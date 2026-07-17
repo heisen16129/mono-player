@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#120b20"/>
+      <stop offset="0.46" stop-color="#24153b"/>
+      <stop offset="1" stop-color="#4a2d82"/>
+    </linearGradient>
+    <radialGradient id="moon" cx="72%" cy="18%" r="34%">
+      <stop offset="0" stop-color="#e6dcff" stop-opacity="0.5"/>
+      <stop offset="0.42" stop-color="#b89aff" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#b89aff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="violet" cx="18%" cy="78%" r="48%">
+      <stop offset="0" stop-color="#9d7cff" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#9d7cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mist" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.08"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.1"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#base)"/>
+  <rect width="1600" height="1000" fill="url(#moon)"/>
+  <rect width="1600" height="1000" fill="url(#violet)"/>
+  <rect width="1600" height="1000" fill="url(#mist)"/>
+  <g opacity="0.22">
+    <circle cx="128" cy="126" r="2.4" fill="#ffffff"/>
+    <circle cx="272" cy="216" r="1.8" fill="#ffffff"/>
+    <circle cx="452" cy="112" r="2.1" fill="#ffffff"/>
+    <circle cx="1016" cy="144" r="2.5" fill="#ffffff"/>
+    <circle cx="1324" cy="308" r="1.9" fill="#ffffff"/>
+    <circle cx="1458" cy="182" r="2.2" fill="#ffffff"/>
+    <circle cx="1176" cy="744" r="1.8" fill="#ffffff"/>
+    <circle cx="786" cy="842" r="2.1" fill="#ffffff"/>
+  </g>
+</svg>

@@ -1,0 +1,19 @@
+[package]
+name = "mono_plugin_yuanli_kw_music"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["yuanli-kw"]
+xiaoyun = []
+xiaowo = []
+xiaoqiu = []
+xiaogou = []
+yuanli-kw = []
+yuanli-qq = []
+
+[dependencies]
+serde_json = "1"

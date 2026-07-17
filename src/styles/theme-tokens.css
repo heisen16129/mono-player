@@ -1,0 +1,557 @@
+﻿:root {
+  --smw-bg-canvas: #ffffff;
+  --smw-bg-page: #f7f7f7;
+  --smw-bg-sidebar: #f2f2f2;
+  --smw-bg-panel: #fafafa;
+  --smw-library-bg: var(--smw-bg-panel);
+  --smw-library-border: var(--smw-border);
+  --smw-bg-workspace: #ffffff;
+  --smw-bg-input: #ffffff;
+  --smw-bg-selected: #e9e9e9;
+  --smw-bg-hover: #eeeeee;
+  --smw-border: #d9d9d9;
+  --smw-border-soft: #e7e7e7;
+  --smw-border-strong: #1f1f1f;
+  --smw-window-border: #bdbdbd;
+  --smw-player-bg: rgba(255, 255, 255, 0.94);
+  --smw-shell-bg: #ececec;
+  --smw-startup-bg: var(--smw-shell-bg);
+  --smw-text-primary: #111111;
+  --smw-text-body: #222222;
+  --smw-text-secondary: #777777;
+  --smw-text-muted: #a0a0a0;
+  --smw-icon-muted: #6f6f6f;
+  --smw-button-primary: #2f2f2f;
+  --smw-scrollbar-track: transparent;
+  --smw-scrollbar-thumb: rgba(17, 17, 17, 0.18);
+  --smw-scrollbar-thumb-hover: rgba(17, 17, 17, 0.34);
+  --smw-accent-blue: #55b9ff;
+  --smw-lyrics-bg: var(--smw-bg-canvas);
+  --smw-lyrics-glow-left: rgba(0, 0, 0, 0.1);
+  --smw-lyrics-glow-right: rgba(85, 185, 255, 0.1);
+  --smw-lyrics-current: #2f2f2f;
+  --smw-volume-bg: var(--smw-bg-input);
+  --smw-volume-track: var(--smw-border);
+  --smw-volume-fill: var(--smw-button-primary);
+  --smw-volume-thumb: var(--smw-button-primary);
+  --smw-volume-text: var(--smw-text-secondary);
+  --smw-progress-track: var(--smw-border);
+  --smw-progress-fill: var(--smw-accent-blue);
+  --smw-progress-thumb: var(--smw-accent-blue);
+  --smw-progress-thumb-border: var(--smw-player-bg);
+  --smw-progress-thumb-ring: rgba(85, 185, 255, 0.24);
+  --smw-cover-base: color-mix(in srgb, var(--smw-bg-selected) 58%, var(--smw-bg-workspace));
+  --smw-cover-base-deep: color-mix(in srgb, var(--smw-button-primary) 28%, var(--smw-bg-panel));
+  --smw-cover-line: color-mix(in srgb, var(--smw-button-primary) 28%, transparent);
+  --smw-cover-dot: color-mix(in srgb, var(--smw-text-primary) 64%, #ffffff);
+  --smw-cover-dot-soft: color-mix(in srgb, var(--smw-text-secondary) 52%, transparent);
+  --smw-cover-object: color-mix(in srgb, var(--smw-button-primary) 42%, var(--smw-bg-panel));
+  --smw-cover-object-border: color-mix(in srgb, var(--smw-button-primary) 52%, var(--smw-border));
+  --smw-cover-divider: color-mix(in srgb, var(--smw-border) 70%, transparent);
+  --smw-avatar-bg: color-mix(in srgb, var(--smw-button-primary) 18%, var(--smw-bg-selected));
+  --smw-avatar-bg-deep: color-mix(in srgb, var(--smw-button-primary) 38%, var(--smw-bg-panel));
+  --smw-avatar-fg: color-mix(in srgb, var(--smw-text-primary) 74%, var(--smw-bg-input));
+  --smw-avatar-border: color-mix(in srgb, var(--smw-button-primary) 22%, var(--smw-border));
+  --smw-avatar-status-border: var(--smw-bg-sidebar);
+  --smw-theme-bg-image: none;
+  --smw-theme-bg-opacity: 0.18;
+  --smw-theme-bg-size: cover;
+  --smw-theme-bg-position: center;
+  --smw-theme-bg-repeat: no-repeat;
+  --smw-status-green: #28c840;
+  --smw-error-text: #8a3333;
+  --smw-error-bg: #fff7f7;
+  --smw-error-border: #d8b8b8;
+  --smw-font-sans: "MiSans", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI",
+    "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 76px;
+  --library-width: 260px;
+  --player-height: 78px;
+  color: var(--smw-text-primary);
+  background: var(--smw-shell-bg);
+  font-family: var(--smw-font-sans);
+  font-synthesis: none;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+:root[data-theme='dark'] {
+  --smw-bg-canvas: #101010;
+  --smw-bg-page: #151515;
+  --smw-bg-sidebar: #121212;
+  --smw-bg-panel: #171717;
+  --smw-library-bg: #171717;
+  --smw-library-border: #2f2f2f;
+  --smw-bg-workspace: #1e1e1e;
+  --smw-bg-input: #222222;
+  --smw-bg-selected: #303030;
+  --smw-bg-hover: #2a2a2a;
+  --smw-border: #3a3a3a;
+  --smw-border-soft: #2f2f2f;
+  --smw-border-strong: #555555;
+  --smw-window-border: #333333;
+  --smw-player-bg: rgba(18, 18, 18, 0.96);
+  --smw-shell-bg: #101010;
+  --smw-startup-bg: var(--smw-shell-bg);
+  --smw-text-primary: #e8e8e8;
+  --smw-text-body: #d2d2d2;
+  --smw-text-secondary: #a0a0a0;
+  --smw-text-muted: #6f6f6f;
+  --smw-icon-muted: #8a8a8a;
+  --smw-button-primary: #8b8b8b;
+  --smw-scrollbar-thumb: rgba(232, 232, 232, 0.2);
+  --smw-scrollbar-thumb-hover: rgba(232, 232, 232, 0.38);
+  --smw-lyrics-bg: var(--smw-bg-canvas);
+  --smw-lyrics-glow-left: rgba(255, 255, 255, 0.07);
+  --smw-lyrics-glow-right: rgba(85, 185, 255, 0.08);
+  --smw-lyrics-current: #f1f1f1;
+  --smw-volume-bg: #202020;
+  --smw-volume-track: #3a3a3a;
+  --smw-volume-fill: #e8e8e8;
+  --smw-volume-thumb: #e8e8e8;
+  --smw-volume-text: #b8b8b8;
+  --smw-progress-track: #3a3a3a;
+  --smw-progress-fill: #e8e8e8;
+  --smw-progress-thumb: #e8e8e8;
+  --smw-progress-thumb-border: #202020;
+  --smw-progress-thumb-ring: rgba(232, 232, 232, 0.24);
+  --smw-error-text: #ffb0a8;
+  --smw-error-bg: #2a1d1d;
+  --smw-error-border: #5c3636;
+}
+
+:root[data-theme='blueWhite'] {
+  --smw-bg-canvas: #fafdff;
+  --smw-bg-page: #f7faff;
+  --smw-bg-sidebar: #f8fbff;
+  --smw-bg-panel: #f8fbff;
+  --smw-library-bg: #f8fbff;
+  --smw-library-border: #e2edf8;
+  --smw-bg-workspace: #fbfdff;
+  --smw-bg-input: #ffffff;
+  --smw-bg-selected: #edf6ff;
+  --smw-bg-hover: #f1f7ff;
+  --smw-border: #e2edf8;
+  --smw-border-soft: #edf4fb;
+  --smw-border-strong: #4a90e2;
+  --smw-window-border: #d8e4f0;
+  --smw-player-bg: rgba(247, 251, 255, 0.98);
+  --smw-shell-bg: #f7faff;
+  --smw-startup-bg: var(--smw-shell-bg);
+  --smw-text-primary: #1d1d1f;
+  --smw-text-body: #2c2c2e;
+  --smw-text-secondary: #86868b;
+  --smw-text-muted: #a1a1aa;
+  --smw-icon-muted: #6e6e73;
+  --smw-button-primary: #4a90e2;
+  --smw-scrollbar-thumb: rgba(134, 134, 139, 0.34);
+  --smw-scrollbar-thumb-hover: rgba(74, 144, 226, 0.52);
+  --smw-accent-blue: #4a90e2;
+  --smw-lyrics-bg: #fafdff;
+  --smw-lyrics-glow-left: rgba(74, 144, 226, 0.08);
+  --smw-lyrics-glow-right: rgba(74, 144, 226, 0.16);
+  --smw-lyrics-current: #2e6ba3;
+  --smw-volume-bg: #ffffff;
+  --smw-volume-track: #dbe8f6;
+  --smw-volume-fill: #4a90e2;
+  --smw-volume-thumb: #4a90e2;
+  --smw-volume-text: #6f7f91;
+  --smw-progress-track: #dbe8f6;
+  --smw-progress-fill: #4a90e2;
+  --smw-progress-thumb: #4a90e2;
+  --smw-progress-thumb-border: #f7fbff;
+  --smw-progress-thumb-ring: rgba(74, 144, 226, 0.28);
+  --smw-status-green: #28c840;
+  --smw-error-text: #8a3333;
+  --smw-error-bg: #fff7f7;
+  --smw-error-border: #d8b8b8;
+}
+
+:root[data-theme='wallpaperTone'] {
+  --smw-system-base: #fbfbfd;
+  --smw-system-accent: #dfe4f2;
+  --smw-bg-canvas: var(--smw-system-base);
+  --smw-bg-page: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 12%);
+  --smw-bg-sidebar: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 18%);
+  --smw-bg-panel: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 14%);
+  --smw-library-bg: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 14%);
+  --smw-library-border: color-mix(in srgb, var(--smw-system-base), black 12%);
+  --smw-bg-workspace: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 8%);
+  --smw-bg-input: #ffffff;
+  --smw-bg-selected: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 24%);
+  --smw-bg-hover: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 18%);
+  --smw-border: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 34%);
+  --smw-border-soft: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 24%);
+  --smw-border-strong: #242426;
+  --smw-window-border: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 38%);
+  --smw-player-bg: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 20%);
+  --smw-shell-bg: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 18%);
+  --smw-startup-bg: var(--smw-shell-bg);
+  --smw-text-primary: #111113;
+  --smw-text-body: #252529;
+  --smw-text-secondary: #6f7178;
+  --smw-text-muted: #8a96a8;
+  --smw-icon-muted: #676970;
+  --smw-button-primary: #242426;
+  --smw-scrollbar-thumb: rgba(17, 17, 19, 0.18);
+  --smw-scrollbar-thumb-hover: rgba(17, 17, 19, 0.34);
+  --smw-accent-blue: color-mix(in srgb, var(--smw-system-accent), #4f8fe8 36%);
+  --smw-lyrics-bg: color-mix(in srgb, var(--smw-system-base), var(--smw-system-accent) 10%);
+  --smw-lyrics-glow-left: color-mix(in srgb, var(--smw-system-accent) 16%, transparent);
+  --smw-lyrics-glow-right: color-mix(in srgb, var(--smw-system-accent) 24%, transparent);
+  --smw-lyrics-current: #242426;
+  --smw-volume-bg: var(--smw-bg-input);
+  --smw-volume-track: color-mix(in srgb, var(--smw-system-base), black 12%);
+  --smw-volume-fill: #242426;
+  --smw-volume-thumb: #242426;
+  --smw-volume-text: var(--smw-text-secondary);
+  --smw-progress-track: color-mix(in srgb, var(--smw-system-base), black 12%);
+  --smw-progress-fill: #4f8fe8;
+  --smw-progress-thumb: #4f8fe8;
+  --smw-progress-thumb-border: color-mix(in srgb, var(--smw-system-base), black 3%);
+  --smw-progress-thumb-ring: rgba(79, 143, 232, 0.24);
+  --smw-status-green: #28c840;
+  --smw-error-text: #8a3333;
+  --smw-error-bg: #fff7f7;
+  --smw-error-border: #d8b8b8;
+}
+
+:root[data-theme='desktopGlass'] {
+  --smw-bg-canvas: transparent;
+  --smw-bg-page: rgba(255, 255, 255, 0.46);
+  --smw-bg-sidebar: rgba(255, 255, 255, 0.52);
+  --smw-bg-panel: rgba(255, 255, 255, 0.44);
+  --smw-library-bg: rgba(255, 255, 255, 0.44);
+  --smw-library-border: rgba(17, 24, 39, 0.14);
+  --smw-bg-workspace: rgba(255, 255, 255, 0.38);
+  --smw-bg-input: rgba(255, 255, 255, 0.64);
+  --smw-bg-selected: rgba(255, 255, 255, 0.42);
+  --smw-bg-hover: rgba(255, 255, 255, 0.34);
+  --smw-border: rgba(17, 24, 39, 0.14);
+  --smw-border-soft: rgba(17, 24, 39, 0.1);
+  --smw-border-strong: rgba(17, 24, 39, 0.48);
+  --smw-window-border: rgba(255, 255, 255, 0.22);
+  --smw-player-bg: rgba(255, 255, 255, 0.52);
+  --smw-shell-bg: transparent;
+  --smw-startup-bg: #eef2f7;
+  --smw-text-primary: #111827;
+  --smw-text-body: #1f2937;
+  --smw-text-secondary: rgba(31, 41, 55, 0.72);
+  --smw-text-muted: #8a96a8;
+  --smw-icon-muted: rgba(31, 41, 55, 0.68);
+  --smw-button-primary: rgba(31, 41, 55, 0.88);
+  --smw-scrollbar-thumb: rgba(17, 24, 39, 0.2);
+  --smw-scrollbar-thumb-hover: rgba(17, 24, 39, 0.34);
+  --smw-accent-blue: #4f9cff;
+  --smw-lyrics-bg: rgba(255, 255, 255, 0.38);
+  --smw-lyrics-glow-left: rgba(255, 255, 255, 0.22);
+  --smw-lyrics-glow-right: rgba(79, 156, 255, 0.12);
+  --smw-volume-bg: rgba(255, 255, 255, 0.68);
+  --smw-volume-track: rgba(17, 24, 39, 0.16);
+  --smw-volume-fill: #4f9cff;
+  --smw-volume-thumb: #4f9cff;
+  --smw-volume-text: rgba(31, 41, 55, 0.72);
+  --smw-progress-track: rgba(17, 24, 39, 0.16);
+  --smw-progress-fill: #4f9cff;
+  --smw-progress-thumb: #4f9cff;
+  --smw-progress-thumb-border: rgba(255, 255, 255, 0.82);
+  --smw-progress-thumb-ring: rgba(79, 156, 255, 0.24);
+  --smw-status-green: #28c840;
+  --smw-error-text: #8a3333;
+  --smw-error-bg: rgba(255, 247, 247, 0.74);
+  --smw-error-border: rgba(216, 184, 184, 0.74);
+}
+
+:root[data-theme='blueWhite'] .quick-row.selected,
+:root[data-theme='blueWhite'] .playlist-row.selected,
+:root[data-theme='blueWhite'] .track-row.selected,
+:root[data-theme='blueWhite'] .main-nav .is-active {
+  box-shadow: inset 0 0 0 1px rgba(74, 144, 226, 0.08);
+}
+
+:root[data-theme='blueWhite'] .primary-button,
+:root[data-theme='blueWhite'] .play-button,
+:root[data-theme='blueWhite'] .confirm-button,
+:root[data-theme='blueWhite'] .collection-play-button {
+  color: #ffffff;
+}
+
+:root[data-theme='blueWhite'] .player-dock {
+  border-top-color: #dbe8f6;
+  background: linear-gradient(180deg, rgba(250, 253, 255, 0.98), rgba(244, 249, 255, 0.98));
+}
+
+:root[data-theme='blueWhite'] .dock-progress::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    var(--smw-progress-fill) 0 var(--progress-percent),
+    var(--smw-progress-track) var(--progress-percent) 100%
+  );
+}
+
+:root[data-theme='blueWhite'] .dock-progress::-webkit-slider-thumb {
+  border-color: var(--smw-progress-thumb-border);
+  background: var(--smw-progress-thumb);
+  box-shadow: 0 0 0 1px var(--smw-progress-thumb-ring);
+}
+
+:root[data-theme='blueWhite'] .dock-progress::-moz-range-track {
+  background: var(--smw-progress-track);
+}
+
+:root[data-theme='blueWhite'] .dock-progress::-moz-range-progress,
+:root[data-theme='blueWhite'] .dock-progress::-moz-range-thumb {
+  background: var(--smw-progress-fill);
+}
+
+:root[data-theme='blueWhite'] .lyrics-panel .current {
+  color: var(--smw-lyrics-current);
+  text-shadow: 0 8px 24px rgba(74, 144, 226, 0.16);
+}
+
+:root[data-theme='blueWhite'] .lyrics-panel p.can-seek:hover,
+:root[data-theme='blueWhite'] .lyrics-panel p.can-seek:focus-visible {
+  color: var(--smw-lyrics-current);
+}
+
+:root[data-theme='blueWhite'] .lyrics-scrollbar {
+  background: #dbe8f6;
+}
+
+:root[data-theme='blueWhite'] .lyrics-scrollbar i {
+  background: var(--smw-accent-blue);
+}
+
+:root[data-theme='wallpaperTone'] .mono-window {
+  background:
+    radial-gradient(circle at 18% 16%, color-mix(in srgb, var(--smw-bg-selected) 28%, transparent), transparent 30%),
+    radial-gradient(circle at 86% 12%, color-mix(in srgb, var(--smw-bg-panel) 42%, transparent), transparent 28%),
+    var(--smw-bg-canvas);
+}
+
+:root[data-theme='wallpaperTone'] .workspace {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--smw-bg-page) 72%, transparent), transparent 180px),
+    var(--smw-bg-workspace);
+}
+
+:root[data-theme='wallpaperTone'] .track-head {
+  background: var(--smw-bg-workspace);
+  box-shadow: 0 -16px 0 0 var(--smw-bg-workspace);
+}
+
+:root[data-theme='wallpaperTone'] .track-row.selected,
+:root[data-theme='wallpaperTone'] .main-nav .is-active,
+:root[data-theme='wallpaperTone'] .quick-row.selected,
+:root[data-theme='wallpaperTone'] .playlist-row.selected {
+  background: var(--smw-bg-selected);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--smw-border-strong) 12%, transparent);
+}
+
+:root[data-theme='wallpaperTone'] .track-row:hover {
+  background: var(--smw-bg-hover);
+}
+
+:root[data-theme='wallpaperTone'] .search-field,
+:root[data-theme='wallpaperTone'] .quick-row > span:first-child {
+  background: var(--smw-bg-input);
+}
+
+:root[data-theme='wallpaperTone'] .player-dock {
+  border-top-color: var(--smw-border);
+  background: var(--smw-player-bg);
+}
+
+:root[data-theme='wallpaperTone'] .dock-progress::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    var(--smw-progress-fill) 0 var(--progress-percent),
+    var(--smw-progress-track) var(--progress-percent) 100%
+  );
+}
+
+:root[data-theme='wallpaperTone'] .dock-progress::-webkit-slider-thumb {
+  border-color: var(--smw-progress-thumb-border);
+  background: var(--smw-progress-thumb);
+  box-shadow:
+    0 0 0 1px var(--smw-progress-thumb-ring),
+    0 2px 8px color-mix(in srgb, var(--smw-border-strong) 12%, transparent);
+}
+
+:root[data-theme='wallpaperTone'] .dock-progress::-moz-range-track {
+  background: var(--smw-progress-track);
+}
+
+:root[data-theme='wallpaperTone'] .dock-progress::-moz-range-progress,
+:root[data-theme='wallpaperTone'] .dock-progress::-moz-range-thumb {
+  background: var(--smw-progress-fill);
+}
+
+:root[data-theme='wallpaperTone'] input[type="range"] {
+  accent-color: var(--smw-accent-blue);
+}
+
+:root[data-theme='wallpaperTone'] .play-button {
+  color: var(--smw-bg-canvas);
+  background:
+    linear-gradient(145deg, var(--smw-button-primary), color-mix(in srgb, var(--smw-button-primary) 82%, var(--smw-bg-canvas)));
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
+}
+
+:root[data-theme='wallpaperTone'] .play-button:hover:not(:disabled) {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--smw-button-primary) 90%, var(--smw-bg-canvas)), var(--smw-button-primary));
+}
+
+:root[data-theme='wallpaperTone'] .volume-rail::after,
+:root[data-theme='wallpaperTone'] .volume-rail i {
+  background: var(--smw-volume-fill);
+}
+
+:root[data-theme='wallpaperTone'] .quality-popover,
+:root[data-theme='wallpaperTone'] .speed-popover,
+:root[data-theme='wallpaperTone'] .volume-popover,
+:root[data-theme='wallpaperTone'] .queue-popover {
+  border-color: var(--smw-border);
+  background: color-mix(in srgb, var(--smw-bg-panel) 92%, var(--smw-bg-canvas));
+}
+
+:root[data-theme='wallpaperTone'] .queue-button.is-active,
+:root[data-theme='wallpaperTone'] .volume-button:hover {
+  color: var(--smw-button-primary);
+  background: var(--smw-bg-selected);
+}
+
+:root[data-theme='wallpaperTone'] .time-pair span:first-child {
+  color: var(--smw-text-body);
+}
+
+:root[data-theme='desktopGlass'] body,
+:root[data-theme='desktopGlass'] #app {
+  background: transparent;
+}
+
+:root[data-theme='desktopGlass'] .mono-window {
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
+}
+
+:root[data-theme='desktopGlass'] .primary-sidebar,
+:root[data-theme='desktopGlass'] .library-panel {
+  background: var(--smw-bg-sidebar);
+}
+
+:root[data-theme='desktopGlass'] .library-panel {
+  background: var(--smw-library-bg);
+}
+
+:root[data-theme='desktopGlass'] .workspace {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 180px),
+    var(--smw-bg-workspace);
+}
+
+:root[data-theme='desktopGlass'] .settings-view,
+:root[data-theme='desktopGlass'] .theme-view,
+:root[data-theme='desktopGlass'] .artists-view {
+  background: var(--smw-bg-workspace);
+}
+
+:root[data-theme='desktopGlass'] .track-head {
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 -16px 0 0 rgba(255, 255, 255, 0.34);
+}
+
+:root[data-theme='desktopGlass'] .track-row.selected,
+:root[data-theme='desktopGlass'] .main-nav .is-active,
+:root[data-theme='desktopGlass'] .quick-row.selected,
+:root[data-theme='desktopGlass'] .playlist-row.selected {
+  background: var(--smw-bg-selected);
+  box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.08);
+}
+
+:root[data-theme='desktopGlass'] .track-row:hover {
+  background: var(--smw-bg-hover);
+}
+
+:root[data-theme='desktopGlass'] .search-field,
+:root[data-theme='desktopGlass'] .quick-row > span:first-child,
+:root[data-theme='desktopGlass'] .settings-select,
+:root[data-theme='desktopGlass'] .setting-input {
+  background: var(--smw-bg-input);
+}
+
+:root[data-theme='desktopGlass'] .player-dock {
+  border-top-color: var(--smw-border);
+  background:
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.4), transparent 36%),
+    linear-gradient(180deg, var(--smw-player-bg), rgba(255, 255, 255, 0.36));
+}
+
+:root[data-theme='desktopGlass'] .dock-progress::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    var(--smw-progress-fill) 0 var(--progress-percent),
+    var(--smw-progress-track) var(--progress-percent) 100%
+  );
+}
+
+:root[data-theme='desktopGlass'] .dock-progress::-webkit-slider-thumb {
+  border-color: var(--smw-progress-thumb-border);
+  background: var(--smw-progress-thumb);
+  box-shadow:
+    0 0 0 1px var(--smw-progress-thumb-ring),
+    0 2px 8px rgba(17, 24, 39, 0.16);
+}
+
+:root[data-theme='desktopGlass'] .dock-progress::-moz-range-track {
+  background: var(--smw-progress-track);
+}
+
+:root[data-theme='desktopGlass'] .dock-progress::-moz-range-progress,
+:root[data-theme='desktopGlass'] .dock-progress::-moz-range-thumb {
+  background: var(--smw-progress-fill);
+}
+
+:root[data-theme='desktopGlass'] input[type="range"] {
+  accent-color: var(--smw-accent-blue);
+}
+
+:root[data-theme='desktopGlass'] .play-button {
+  color: #ffffff;
+  background: rgba(31, 41, 55, 0.88);
+  box-shadow: 0 8px 20px rgba(17, 24, 39, 0.16);
+}
+
+:root[data-theme='desktopGlass'] .play-button:hover:not(:disabled) {
+  background: rgba(17, 24, 39, 0.9);
+}
+
+:root[data-theme='desktopGlass'] .volume-rail::after,
+:root[data-theme='desktopGlass'] .volume-rail i {
+  background: rgba(31, 41, 55, 0.84);
+}
+
+:root[data-theme='desktopGlass'] .quality-popover,
+:root[data-theme='desktopGlass'] .speed-popover,
+:root[data-theme='desktopGlass'] .volume-popover,
+:root[data-theme='desktopGlass'] .queue-popover {
+  border-color: var(--smw-border);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme='desktopGlass'] .queue-button.is-active,
+:root[data-theme='desktopGlass'] .volume-button:hover {
+  color: var(--smw-text-primary);
+  background: var(--smw-bg-selected);
+}
+
+:root[data-theme='desktopGlass'] .time-pair span:first-child {
+  color: rgba(17, 24, 39, 0.88);
+}
+
+* {
+  box-sizing: border-box;
+}

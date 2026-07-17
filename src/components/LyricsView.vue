@@ -1,0 +1,2000 @@
+﻿<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { ChevronDown, Maximize2, Minimize2, Search, X } from '@lucide/vue';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { downloadCoverFile, downloadLyricsFile } from '../services/downloads';
+import { clearCoverThumbnailCache, readCover, readCoverThumbnail, resolveLyricsSource } from '../services/music';
+import type { LyricLine, Track } from '../types/music';
+import { isTauriRuntime } from '../services/music';
+import { getPluginLyricsMetadata, listPluginLyricSearchProviders, searchPluginLyrics as searchPluginLyricsFromProviders } from '../services/pluginSearch';
+import { t } from '../i18n';
+import { usePlayerStore } from '../stores/player';
+import type { PluginSearchProvider, PluginSearchTrack } from '../types/plugin';
+import { parseRawLyrics } from '../utils/lyrics';
+import { getPlayerOriginalCoverCache, playerCoverCacheKey } from '../services/playerCoverCache';
+import { normalizeTrackLyrics, trackRawLyrics } from '../utils/trackLyrics';
+
+const MAX_LYRICS_COVER_CACHE = 80;
+const lyricsCoverCache = new Map<string, { url: string; data: number[] | null; mimeType: string | null }>();
+const lyricsCoverRequestCache = new Map<string, Promise<{ url: string; data: number[] | null; mimeType: string | null } | null>>();
+const componentCoverRefs = new Map<string, number>();
+let lyricsCoverCacheVersion = 0;
+
+const props = defineProps<{
+  activeTrack: Track | null;
+  currentTime: number;
+  isPlaying: boolean;
+}>();
+
+const emit = defineEmits<{
+  close: [];
+  coverChanged: [];
+  lyricsCleared: [];
+  lyricsFound: [
+    rawLyrics: string,
+    artwork?: string | null,
+    sourceName?: string | null,
+    sourceUrl?: string | null,
+    formats?: string[],
+    defaultFormat?: string | null,
+    format?: string | null,
+    providerId?: string | null,
+    trackId?: string | null,
+    trackRaw?: unknown,
+  ];
+  notify: [message: string, variant?: 'success' | 'error'];
+  seek: [time: number];
+}>();
+
+const loadedLyricLines = ref<LyricLine[]>([]);
+const lyricsPanel = ref<HTMLElement | null>(null);
+const isLoadingLyrics = ref(false);
+const isBrowsingLyrics = ref(false);
+const isLyricsListScrolling = ref(false);
+const scrollThumbTop = ref(0);
+const coverUrl = ref('');
+const coverData = ref<number[] | null>(null);
+const coverMimeType = ref<string | null>(null);
+const activeCoverCacheKey = ref<string | null>(null);
+const isFontMenuOpen = ref(false);
+const isFullscreen = ref(false);
+const isLyricSyncOpen = ref(false);
+const lyricTimeOffset = ref(0);
+const isSearchDialogOpen = ref(false);
+const lyricSearchQuery = ref('');
+const lyricSearchResults = ref<PluginSearchTrack[]>([]);
+const lyricSearchProviders = ref<PluginSearchProvider[]>([]);
+const lyricSearchProviderId = ref<string | null>(null);
+const lyricSearchStatus = ref('');
+const isSearchingPluginLyrics = ref(false);
+const isLoadingMorePluginLyrics = ref(false);
+const lyricSearchPage = ref(1);
+const isLyricSearchEnd = ref(true);
+const resolvingLyricTrackKey = ref<string | null>(null);
+const switchingLyricFormat = ref<string | null>(null);
+const fontMenuLeft = ref(0);
+const fontMenuTop = ref(0);
+const smoothCurrentTime = ref(0);
+let browseRestoreTimer = 0;
+let lyricsScrollHideTimer = 0;
+let lyricAnimationFrame = 0;
+let lastLyricFrameAt = 0;
+let restoreMaximizedAfterFullscreen = false;
+
+const MIN_LYRIC_FONT_SIZE = 14;
+const MAX_LYRIC_FONT_SIZE = 34;
+const player = usePlayerStore();
+const lyricFontSize = computed(() => player.settings.lyricFontSize);
+const syncedLyricTime = computed(() => smoothCurrentTime.value + lyricTimeOffset.value);
+const activeLyrics = computed(() => normalizeTrackLyrics(props.activeTrack));
+const availableLyricFormats = computed(() => {
+  const formats = activeLyrics.value?.formats ?? [];
+  return formats.filter((format, index) => format && formats.indexOf(format) === index);
+});
+const downloadableLyricFormats = computed(() => {
+  const formats = availableLyricFormats.value.length > 0
+    ? availableLyricFormats.value
+    : (activeLyrics.value?.rawLyrics ? [activeLyrics.value.format ?? 'lrc'] : []);
+  const items = formats.filter((format, index) => format && formats.indexOf(format) === index);
+  if (items.includes('lrc') && !items.includes('txt')) {
+    items.push('txt');
+  }
+  return items;
+});
+const currentLyricFormat = computed(() => activeLyrics.value?.format ?? activeLyrics.value?.defaultFormat ?? availableLyricFormats.value[0] ?? null);
+const canSwitchLyricFormat = computed(() => {
+  const lyrics = activeLyrics.value;
+  return Boolean(
+    availableLyricFormats.value.length > 1
+      && (
+        (lyrics?.providerId && lyrics.trackId)
+        || (props.activeTrack?.sourceProviderId && props.activeTrack.sourceId)
+      ),
+  );
+});
+
+function resolveRawLyrics(rawLyrics: string, format?: string | null) {
+  return resolveLyricsSource({
+    rawLyrics,
+    lyricsFormat: format ?? null,
+  });
+}
+
+function normalizeLyricLines(lines: LyricLine[]) {
+  return lines.filter((line) => {
+    const text = line.text.trim();
+    return text && text !== '...' && text !== '…';
+  });
+}
+
+const activeLyricIndex = computed(() => {
+  let timedIndex = -1;
+  for (let index = 0; index < loadedLyricLines.value.length; index += 1) {
+    const line = loadedLyricLines.value[index];
+    if (line.time !== null && line.time <= syncedLyricTime.value) {
+      timedIndex = index;
+    }
+  }
+
+  if (timedIndex >= 0) return timedIndex;
+  return loadedLyricLines.value.length > 0 ? 0 : -1;
+});
+
+function activeLyricWordIndex(line: LyricLine, currentTime = syncedLyricTime.value) {
+  if (!line.words?.length) return -1;
+
+  let activeIndex = -1;
+  for (let index = 0; index < line.words.length; index += 1) {
+    if (line.words[index].time <= currentTime) {
+      activeIndex = index;
+    }
+  }
+  return activeIndex;
+}
+
+function nextLyricBoundary(lineIndex: number, wordIndex: number) {
+  const line = loadedLyricLines.value[lineIndex];
+  const nextWordTime = line?.words?.[wordIndex + 1]?.time;
+  if (typeof nextWordTime === 'number') return nextWordTime;
+
+  for (let index = lineIndex + 1; index < loadedLyricLines.value.length; index += 1) {
+    const nextLineTime = loadedLyricLines.value[index].time;
+    if (nextLineTime !== null) return nextLineTime;
+  }
+
+  const wordTime = line?.words?.[wordIndex]?.time ?? line?.time ?? syncedLyricTime.value;
+  return wordTime + 0.45;
+}
+
+function lyricWordProgress(line: LyricLine, lineIndex: number, wordIndex: number) {
+  if (!line.words?.length || lineIndex !== activeLyricIndex.value) return '0%';
+
+  const currentTime = syncedLyricTime.value;
+  const word = line.words[wordIndex];
+  if (currentTime < word.time) return '0%';
+
+  const activeWordIndex = activeLyricWordIndex(line, currentTime);
+  if (wordIndex < activeWordIndex) return '100%';
+  if (wordIndex > activeWordIndex) return '0%';
+
+  const duration = Math.max(0.08, nextLyricBoundary(lineIndex, wordIndex) - word.time);
+  const progress = Math.min(1, Math.max(0, (currentTime - word.time) / duration));
+  return `${Math.round(progress * 1000) / 10}%`;
+}
+
+function tickLyricAnimation(now: number) {
+  if (lastLyricFrameAt === 0) {
+    lastLyricFrameAt = now;
+  }
+
+  if (props.isPlaying) {
+    const elapsed = Math.min(0.25, Math.max(0, (now - lastLyricFrameAt) / 1000));
+    smoothCurrentTime.value += elapsed;
+  } else {
+    smoothCurrentTime.value = props.currentTime;
+  }
+
+  lastLyricFrameAt = now;
+  lyricAnimationFrame = window.requestAnimationFrame(tickLyricAnimation);
+}
+
+const displayCoverUrl = computed(() => {
+  if (coverUrl.value) return coverUrl.value;
+
+  const path = props.activeTrack?.path;
+  if (!path) return '';
+
+  const artwork = props.activeTrack.artwork;
+  const coverVersion = props.activeTrack.coverVersion;
+  const fullCover = lyricsCoverCache.get(lyricsCoverCacheKey(path, artwork, coverVersion));
+  if (fullCover?.url) return fullCover.url;
+
+  return lyricsCoverCache.get(lyricsCoverThumbCacheKey(path, artwork, coverVersion))?.url ?? '';
+});
+
+const backgroundCoverUrl = computed(() => (
+  getPlayerOriginalCoverCache(playerCoverCacheKey(props.activeTrack))?.url ?? coverUrl.value ?? ''
+));
+
+const lyricsViewStyle = computed(() => ({
+  '--lyrics-font-size': `${lyricFontSize.value}px`,
+  '--smw-lyrics-current': player.settings.useThemeLyricColor ? undefined : player.settings.lyricFontColor,
+  '--lyrics-cover-bg': backgroundCoverUrl.value ? `url("${backgroundCoverUrl.value}")` : undefined,
+}));
+
+function lyricsCoverCacheKey(path: string, artwork: string | null | undefined, coverVersion: number | undefined) {
+  return `${path}:${artwork ?? ''}:${coverVersion ?? ''}:full`;
+}
+
+function lyricsCoverThumbCacheKey(path: string, artwork: string | null | undefined, coverVersion: number | undefined) {
+  return `${path}:${artwork ?? ''}:${coverVersion ?? ''}:thumb`;
+}
+
+function retainLyricsCoverCache(key: string | null) {
+  if (!key) return;
+  componentCoverRefs.set(key, (componentCoverRefs.get(key) ?? 0) + 1);
+}
+
+function releaseLyricsCoverCache(key: string | null) {
+  if (!key) return;
+  const refs = (componentCoverRefs.get(key) ?? 0) - 1;
+  if (refs > 0) {
+    componentCoverRefs.set(key, refs);
+    return;
+  }
+
+  componentCoverRefs.delete(key);
+}
+
+function trimLyricsCoverCache() {
+  while (lyricsCoverCache.size > MAX_LYRICS_COVER_CACHE) {
+    const entry = lyricsCoverCache.entries().next().value;
+    if (!entry) return;
+    const [key, cached] = entry;
+    if (componentCoverRefs.has(key)) return;
+    lyricsCoverCache.delete(key);
+    if (cached.url.startsWith('blob:')) URL.revokeObjectURL(cached.url);
+  }
+}
+
+function setLyricsCoverCache(key: string, value: { url: string; data: number[] | null; mimeType: string | null }) {
+  lyricsCoverCache.delete(key);
+  lyricsCoverCache.set(key, value);
+  trimLyricsCoverCache();
+}
+
+function deleteLyricsCoverCache(key: string | null) {
+  if (!key) return;
+  const cached = lyricsCoverCache.get(key);
+  lyricsCoverCache.delete(key);
+  componentCoverRefs.delete(key);
+  if (cached?.url.startsWith('blob:')) URL.revokeObjectURL(cached.url);
+}
+
+function clearLyricsCoverCache() {
+  lyricsCoverCacheVersion += 1;
+  for (const cached of lyricsCoverCache.values()) {
+    if (cached.url.startsWith('blob:')) URL.revokeObjectURL(cached.url);
+  }
+  lyricsCoverCache.clear();
+  lyricsCoverRequestCache.clear();
+  componentCoverRefs.clear();
+}
+
+async function loadLyricsCover(path: string, artwork: string | null | undefined, coverVersion: number | undefined) {
+  const key = lyricsCoverCacheKey(path, artwork, coverVersion);
+  const cached = lyricsCoverCache.get(key);
+  if (cached) return { key, cover: cached };
+
+  const existingRequest = lyricsCoverRequestCache.get(key);
+  if (existingRequest) return { key, cover: await existingRequest };
+
+  const requestCacheVersion = lyricsCoverCacheVersion;
+  const request = (async () => {
+    if (artwork?.trim()) {
+      return { url: artwork.trim(), data: null, mimeType: null };
+    }
+
+    const cover = await readCover(path);
+    if (!cover?.data.length) return null;
+
+    const blob = new Blob([new Uint8Array(cover.data)], { type: cover.mime_type });
+    return {
+      url: URL.createObjectURL(blob),
+      data: cover.data,
+      mimeType: cover.mime_type,
+    };
+  })()
+    .then((cover) => {
+      if (requestCacheVersion !== lyricsCoverCacheVersion) {
+        if (cover?.url.startsWith('blob:')) URL.revokeObjectURL(cover.url);
+        return null;
+      }
+      if (cover) setLyricsCoverCache(key, cover);
+      return cover;
+    })
+    .finally(() => {
+      lyricsCoverRequestCache.delete(key);
+    });
+
+  lyricsCoverRequestCache.set(key, request);
+  return { key, cover: await request };
+}
+
+async function loadLyricsCoverThumbnail(path: string, artwork: string | null | undefined, coverVersion: number | undefined) {
+  const key = lyricsCoverThumbCacheKey(path, artwork, coverVersion);
+  const cached = lyricsCoverCache.get(key);
+  if (cached) return { key, cover: cached };
+
+  const existingRequest = lyricsCoverRequestCache.get(key);
+  if (existingRequest) return { key, cover: await existingRequest };
+
+  const requestCacheVersion = lyricsCoverCacheVersion;
+  const request = (async () => {
+    if (artwork?.trim()) {
+      return { url: artwork.trim(), data: null, mimeType: null };
+    }
+
+    const cover = await readCoverThumbnail(path);
+    if (!cover?.data.length) return null;
+
+    const blob = new Blob([new Uint8Array(cover.data)], { type: cover.mime_type });
+    return {
+      url: URL.createObjectURL(blob),
+      data: null,
+      mimeType: cover.mime_type,
+    };
+  })()
+    .then((cover) => {
+      if (requestCacheVersion !== lyricsCoverCacheVersion) {
+        if (cover?.url.startsWith('blob:')) URL.revokeObjectURL(cover.url);
+        return null;
+      }
+      if (cover) setLyricsCoverCache(key, cover);
+      return cover;
+    })
+    .finally(() => {
+      lyricsCoverRequestCache.delete(key);
+    });
+
+  lyricsCoverRequestCache.set(key, request);
+  return { key, cover: await request };
+}
+
+watch(
+  () => [props.activeTrack?.path, props.activeTrack?.title, props.activeTrack?.artist, props.activeTrack?.artwork, activeLyrics.value?.rawLyrics, activeLyrics.value?.lyricsUrl, activeLyrics.value?.format, props.activeTrack?.coverVersion] as const,
+  async ([path, _title, _artist, artwork, rawLyrics, _lyricsUrl, _format, coverVersion]) => {
+    loadedLyricLines.value = [];
+    lyricTimeOffset.value = 0;
+    isLyricSyncOpen.value = false;
+    const previousCoverCacheKey = activeCoverCacheKey.value;
+    activeCoverCacheKey.value = null;
+    if (!path) {
+      releaseLyricsCoverCache(previousCoverCacheKey);
+      coverUrl.value = '';
+      coverData.value = null;
+      coverMimeType.value = null;
+      return;
+    }
+
+    const playerCoverCache = getPlayerOriginalCoverCache(playerCoverCacheKey(props.activeTrack));
+    const nextCoverCacheKey = lyricsCoverCacheKey(path, artwork, coverVersion);
+    const nextThumbCacheKey = lyricsCoverThumbCacheKey(path, artwork, coverVersion);
+    const cachedCover = playerCoverCache ?? lyricsCoverCache.get(nextCoverCacheKey) ?? lyricsCoverCache.get(nextThumbCacheKey);
+    const cachedCoverKey = lyricsCoverCache.has(nextCoverCacheKey) ? nextCoverCacheKey : nextThumbCacheKey;
+    if (cachedCover) {
+      if (!playerCoverCache) retainLyricsCoverCache(cachedCoverKey);
+      releaseLyricsCoverCache(previousCoverCacheKey);
+      activeCoverCacheKey.value = playerCoverCache ? null : cachedCoverKey;
+      coverUrl.value = cachedCover.url;
+      coverData.value = cachedCover.data;
+      coverMimeType.value = cachedCover.mimeType;
+    } else {
+      releaseLyricsCoverCache(previousCoverCacheKey);
+      coverUrl.value = '';
+      coverData.value = null;
+      coverMimeType.value = null;
+    }
+
+    isLoadingLyrics.value = true;
+    try {
+      const lyrics = isTauriRuntime()
+        ? await resolveLyricsSource({
+          ...(props.activeTrack ?? {}),
+          rawLyrics: activeLyrics.value?.rawLyrics ?? rawLyrics ?? null,
+          lyricsSourceUrl: activeLyrics.value?.lyricsUrl ?? null,
+          lyricsFormat: activeLyrics.value?.format ?? null,
+        })
+        : parseRawLyrics(activeLyrics.value?.rawLyrics ?? rawLyrics ?? '');
+      loadedLyricLines.value = normalizeLyricLines(lyrics);
+
+      if (!lyricsCoverCache.has(nextCoverCacheKey) && !lyricsCoverCache.has(nextThumbCacheKey)) {
+        const { key, cover } = await loadLyricsCoverThumbnail(path, artwork, coverVersion);
+        if (cover) {
+          retainLyricsCoverCache(key);
+          releaseLyricsCoverCache(activeCoverCacheKey.value);
+          activeCoverCacheKey.value = key;
+          coverUrl.value = cover.url;
+          coverData.value = cover.data;
+          coverMimeType.value = cover.mimeType;
+        }
+      }
+
+      const { key, cover } = await loadLyricsCover(path, artwork, coverVersion);
+      if (key === activeCoverCacheKey.value && coverUrl.value) return;
+      if (cover) {
+        retainLyricsCoverCache(key);
+        releaseLyricsCoverCache(activeCoverCacheKey.value);
+        activeCoverCacheKey.value = key;
+        coverUrl.value = cover.url;
+        coverData.value = cover.data;
+        coverMimeType.value = cover.mimeType;
+      }
+    } finally {
+      isLoadingLyrics.value = false;
+      await syncLyricsToCurrentTime();
+    }
+  },
+  { immediate: true, flush: 'sync' },
+);
+
+watch(
+  () => props.currentTime,
+  (currentTime) => {
+    smoothCurrentTime.value = currentTime;
+    lastLyricFrameAt = performance.now();
+  },
+  { immediate: true },
+);
+
+watch(activeLyricIndex, async () => {
+  if (activeLyricIndex.value < 0) return;
+  if (isLoadingLyrics.value) return;
+  if (isBrowsingLyrics.value) return;
+
+  await scrollToActiveLyric();
+});
+
+async function syncLyricsToCurrentTime() {
+  if (activeLyricIndex.value < 0) return;
+  if (isBrowsingLyrics.value) return;
+
+  await scrollToActiveLyric('auto');
+}
+
+async function scrollToActiveLyric(behavior: ScrollBehavior = 'smooth') {
+  await nextTick();
+  const panel = lyricsPanel.value;
+  const currentLine = panel?.querySelector<HTMLElement>('.lyrics-panel .current');
+  if (!panel || !currentLine) return;
+
+  const nextTop = currentLine.offsetTop - panel.clientHeight / 2 + currentLine.clientHeight / 2;
+  panel.scrollTo({ top: Math.max(0, nextTop), behavior });
+  requestAnimationFrame(syncScrollThumb);
+}
+
+function beginLyricBrowse() {
+  if (!loadedLyricLines.value.length) return;
+  isBrowsingLyrics.value = true;
+  if (browseRestoreTimer) {
+    window.clearTimeout(browseRestoreTimer);
+    browseRestoreTimer = 0;
+  }
+}
+
+function scheduleRealtimeLyricsRestore() {
+  beginLyricBrowse();
+  browseRestoreTimer = window.setTimeout(() => {
+    restoreRealtimeLyrics();
+  }, 900);
+}
+
+function showLyricsScrollbarWhileScrolling() {
+  if (!loadedLyricLines.value.length) return;
+  isLyricsListScrolling.value = true;
+  if (lyricsScrollHideTimer) {
+    window.clearTimeout(lyricsScrollHideTimer);
+  }
+  lyricsScrollHideTimer = window.setTimeout(() => {
+    isLyricsListScrolling.value = false;
+    lyricsScrollHideTimer = 0;
+  }, 800);
+}
+
+function handleLyricsWheel() {
+  showLyricsScrollbarWhileScrolling();
+  scheduleRealtimeLyricsRestore();
+}
+
+function hideLyricsScrollbar() {
+  if (lyricsScrollHideTimer) {
+    window.clearTimeout(lyricsScrollHideTimer);
+    lyricsScrollHideTimer = 0;
+  }
+  isLyricsListScrolling.value = false;
+}
+
+function restoreRealtimeLyrics() {
+  if (browseRestoreTimer) {
+    window.clearTimeout(browseRestoreTimer);
+    browseRestoreTimer = 0;
+  }
+
+  if (!isBrowsingLyrics.value) return;
+  isBrowsingLyrics.value = false;
+  void scrollToActiveLyric();
+}
+
+function syncScrollThumb() {
+  const panel = lyricsPanel.value;
+  if (!panel) return;
+
+  const maxScrollTop = panel.scrollHeight - panel.clientHeight;
+  if (maxScrollTop <= 0) {
+    scrollThumbTop.value = 0;
+    return;
+  }
+
+  scrollThumbTop.value = (panel.scrollTop / maxScrollTop) * 154;
+}
+
+function seekToLyric(line: LyricLine) {
+  if (line.time === null) return;
+  emit('seek', Math.max(0, line.time - lyricTimeOffset.value));
+}
+
+function defaultLyricSearchQuery() {
+  return [props.activeTrack?.title, props.activeTrack?.artist].filter(Boolean).join(' ').trim();
+}
+
+function lyricTrackKey(track: PluginSearchTrack) {
+  return `${track.providerId}:${track.id}`;
+}
+
+function resetLyricSearchPaging() {
+  lyricSearchPage.value = 1;
+  isLyricSearchEnd.value = true;
+  isLoadingMorePluginLyrics.value = false;
+}
+
+async function openLyricSearchDialog() {
+  closeFontMenu();
+  lyricSearchQuery.value = defaultLyricSearchQuery();
+  lyricSearchResults.value = [];
+  lyricSearchStatus.value = '';
+  resetLyricSearchPaging();
+  resolvingLyricTrackKey.value = null;
+  isSearchDialogOpen.value = true;
+
+  try {
+    lyricSearchProviders.value = await listPluginLyricSearchProviders();
+    const enabledProvider = lyricSearchProviders.value.find((provider) => provider.enabled);
+    lyricSearchProviderId.value = enabledProvider?.id ?? null;
+    if (lyricSearchQuery.value) {
+      await searchPluginLyrics();
+    }
+  } catch (error) {
+    lyricSearchStatus.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function closeLyricSearchDialog() {
+  isSearchDialogOpen.value = false;
+  isLoadingMorePluginLyrics.value = false;
+  resolvingLyricTrackKey.value = null;
+}
+
+async function selectLyricSearchProvider(providerId: string | null) {
+  lyricSearchProviderId.value = providerId;
+  await searchPluginLyrics();
+}
+
+async function searchPluginLyrics() {
+  const query = lyricSearchQuery.value.trim();
+  if (!query) {
+    lyricSearchResults.value = [];
+    lyricSearchStatus.value = '请输入歌曲名或歌手';
+    resetLyricSearchPaging();
+    return;
+  }
+
+  isSearchingPluginLyrics.value = true;
+  lyricSearchStatus.value = '';
+  lyricSearchPage.value = 1;
+  isLyricSearchEnd.value = true;
+  try {
+    const result = await searchPluginLyricsFromProviders(query, lyricSearchProviderId.value, 1, 30);
+    lyricSearchResults.value = result.tracks;
+    isLyricSearchEnd.value = result.isEnd;
+    if (result.tracks.length === 0) {
+      lyricSearchStatus.value = '没有找到匹配歌曲';
+    }
+  } catch (error) {
+    lyricSearchResults.value = [];
+    isLyricSearchEnd.value = true;
+    lyricSearchStatus.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    isSearchingPluginLyrics.value = false;
+  }
+}
+
+async function loadMorePluginLyrics() {
+  const query = lyricSearchQuery.value.trim();
+  if (!query || isSearchingPluginLyrics.value || isLoadingMorePluginLyrics.value || isLyricSearchEnd.value) return;
+
+  isLoadingMorePluginLyrics.value = true;
+  lyricSearchStatus.value = '';
+  try {
+    const nextPage = lyricSearchPage.value + 1;
+    const result = await searchPluginLyricsFromProviders(query, lyricSearchProviderId.value, nextPage, 30);
+    const existingKeys = new Set(lyricSearchResults.value.map(lyricTrackKey));
+    const nextTracks = result.tracks.filter((track) => !existingKeys.has(lyricTrackKey(track)));
+    lyricSearchResults.value = [...lyricSearchResults.value, ...nextTracks];
+    lyricSearchPage.value = nextPage;
+    isLyricSearchEnd.value = result.isEnd || nextTracks.length === 0;
+  } catch (error) {
+    lyricSearchStatus.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    isLoadingMorePluginLyrics.value = false;
+  }
+}
+
+function handleLyricSearchResultsScroll(event: Event) {
+  const target = event.currentTarget as HTMLElement;
+  const remaining = target.scrollHeight - target.scrollTop - target.clientHeight;
+  if (remaining < 96) {
+    void loadMorePluginLyrics();
+  }
+}
+
+async function applyPluginLyrics(track: PluginSearchTrack) {
+  const key = lyricTrackKey(track);
+  resolvingLyricTrackKey.value = key;
+  lyricSearchStatus.value = '';
+
+  try {
+    const source = await getPluginLyricsMetadata(track);
+    const rawLyrics = source.rawLyrics?.trim();
+    if (!rawLyrics) {
+      lyricSearchStatus.value = '这个结果没有可用歌词';
+      return;
+    }
+
+    const artwork = track.artwork?.trim() || null;
+    if (artwork) {
+      releaseLyricsCoverCache(activeCoverCacheKey.value);
+      activeCoverCacheKey.value = null;
+      coverData.value = null;
+      coverMimeType.value = null;
+      coverUrl.value = artwork;
+    }
+    const lyrics = isTauriRuntime() ? await resolveRawLyrics(rawLyrics, source.format ?? source.defaultFormat ?? null) : parseRawLyrics(rawLyrics);
+    loadedLyricLines.value = normalizeLyricLines(lyrics);
+    emit(
+      'lyricsFound',
+      rawLyrics,
+      artwork,
+      track.providerName,
+      source.lyricsUrl ?? `${track.providerName}@${track.providerId}`,
+      source.formats ?? [],
+      source.defaultFormat ?? null,
+      source.format ?? source.defaultFormat ?? null,
+      track.providerId,
+      track.id,
+      track.raw ?? track,
+    );
+    closeLyricSearchDialog();
+    await scrollToActiveLyric();
+  } catch (error) {
+    lyricSearchStatus.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (resolvingLyricTrackKey.value === key) {
+      resolvingLyricTrackKey.value = null;
+    }
+  }
+}
+
+function setLyricFontSize(size: number) {
+  player.setLyricFontSize(Math.min(MAX_LYRIC_FONT_SIZE, Math.max(MIN_LYRIC_FONT_SIZE, size)));
+  void scrollToActiveLyric();
+}
+
+function decreaseLyricFontSize() {
+  setLyricFontSize(lyricFontSize.value - 1);
+}
+
+function increaseLyricFontSize() {
+  setLyricFontSize(lyricFontSize.value + 1);
+}
+
+function openLyricSyncControls() {
+  isLyricSyncOpen.value = true;
+  closeFontMenu();
+}
+
+function shiftLyricTiming(deltaSeconds: number) {
+  lyricTimeOffset.value = Math.round((lyricTimeOffset.value + deltaSeconds) * 10) / 10;
+  void scrollToActiveLyric();
+}
+
+function openFontMenu(event: MouseEvent) {
+  const menuWidth = 204;
+  const menuHeight = 284;
+  fontMenuLeft.value = Math.min(event.clientX, window.innerWidth - menuWidth - 8);
+  fontMenuTop.value = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
+  isFontMenuOpen.value = true;
+}
+
+function closeFontMenu() {
+  isFontMenuOpen.value = false;
+}
+
+function closeFontMenuOnOutsidePointer(event: PointerEvent) {
+  const target = event.target;
+  if (target instanceof HTMLElement && target.closest('.lyrics-font-menu')) return;
+  closeFontMenu();
+}
+
+function clearAssociatedLyrics() {
+  loadedLyricLines.value = [];
+  releaseLyricsCoverCache(activeCoverCacheKey.value);
+  activeCoverCacheKey.value = null;
+  coverUrl.value = '';
+  coverData.value = null;
+  coverMimeType.value = null;
+  emit('lyricsCleared');
+  closeFontMenu();
+}
+
+function rawLyricsForDownload() {
+  return trackRawLyrics(props.activeTrack)?.trim() || '';
+}
+
+function plainTextLyrics(rawLyrics: string) {
+  return rawLyrics
+    .split(/\r?\n/)
+    .map((line) => line
+      .replace(/\[[^\]]*]/g, '')
+      .trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function isOnlineTrackPath(path: string) {
+  return /^https?:\/\//i.test(path) || path.startsWith('plugin://');
+}
+
+function localTrackFolder(path: string) {
+  if (!path || isOnlineTrackPath(path)) return '';
+
+  const normalizedPath = path.replace(/\//g, '\\');
+  const separatorIndex = normalizedPath.lastIndexOf('\\');
+  return separatorIndex > 0 ? normalizedPath.slice(0, separatorIndex) : '';
+}
+
+function lyricsDownloadDir(track: Track) {
+  return localTrackFolder(track.path) || player.settings.downloadDir;
+}
+
+function linkedLyricsLabel(track: Track) {
+  const lyrics = normalizeTrackLyrics(track);
+  if (lyrics?.lyricsUrl) return lyrics.lyricsUrl;
+  if (lyrics?.providerName) return lyrics.providerName;
+  if (isOnlineTrackPath(track.path)) return track.sourceName || '在线歌词';
+  return '本地歌词';
+}
+
+function lyricsDownloadTitle(track: Track) {
+  const title = track.title.trim();
+  const artist = track.artist?.trim();
+  if (!artist || title.endsWith(` - ${artist}`)) {
+    return title;
+  }
+  return `${title} - ${artist}`;
+}
+
+async function downloadLyrics(format: string) {
+  const rawLyrics = rawLyricsForDownload();
+  const activeTrack = props.activeTrack;
+  if (!activeTrack || !rawLyrics) {
+    emit('notify', '当前歌曲没有可下载的歌词');
+    return;
+  }
+
+  const downloadDir = lyricsDownloadDir(activeTrack);
+  if (!downloadDir) {
+    emit('notify', '请先在设置中选择下载位置');
+    return;
+  }
+
+  try {
+    await downloadLyricsFile({
+      downloadDir,
+      title: lyricsDownloadTitle(activeTrack),
+      artist: null,
+      lyrics: format === 'txt' ? plainTextLyrics(rawLyrics) : rawLyrics,
+      format,
+    });
+    emit('notify', '下载成功', 'success');
+    closeFontMenu();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit('notify', `歌词下载失败：${message}`);
+  }
+}
+
+function lyricFormatLabel(format: string) {
+  switch (format) {
+    case 'yrc':
+      return '逐字';
+    case 'qrc':
+      return 'QRC';
+    case 'krc':
+      return 'KRC';
+    case 'a2':
+      return 'A2';
+    case 'lrc':
+      return '原文';
+    case 'trans':
+      return '翻译';
+    case 'txt':
+      return '文本';
+    default:
+      return format;
+  }
+}
+
+function activeTrackAsPluginTrack(): PluginSearchTrack | null {
+  const track = props.activeTrack;
+  const lyrics = activeLyrics.value;
+  const providerId = lyrics?.providerId ?? track?.sourceProviderId;
+  const trackId = lyrics?.trackId ?? track?.sourceId;
+  if (!track || !providerId || !trackId) return null;
+  return {
+    id: trackId,
+    providerId,
+    providerName: lyrics?.providerName ?? track.sourceName ?? providerId,
+    title: track.title,
+    artist: track.artist ?? '',
+    album: track.album ?? '',
+    duration: track.duration ?? null,
+    artwork: track.artwork ?? null,
+    raw: lyrics?.trackRaw ?? track.sourceRaw ?? {
+      id: trackId,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      duration: track.duration,
+    },
+  };
+}
+
+async function switchLyricFormat(format: string) {
+  if (format === currentLyricFormat.value || switchingLyricFormat.value) return;
+  const pluginTrack = activeTrackAsPluginTrack();
+  if (!pluginTrack) return;
+
+  switchingLyricFormat.value = format;
+  try {
+    const source = await getPluginLyricsMetadata(pluginTrack, format);
+    const rawLyrics = source.rawLyrics?.trim();
+    if (!rawLyrics) {
+      emit('notify', '这个歌词格式没有可用内容', 'error');
+      return;
+    }
+
+    const lyrics = isTauriRuntime() ? await resolveRawLyrics(rawLyrics, source.format ?? format) : parseRawLyrics(rawLyrics);
+    loadedLyricLines.value = normalizeLyricLines(lyrics);
+    emit(
+      'lyricsFound',
+      rawLyrics,
+      props.activeTrack?.artwork ?? null,
+      pluginTrack.providerName,
+      source.lyricsUrl ?? `${pluginTrack.providerName}@${pluginTrack.providerId}`,
+      source.formats ?? availableLyricFormats.value,
+      source.defaultFormat ?? activeLyrics.value?.defaultFormat ?? null,
+      source.format ?? format,
+      pluginTrack.providerId,
+      pluginTrack.id,
+      pluginTrack.raw ?? pluginTrack,
+    );
+    await scrollToActiveLyric();
+  } catch (error) {
+    emit('notify', error instanceof Error ? error.message : String(error), 'error');
+  } finally {
+    switchingLyricFormat.value = null;
+  }
+}
+
+function hasDownloadableCover() {
+  return Boolean(coverData.value?.length || props.activeTrack?.artwork);
+}
+
+async function downloadCover() {
+  const activeTrack = props.activeTrack;
+  if (!activeTrack || !hasDownloadableCover()) {
+    emit('notify', '当前歌曲没有可下载的封面');
+    return;
+  }
+
+  if (!player.settings.downloadDir) {
+    emit('notify', '请先在设置中选择下载位置');
+    return;
+  }
+
+  try {
+    const result = await downloadCoverFile({
+      downloadDir: player.settings.downloadDir,
+      trackPath: activeTrack.path,
+      title: activeTrack.title,
+      artist: activeTrack.artist,
+      artworkUrl: coverData.value?.length ? null : activeTrack.artwork ?? null,
+      mimeType: coverMimeType.value,
+      data: coverData.value,
+    });
+    if (result.embeddedInTrack) {
+      await clearCoverThumbnailCache(activeTrack.path);
+      emit('coverChanged');
+    }
+    emit('notify', result.embeddedInTrack ? '封面已写入歌曲文件' : '封面已保存为图片', 'success');
+    closeFontMenu();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit('notify', `封面下载失败：${message}`);
+  }
+}
+
+async function updateFullscreenState() {
+  if (!isTauriRuntime()) return;
+  isFullscreen.value = await getCurrentWindow().isFullscreen();
+}
+
+async function toggleLyricsFullscreen() {
+  if (!isTauriRuntime()) return;
+  const appWindow = getCurrentWindow();
+  const currentlyFullscreen = await appWindow.isFullscreen();
+
+  if (currentlyFullscreen) {
+    await appWindow.setFullscreen(false);
+    isFullscreen.value = false;
+    if (restoreMaximizedAfterFullscreen) {
+      await appWindow.maximize();
+      restoreMaximizedAfterFullscreen = false;
+    }
+    return;
+  }
+
+  restoreMaximizedAfterFullscreen = await appWindow.isMaximized();
+  if (restoreMaximizedAfterFullscreen) {
+    await appWindow.unmaximize();
+    await new Promise((resolve) => window.setTimeout(resolve, 40));
+  }
+  await appWindow.setFullscreen(true);
+  isFullscreen.value = true;
+}
+
+async function closeLyricsView() {
+  if (isTauriRuntime() && isFullscreen.value) {
+    const appWindow = getCurrentWindow();
+    await appWindow.setFullscreen(false);
+    isFullscreen.value = false;
+    if (restoreMaximizedAfterFullscreen) {
+      await appWindow.maximize();
+      restoreMaximizedAfterFullscreen = false;
+    }
+  }
+  emit('close');
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', closeFontMenuOnOutsidePointer);
+  lyricAnimationFrame = window.requestAnimationFrame(tickLyricAnimation);
+  void updateFullscreenState();
+  void syncLyricsToCurrentTime();
+});
+
+onBeforeUnmount(() => {
+  if (browseRestoreTimer) {
+    window.clearTimeout(browseRestoreTimer);
+  }
+  if (lyricsScrollHideTimer) {
+    window.clearTimeout(lyricsScrollHideTimer);
+  }
+  if (lyricAnimationFrame) {
+    window.cancelAnimationFrame(lyricAnimationFrame);
+    lyricAnimationFrame = 0;
+  }
+  document.removeEventListener('pointerdown', closeFontMenuOnOutsidePointer);
+  clearLyricsCoverCache();
+  activeCoverCacheKey.value = null;
+  if (isTauriRuntime() && isFullscreen.value) {
+    void getCurrentWindow().setFullscreen(false).then(() => {
+      if (restoreMaximizedAfterFullscreen) {
+        return getCurrentWindow().maximize();
+      }
+      return undefined;
+    });
+  }
+});
+
+function handleCoverError() {
+  const key = activeCoverCacheKey.value;
+  deleteLyricsCoverCache(key);
+  activeCoverCacheKey.value = null;
+  coverUrl.value = '';
+}
+</script>
+
+<template>
+  <section
+    class="lyrics-view"
+    :class="{ 'has-cover-background': backgroundCoverUrl }"
+    :style="lyricsViewStyle"
+    @contextmenu.prevent="openFontMenu"
+  >
+    <button class="lyrics-close icon-button" type="button" :aria-label="t(player.settings.locale, 'close')" @click="closeLyricsView">
+      <ChevronDown :size="22" />
+    </button>
+    <button
+      class="lyrics-fullscreen icon-button"
+      type="button"
+      :aria-label="isFullscreen ? '退出全屏' : '全屏显示'"
+      :title="isFullscreen ? '退出全屏' : '全屏显示'"
+      @click.stop="toggleLyricsFullscreen"
+    >
+      <Minimize2 v-if="isFullscreen" :size="16" />
+      <Maximize2 v-else :size="16" />
+    </button>
+
+    <header class="lyrics-heading">
+      <h1>{{ activeTrack?.title || t(player.settings.locale, 'unknownTrack') }}</h1>
+      <p>
+        {{ activeTrack?.artist || t(player.settings.locale, 'unknownArtist') }}
+        <span>-</span>
+        {{ activeTrack?.album || t(player.settings.locale, 'localMusic') }}
+      </p>
+    </header>
+
+    <div class="lyrics-stage">
+      <div class="lyrics-cover album-cover" :class="{ 'has-cover-image': displayCoverUrl }">
+        <img v-if="displayCoverUrl" :src="displayCoverUrl" alt="" @error="handleCoverError" />
+        <template v-else>
+          <span class="cover-stars"></span>
+          <span class="cover-cup"></span>
+        </template>
+      </div>
+
+      <div class="lyrics-panel-wrap" :class="{ 'is-scrolling': isLyricsListScrolling }">
+        <div
+          ref="lyricsPanel"
+          class="lyrics-panel"
+          :class="{ 'is-empty': !loadedLyricLines.length }"
+          :aria-label="t(player.settings.locale, 'lyrics')"
+          @pointerdown="beginLyricBrowse"
+          @pointerup="restoreRealtimeLyrics"
+          @pointercancel="restoreRealtimeLyrics"
+          @mouseleave="restoreRealtimeLyrics(); hideLyricsScrollbar()"
+          @scroll="syncScrollThumb"
+          @wheel.passive="handleLyricsWheel"
+        >
+          <small v-if="isLoadingLyrics" class="lyrics-hint">{{ t(player.settings.locale, 'lyricsLoading') }}</small>
+          <div v-else-if="!loadedLyricLines.length" class="lyrics-empty">
+            <small class="lyrics-hint">{{ t(player.settings.locale, 'noLyrics') }}</small>
+            <button class="lyrics-search-link" type="button" @click.stop="openLyricSearchDialog">搜索歌词</button>
+          </div>
+          <p
+            v-for="(line, index) in loadedLyricLines"
+            :key="`${line.time ?? 'plain'}-${line.text}-${index}`"
+            :class="{
+              current: index === activeLyricIndex,
+              previous: index === activeLyricIndex - 1,
+              'previous-far': index === activeLyricIndex - 2,
+              next: index === activeLyricIndex + 1,
+              'next-far': index === activeLyricIndex + 2,
+              'next-farther': index === activeLyricIndex + 3,
+              'can-seek': line.time !== null,
+            }"
+            :role="line.time !== null ? 'button' : undefined"
+            :tabindex="line.time !== null ? 0 : undefined"
+            @click="seekToLyric(line)"
+            @keydown.enter="seekToLyric(line)"
+            @keydown.space.prevent="seekToLyric(line)"
+          >
+            <template v-if="line.words?.length">
+              <span
+                v-for="(word, wordIndex) in line.words"
+                :key="`${word.time}-${word.text}-${wordIndex}`"
+                class="lyric-word"
+                :style="{ '--lyric-word-progress': lyricWordProgress(line, index, wordIndex) }"
+              >
+                {{ word.text }}
+              </span>
+            </template>
+            <template v-else>{{ line.text }}</template>
+          </p>
+        </div>
+        <span v-if="loadedLyricLines.length" class="lyrics-scrollbar" aria-hidden="true">
+          <i :style="{ transform: `translateY(${scrollThumbTop}px)` }"></i>
+        </span>
+        <div v-if="isLyricSyncOpen" class="lyrics-sync-controls" @pointerdown.stop>
+          <button type="button" title="歌词快0.5秒" aria-label="歌词快0.5秒" @click="shiftLyricTiming(0.5)">
+            <span>+</span>
+            <strong>0.5</strong>
+          </button>
+          <button type="button" title="歌词慢0.5秒" aria-label="歌词慢0.5秒" @click="shiftLyricTiming(-0.5)">
+            <span>-</span>
+            <strong>0.5</strong>
+          </button>
+        </div>
+        <div v-if="canSwitchLyricFormat" class="lyrics-format-switcher" aria-label="歌词格式">
+          <button
+            v-for="format in availableLyricFormats"
+            :key="format"
+            type="button"
+            :class="{ active: format === currentLyricFormat }"
+            :disabled="switchingLyricFormat !== null"
+            @click="switchLyricFormat(format)"
+          >
+            {{ lyricFormatLabel(format) }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="isFontMenuOpen"
+      class="lyrics-font-menu"
+      :style="{ left: `${fontMenuLeft}px`, top: `${fontMenuTop}px` }"
+      role="menu"
+      aria-label="歌词操作"
+      @contextmenu.prevent
+      @pointerdown.stop
+    >
+      <span class="lyrics-font-menu-title">设置字号</span>
+      <div class="lyrics-font-menu-row">
+        <button type="button" aria-label="减小字号" @click="decreaseLyricFontSize">
+          A<small>-</small>
+        </button>
+        <strong>{{ lyricFontSize }}</strong>
+        <button type="button" aria-label="增大字号" @click="increaseLyricFontSize">
+          A<small>+</small>
+        </button>
+      </div>
+      <span class="lyrics-menu-separator" aria-hidden="true"></span>
+      <button class="lyrics-menu-item" type="button" disabled>歌曲操作</button>
+      <button class="lyrics-menu-item" type="button" :disabled="!hasDownloadableCover()" @click="downloadCover">下载封面</button>
+      <button
+        v-for="format in downloadableLyricFormats"
+        :key="format"
+        class="lyrics-menu-item"
+        type="button"
+        @click="downloadLyrics(format)"
+      >
+        下载歌词 (.{{ format }})
+      </button>
+      <span class="lyrics-menu-separator" aria-hidden="true"></span>
+      <span v-if="activeLyrics?.rawLyrics && activeTrack" class="lyrics-menu-linked" :title="`已关联歌词：${linkedLyricsLabel(activeTrack)}`">
+        已关联歌词：{{ linkedLyricsLabel(activeTrack) }}
+      </span>
+      <button class="lyrics-menu-item" type="button" @click="openLyricSearchDialog">搜索歌词</button>
+      <button class="lyrics-menu-item" type="button" @click="openLyricSyncControls">同步歌词</button>
+      <button v-if="activeLyrics?.rawLyrics" class="lyrics-menu-item" type="button" @click="clearAssociatedLyrics">取消关联歌词</button>
+    </div>
+
+    <div v-if="isSearchDialogOpen" class="lyrics-search-overlay" @pointerdown.self="closeLyricSearchDialog">
+      <section class="lyrics-search-dialog" role="dialog" aria-modal="true" aria-label="搜索歌词">
+        <header class="lyrics-search-head">
+          <label class="lyrics-search-field">
+            <Search :size="16" />
+            <input
+              v-model="lyricSearchQuery"
+              type="search"
+              placeholder="搜索歌词"
+              @keydown.enter="searchPluginLyrics"
+            />
+          </label>
+          <button class="lyrics-search-close" type="button" aria-label="关闭" @click="closeLyricSearchDialog">
+            <X :size="18" />
+          </button>
+        </header>
+
+        <nav v-if="lyricSearchProviders.length > 0" class="lyrics-provider-tabs" aria-label="歌词来源">
+          <button
+            type="button"
+            :class="{ active: lyricSearchProviderId === null }"
+            @click="selectLyricSearchProvider(null)"
+          >
+            全部
+          </button>
+          <button
+            v-for="provider in lyricSearchProviders"
+            :key="provider.id"
+            type="button"
+            :class="{ active: lyricSearchProviderId === provider.id }"
+            :disabled="!provider.enabled"
+            @click="selectLyricSearchProvider(provider.id)"
+          >
+            {{ provider.name }}
+          </button>
+        </nav>
+
+        <div class="lyrics-search-results" @scroll="handleLyricSearchResultsScroll">
+          <p v-if="isSearchingPluginLyrics" class="lyrics-search-state">正在搜索歌词...</p>
+          <template v-else>
+            <button
+              v-for="track in lyricSearchResults"
+              :key="lyricTrackKey(track)"
+              class="lyrics-search-row"
+              type="button"
+              :disabled="resolvingLyricTrackKey === lyricTrackKey(track)"
+              @click="applyPluginLyrics(track)"
+            >
+              <span class="lyrics-search-cover">
+                <img v-if="track.artwork" :src="track.artwork" alt="" />
+                <Search v-else :size="18" />
+              </span>
+              <span class="lyrics-search-meta">
+                <strong>{{ track.title }}</strong>
+                <small>{{ track.artist || '未知歌手' }} · {{ track.providerName }}</small>
+              </span>
+              <small v-if="resolvingLyricTrackKey === lyricTrackKey(track)" class="lyrics-search-resolving">读取中</small>
+            </button>
+            <p v-if="isLoadingMorePluginLyrics" class="lyrics-search-state">正在加载更多...</p>
+          </template>
+          <p v-if="!isSearchingPluginLyrics && lyricSearchStatus" class="lyrics-search-state">{{ lyricSearchStatus }}</p>
+        </div>
+      </section>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.lyrics-view {
+  position: relative;
+  grid-row: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 24px clamp(28px, 5vw, 72px) 16px;
+  background: var(--lyrics-surface, var(--smw-bg-canvas));
+}
+
+.lyrics-view::before,
+.lyrics-view::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+
+.lyrics-view::before {
+  inset: -18px;
+  background-image: var(--lyrics-cover-bg);
+  background-position: center;
+  background-size: cover;
+  filter: blur(16px) saturate(0.82) brightness(1.02);
+  opacity: 0;
+  transform: scale(1.02);
+}
+
+.lyrics-view.has-cover-background::before {
+  opacity: 0.42;
+}
+
+.lyrics-view::after {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--smw-lyrics-bg) 58%, transparent) 0%,
+      color-mix(in srgb, var(--smw-lyrics-bg) 42%, transparent) 48%,
+      color-mix(in srgb, var(--smw-lyrics-bg) 68%, transparent) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.48) 0%,
+      transparent 56%,
+      color-mix(in srgb, var(--smw-lyrics-bg) 18%, transparent) 100%
+  );
+  opacity: 0;
+}
+
+.lyrics-view.has-cover-background::after {
+  opacity: 0.82;
+}
+
+.lyrics-view > * {
+  position: relative;
+  z-index: 1;
+}
+
+.lyrics-close {
+  position: absolute;
+  top: 22px;
+  left: 22px;
+  z-index: 2;
+}
+
+.lyrics-fullscreen {
+  position: absolute;
+  top: 70px;
+  right: 32px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  color: var(--smw-text-secondary);
+}
+
+.lyrics-fullscreen:hover {
+  color: var(--smw-text-primary);
+}
+
+.lyrics-heading {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding-top: 16px;
+  text-align: center;
+}
+
+.lyrics-heading h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 620;
+  line-height: 1.1;
+}
+
+.lyrics-heading p {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  color: var(--smw-text-secondary);
+  font-size: 14px;
+}
+
+.lyrics-stage {
+  display: grid;
+  grid-template-columns: minmax(240px, 360px) minmax(520px, 1.7fr);
+  gap: clamp(44px, 6vw, 86px);
+  align-items: center;
+  max-width: 1280px;
+  height: calc(100% - 78px);
+  margin: 0 auto;
+}
+
+.mono-window.lyrics-open .lyrics-stage {
+  height: calc(100% - var(--player-height) - 78px);
+}
+
+.lyrics-cover {
+  position: relative;
+  width: min(360px, 30vw);
+  max-width: 360px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 31% 72%, var(--smw-cover-dot) 0 2px, transparent 4px),
+    radial-gradient(circle at 58% 65%, var(--smw-cover-dot-soft) 0 2px, transparent 4px),
+    radial-gradient(circle at 75% 54%, var(--smw-cover-dot) 0 2px, transparent 4px),
+    linear-gradient(90deg, var(--smw-cover-line) 0 1px, transparent 1px 18px),
+    linear-gradient(140deg, var(--smw-cover-base-deep) 0%, var(--smw-cover-base) 52%, var(--smw-cover-base-deep) 100%);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.16);
+}
+
+.lyrics-cover::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    linear-gradient(90deg, transparent 74%, var(--smw-cover-line) 74.5%, transparent 75.2%),
+    repeating-linear-gradient(90deg, var(--smw-cover-line) 0 1px, transparent 1px 12px);
+  opacity: 0.55;
+}
+
+.lyrics-cover.has-cover-image::before {
+  display: none;
+}
+
+.lyrics-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-stars {
+  position: absolute;
+  right: 42px;
+  bottom: 62px;
+  width: 54px;
+  height: 54px;
+  background:
+    radial-gradient(circle, var(--smw-cover-dot) 0 2px, transparent 3px) 4px 5px / 18px 18px,
+    radial-gradient(circle, var(--smw-cover-dot-soft) 0 1px, transparent 2px) 8px 7px / 13px 13px;
+  opacity: 0.92;
+}
+
+.cover-cup {
+  position: absolute;
+  right: 32px;
+  bottom: 28px;
+  width: 48px;
+  height: 30px;
+  border: 2px solid var(--smw-cover-object-border);
+  border-top-color: var(--smw-cover-line);
+  border-radius: 4px 4px 14px 14px;
+  background: var(--smw-cover-object);
+}
+
+.cover-cup::after {
+  position: absolute;
+  top: 8px;
+  right: -17px;
+  width: 18px;
+  height: 16px;
+  border: 2px solid var(--smw-cover-object-border);
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+  content: "";
+}
+
+.lyrics-panel-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.lyrics-panel {
+  display: grid;
+  gap: 20px;
+  justify-items: center;
+  height: clamp(420px, 72vh, 760px);
+  overflow-y: auto;
+  padding: calc(clamp(420px, 72vh, 760px) * 0.32) 34px calc(clamp(420px, 72vh, 760px) * 0.42) 0;
+  color: var(--smw-text-secondary);
+  scroll-behavior: smooth;
+  text-align: center;
+  scrollbar-width: none;
+}
+
+.lyrics-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.lyrics-panel.is-empty {
+  align-content: center;
+  padding: 0 34px 0 0;
+}
+
+.lyrics-hint {
+  color: var(--smw-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.lyrics-empty {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.lyrics-empty .lyrics-hint,
+.lyrics-search-link {
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.lyrics-search-link {
+  padding: 0;
+  border: 0;
+  color: var(--smw-accent-blue, #2f7df6);
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.lyrics-search-link:hover,
+.lyrics-search-link:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.lyrics-panel p {
+  margin: 0;
+  font-size: var(--lyrics-font-size, 22px);
+  line-height: 1.25;
+  opacity: 0.22;
+  transform: scale(0.9);
+  transition:
+    opacity 240ms ease,
+    color 240ms ease,
+    font-size 240ms ease,
+    transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.lyrics-panel p.can-seek {
+  cursor: pointer;
+}
+
+.lyrics-panel p.can-seek:hover,
+.lyrics-panel p.can-seek:focus-visible {
+  color: var(--smw-lyrics-current);
+  outline: none;
+}
+
+.lyrics-panel .current {
+  color: var(--smw-lyrics-current);
+  font-size: calc(var(--lyrics-font-size, 22px) + 10px);
+  font-weight: 680;
+  opacity: 1;
+  transform: scale(1);
+  text-shadow: 0 8px 24px color-mix(in srgb, var(--smw-lyrics-current) 18%, transparent);
+}
+
+.lyrics-panel .current .lyric-word {
+  display: inline-block;
+  color: transparent;
+  background:
+    linear-gradient(
+      90deg,
+      var(--smw-lyrics-current) 0 var(--lyric-word-progress, 0%),
+      var(--smw-text-secondary) var(--lyric-word-progress, 0%) 100%
+    );
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.lyrics-panel .current .lyric-word {
+  text-shadow: 0 8px 24px color-mix(in srgb, var(--smw-lyrics-current) 22%, transparent);
+}
+
+.lyrics-panel .previous {
+  opacity: 0.68;
+  transform: scale(0.92);
+}
+
+.lyrics-panel .previous-far {
+  opacity: 0.48;
+  transform: scale(0.9);
+}
+
+.lyrics-panel .next {
+  opacity: 0.58;
+  transform: scale(0.96);
+}
+
+.lyrics-panel .next-far {
+  opacity: 0.44;
+  transform: scale(0.94);
+}
+
+.lyrics-panel .next-farther {
+  opacity: 0.32;
+  transform: scale(0.92);
+}
+
+.lyrics-scrollbar {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 4px;
+  height: 220px;
+  border-radius: 999px;
+  background: var(--smw-border);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 160ms ease;
+}
+
+.lyrics-panel-wrap:hover.is-scrolling .lyrics-scrollbar {
+  opacity: 1;
+}
+
+.lyrics-scrollbar i {
+  display: block;
+  width: 4px;
+  height: 66px;
+  border-radius: inherit;
+  background: var(--smw-text-secondary);
+  transition: transform 180ms ease;
+}
+
+.lyrics-sync-controls {
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  z-index: 2;
+  display: grid;
+  gap: 16px;
+  transform: translateY(-50%);
+}
+
+.lyrics-sync-controls button {
+  display: grid;
+  grid-template-rows: 16px 14px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  padding: 0;
+  border: 1.5px solid color-mix(in srgb, var(--smw-lyrics-current) 78%, var(--smw-text-primary));
+  border-radius: 6px;
+  color: var(--smw-lyrics-current);
+  background: color-mix(in srgb, var(--smw-bg-workspace) 82%, transparent);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  line-height: 1;
+  backdrop-filter: blur(10px);
+}
+
+.lyrics-sync-controls button:hover,
+.lyrics-sync-controls button:focus-visible {
+  background: color-mix(in srgb, var(--smw-bg-hover) 88%, transparent);
+  transform: translateY(-1px);
+}
+
+.lyrics-sync-controls button span {
+  align-self: end;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.lyrics-sync-controls button strong {
+  align-self: start;
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.lyrics-format-switcher {
+  position: absolute;
+  right: 34px;
+  bottom: -34px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--smw-border) 72%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--smw-bg) 82%, transparent);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+.lyrics-format-switcher button {
+  min-width: 44px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--smw-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.lyrics-format-switcher button:hover,
+.lyrics-format-switcher button:focus-visible {
+  color: var(--smw-text-primary);
+  outline: none;
+}
+
+.lyrics-format-switcher button.active {
+  color: #fff;
+  background: var(--smw-accent-blue, #2f7df6);
+}
+
+.lyrics-format-switcher button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.lyrics-font-menu {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  gap: 0;
+  width: 204px;
+  padding: 8px 0;
+  border: 1px solid var(--smw-border);
+  border-radius: 6px;
+  color: var(--smw-text-body);
+  background: var(--smw-bg-input);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+}
+
+.lyrics-font-menu-title {
+  padding: 0 12px 8px;
+  color: var(--smw-text-secondary);
+  font-size: 13px;
+}
+
+.lyrics-font-menu-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  gap: 10px;
+  align-items: center;
+  padding: 0 12px 10px;
+}
+
+.lyrics-font-menu-row button {
+  display: inline-grid;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  color: var(--smw-text-primary);
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.lyrics-font-menu-row button:hover {
+  border-radius: 6px;
+  background: var(--smw-bg-hover);
+}
+
+.lyrics-font-menu-row button small {
+  margin-left: 1px;
+  font-size: 10px;
+}
+
+.lyrics-font-menu-row strong {
+  display: grid;
+  height: 28px;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--smw-text-body);
+  background: var(--smw-bg-selected);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.lyrics-menu-separator {
+  display: block;
+  height: 1px;
+  margin: 6px 0;
+  background: var(--smw-border-soft);
+}
+
+.lyrics-menu-item {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  color: var(--smw-text-body);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.lyrics-menu-item:hover,
+.lyrics-menu-item:focus-visible {
+  background: var(--smw-bg-hover);
+  outline: none;
+}
+
+.lyrics-menu-item:disabled {
+  color: var(--smw-text-muted);
+  cursor: default;
+  opacity: 0.58;
+}
+
+.lyrics-menu-item:disabled:hover {
+  background: transparent;
+}
+
+.lyrics-menu-linked {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  padding: 8px 12px;
+  color: var(--smw-text-body);
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lyrics-search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.lyrics-search-dialog {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  width: min(600px, calc(100vw - 32px));
+  max-height: min(520px, calc(100vh - 80px));
+  overflow: hidden;
+  border: 1px solid var(--smw-border-soft);
+  border-radius: 8px;
+  background: var(--smw-bg-workspace);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
+}
+
+.lyrics-search-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px 6px 14px;
+}
+
+.lyrics-search-field {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--smw-border);
+  border-radius: 6px;
+  color: var(--smw-text-secondary);
+  background: var(--smw-bg-input);
+}
+
+.lyrics-search-field input {
+  min-width: 0;
+  border: 0;
+  color: var(--smw-text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.lyrics-search-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  color: var(--smw-text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.lyrics-search-close:hover {
+  color: var(--smw-text-primary);
+}
+
+.lyrics-provider-tabs {
+  display: flex;
+  gap: 22px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 12px 16px 4px;
+  border-bottom: 1px solid var(--smw-border-soft);
+  scrollbar-width: thin;
+}
+
+.lyrics-provider-tabs button {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 30px;
+  border: 0;
+  color: var(--smw-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.lyrics-provider-tabs button.active {
+  color: var(--smw-text-primary);
+  font-weight: 620;
+}
+
+.lyrics-provider-tabs button.active::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--smw-accent-blue, #2f7df6);
+  content: "";
+}
+
+.lyrics-provider-tabs button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.lyrics-search-results {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 12px 12px;
+}
+
+.lyrics-search-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--smw-text-body);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lyrics-search-row:hover,
+.lyrics-search-row:focus-visible {
+  background: var(--smw-bg-hover);
+  outline: none;
+}
+
+.lyrics-search-row:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.lyrics-search-cover {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 7px;
+  color: var(--smw-text-secondary);
+  background: var(--smw-bg-selected);
+}
+
+.lyrics-search-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lyrics-search-meta {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.lyrics-search-meta strong,
+.lyrics-search-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lyrics-search-meta strong {
+  color: var(--smw-text-primary);
+  font-size: 14px;
+  font-weight: 520;
+}
+
+.lyrics-search-meta small,
+.lyrics-search-resolving,
+.lyrics-search-state {
+  color: var(--smw-text-secondary);
+  font-size: 13px;
+}
+
+.lyrics-search-state {
+  margin: 18px 8px;
+  text-align: center;
+}
+</style>

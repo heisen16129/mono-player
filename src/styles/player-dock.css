@@ -1,0 +1,42 @@
+.lyrics-dock-hot-zone {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 31;
+  height: 28px;
+}
+
+.mono-window.lyrics-open .player-dock.lyrics-auto-hidden {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(100% + 2px));
+}
+
+.mono-window.lyrics-open .player-dock.has-cover-background {
+  isolation: isolate;
+  border-top-color: transparent;
+  background: transparent;
+}
+
+.mono-window.lyrics-open .player-dock.has-cover-background::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+}
+
+.mono-window.lyrics-open .player-dock.has-cover-background::before {
+  display: none;
+}
+
+.mono-window.lyrics-open .player-dock.has-cover-background::after {
+  z-index: -1;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--smw-lyrics-bg) 10%, transparent) 0%,
+      color-mix(in srgb, var(--smw-lyrics-bg) 30%, transparent) 54%,
+      color-mix(in srgb, var(--smw-lyrics-bg) 42%, transparent) 100%
+    );
+}

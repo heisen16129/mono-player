@@ -1,0 +1,177 @@
+.app-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-row: 1;
+  grid-template-columns: var(--sidebar-width) var(--library-width) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.lyrics-slide-enter-active,
+.lyrics-slide-leave-active {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  width: 100%;
+  will-change: transform, opacity;
+  transition: transform 460ms cubic-bezier(0.22, 0.76, 0.22, 1);
+}
+
+.lyrics-slide-enter-from {
+  transform: translateY(calc(100% + var(--player-height))) scale(0.98);
+}
+
+.lyrics-slide-enter-to {
+  transform: translateY(0) scale(1);
+}
+
+.lyrics-slide-leave-to {
+  transform: translateY(calc(100% + var(--player-height))) scale(0.98);
+}
+
+.lyrics-slide-leave-active {
+  transition: transform 460ms cubic-bezier(0.22, 0.76, 0.22, 1);
+}
+
+.mono-window.lyrics-open .lyrics-view {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  width: 100%;
+}
+
+.sidebar-collapsed .app-grid {
+  grid-template-columns: var(--sidebar-collapsed-width) var(--library-width) minmax(0, 1fr);
+}
+
+.app-grid.settings-grid {
+  grid-template-columns: var(--sidebar-width) 0 minmax(0, 1fr);
+}
+
+.app-grid.theme-grid {
+  grid-template-columns: var(--sidebar-width) 0 minmax(0, 1fr);
+}
+
+.app-grid.plugins-grid {
+  grid-template-columns: var(--sidebar-width) 0 minmax(0, 1fr);
+}
+
+.app-grid.downloads-grid {
+  grid-template-columns: var(--sidebar-width) 0 minmax(0, 1fr);
+}
+
+.app-grid.discover-grid {
+  grid-template-columns: var(--sidebar-width) 0 minmax(0, 1fr);
+}
+
+.app-grid.favorites-grid {
+  grid-template-columns: var(--sidebar-width) 0 minmax(0, 1fr);
+}
+
+.app-grid.artists-grid {
+  grid-template-columns: var(--sidebar-width) var(--library-width) minmax(0, 1fr);
+}
+
+.sidebar-collapsed .app-grid.settings-grid {
+  grid-template-columns: var(--sidebar-collapsed-width) 0 minmax(0, 1fr);
+}
+
+.sidebar-collapsed .app-grid.theme-grid {
+  grid-template-columns: var(--sidebar-collapsed-width) 0 minmax(0, 1fr);
+}
+
+.sidebar-collapsed .app-grid.plugins-grid {
+  grid-template-columns: var(--sidebar-collapsed-width) 0 minmax(0, 1fr);
+}
+
+.sidebar-collapsed .app-grid.downloads-grid {
+  grid-template-columns: var(--sidebar-collapsed-width) 0 minmax(0, 1fr);
+}
+
+.sidebar-collapsed .app-grid.discover-grid {
+  grid-template-columns: var(--sidebar-collapsed-width) 0 minmax(0, 1fr);
+}
+
+.sidebar-collapsed .app-grid.favorites-grid {
+  grid-template-columns: var(--sidebar-collapsed-width) 0 minmax(0, 1fr);
+}
+
+.sidebar-collapsed .app-grid.artists-grid {
+  grid-template-columns: var(--sidebar-collapsed-width) var(--library-width) minmax(0, 1fr);
+}
+
+.settings-grid .settings-view,
+.theme-grid .theme-view,
+.plugins-grid .plugin-manager-view,
+.downloads-grid .download-manager-view,
+.discover-grid .discover-music-view,
+.discover-grid .plugin-search-view,
+.favorites-grid .workspace {
+  grid-column: 3;
+}
+
+.artists-grid .artists-view {
+  grid-column: 2 / 4;
+  display: grid;
+  grid-template-columns: var(--library-width) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.mono-window.has-theme-background .primary-sidebar {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(18, 32, 58, 0.08);
+  border-right-color: rgba(255, 255, 255, 0.16);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(2px);
+}
+
+.mono-window.has-theme-background .library-panel,
+.mono-window.has-theme-background .artists-panel {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(18, 32, 58, 0.08);
+  border-right-color: rgba(255, 255, 255, 0.16);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(2px);
+}
+
+.mono-window.has-theme-background .workspace,
+.mono-window.has-theme-background .plugin-search-view,
+.mono-window.has-theme-background .artist-detail,
+.mono-window.has-theme-background .discover-music-view,
+.mono-window.has-theme-background .settings-view,
+.mono-window.has-theme-background .plugin-manager-view,
+.mono-window.has-theme-background .download-manager-view,
+.mono-window.has-theme-background .theme-view {
+  background: rgba(18, 32, 58, 0.08);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(2px);
+}
+
+.mono-window.has-theme-background .player-dock {
+  color: rgba(255, 255, 255, 0.94);
+  border-top-color: rgba(255, 255, 255, 0.34);
+  background: transparent;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: none;
+}
+
+.mono-window.has-theme-background.lyrics-open .player-dock {
+  border-top-color: rgba(255, 255, 255, 0.34);
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.mono-window.has-theme-background .main-nav a:hover,
+.mono-window.has-theme-background .playlist-nav-item:hover,
+.mono-window.has-theme-background .main-nav .is-active,
+.mono-window.has-theme-background .quick-row:hover,
+.mono-window.has-theme-background .quick-row.selected,
+.mono-window.has-theme-background .playlist-row:hover,
+.mono-window.has-theme-background .playlist-row.selected {
+  background: rgba(255, 255, 255, 0.32);
+}

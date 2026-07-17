@@ -1,0 +1,11 @@
+{
+  "id": "soft-pink",
+  "name": "柔和粉色",
+  "author": "Mono Player",
+  "version": "1.0.0",
+  "type": "theme",
+  "entry": "variables.css",
+  "preview": "preview.svg",
+  "background": "background.svg",
+  "backgroundOpacity": 0.86
+}

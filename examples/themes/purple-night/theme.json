@@ -1,0 +1,11 @@
+{
+  "id": "purple-night",
+  "name": "Purple Night",
+  "author": "Mono Player",
+  "version": "1.0.0",
+  "type": "theme",
+  "entry": "variables.css",
+  "preview": "preview.svg",
+  "background": "background.svg",
+  "backgroundOpacity": 0.9
+}

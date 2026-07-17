@@ -1,0 +1,11 @@
+{
+  "id": "soft-mint",
+  "name": "柔和薄荷",
+  "author": "Mono Player",
+  "version": "1.0.0",
+  "type": "theme",
+  "entry": "variables.css",
+  "preview": "preview.svg",
+  "background": "background.png",
+  "backgroundOpacity": 0.88
+}

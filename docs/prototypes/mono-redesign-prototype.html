@@ -1,0 +1,1167 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mono Player Redesign Prototype</title>
+    <style>
+      :root {
+        --bg: #111418;
+        --shell: #151a20;
+        --panel: rgba(31, 37, 45, 0.72);
+        --panel-strong: rgba(38, 45, 54, 0.92);
+        --panel-soft: rgba(255, 255, 255, 0.045);
+        --line: rgba(210, 220, 232, 0.12);
+        --line-strong: rgba(210, 220, 232, 0.2);
+        --text: #eceff3;
+        --text-body: #c6cdd6;
+        --muted: #8f9aa7;
+        --faint: #687382;
+        --accent: #4f8fe8;
+        --accent-soft: rgba(79, 143, 232, 0.18);
+        --good: #70d18d;
+        --radius: 14px;
+        --radius-sm: 10px;
+        color-scheme: dark;
+        font-family:
+          "MiSans",
+          "HarmonyOS Sans SC",
+          "PingFang SC",
+          "Microsoft YaHei UI",
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 22% 10%, rgba(79, 143, 232, 0.18), transparent 32%),
+          radial-gradient(circle at 78% 18%, rgba(120, 134, 155, 0.16), transparent 26%),
+          linear-gradient(140deg, #101318, #171b20 56%, #11151a);
+        overflow: hidden;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        color: inherit;
+      }
+
+      .prototype {
+        display: grid;
+        min-height: 100dvh;
+        place-items: center;
+        padding: 28px;
+      }
+
+      .app-frame {
+        position: relative;
+        display: grid;
+        grid-template-rows: 42px minmax(0, 1fr) 94px;
+        width: min(1440px, calc(100vw - 56px));
+        height: min(900px, calc(100dvh - 56px));
+        min-height: 720px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 22px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 130px),
+          rgba(17, 20, 24, 0.78);
+        box-shadow:
+          0 28px 80px rgba(0, 0, 0, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(28px) saturate(130%);
+      }
+
+      .titlebar {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 18px;
+        padding: 0 18px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .traffic {
+        display: inline-flex;
+        gap: 8px;
+      }
+
+      .traffic i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.22);
+      }
+
+      .titlebar strong {
+        justify-self: center;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 560;
+        letter-spacing: 0.02em;
+      }
+
+      .window-tools {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .tool-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 26px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--text-body);
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .app-grid {
+        display: grid;
+        grid-template-columns: 248px 318px minmax(0, 1fr);
+        min-height: 0;
+      }
+
+      .sidebar,
+      .library,
+      .workspace {
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .sidebar {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        gap: 22px;
+        padding: 18px 14px;
+        border-right: 1px solid var(--line);
+        background: rgba(17, 22, 28, 0.55);
+      }
+
+      .brand {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 12px;
+        align-items: center;
+        padding: 2px 8px;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 12px;
+        color: #f4f7fb;
+        background:
+          radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.38), transparent 28%),
+          linear-gradient(145deg, #526071, #1c232c);
+        font-size: 22px;
+        font-weight: 780;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+      }
+
+      .brand-copy {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .brand-copy strong {
+        font-size: 16px;
+        letter-spacing: -0.02em;
+      }
+
+      .brand-copy span,
+      .account small,
+      .metric span,
+      .folder-row small,
+      .track-meta,
+      .queue-row small {
+        color: var(--muted);
+      }
+
+      .brand-copy span,
+      .account small {
+        font-size: 12px;
+      }
+
+      .nav {
+        display: grid;
+        align-content: start;
+        gap: 6px;
+      }
+
+      .nav-group {
+        display: grid;
+        gap: 5px;
+      }
+
+      .nav-label {
+        margin: 10px 10px 4px;
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .nav button,
+      .folder-row,
+      .icon-button,
+      .ghost-button,
+      .primary-button,
+      .transport button,
+      .queue-row {
+        border: 0;
+        cursor: pointer;
+      }
+
+      .nav button {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 0 10px;
+        border-radius: var(--radius-sm);
+        color: var(--text-body);
+        background: transparent;
+        text-align: left;
+      }
+
+      .nav button:hover,
+      .folder-row:hover,
+      .queue-row:hover,
+      .track-row:hover {
+        background: rgba(255, 255, 255, 0.055);
+      }
+
+      .nav button.active {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.085);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      }
+
+      .glyph {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border-radius: 9px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.055);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .nav button.active .glyph {
+        color: #dbe9ff;
+        background: var(--accent-soft);
+      }
+
+      .nav count {
+        color: var(--faint);
+        font-size: 12px;
+      }
+
+      .account {
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .avatar {
+        display: grid;
+        width: 38px;
+        height: 38px;
+        place-items: center;
+        border-radius: 50%;
+        background: linear-gradient(145deg, #3a4554, #202832);
+        font-weight: 720;
+      }
+
+      .account span {
+        display: grid;
+        gap: 1px;
+      }
+
+      .account strong {
+        font-size: 13px;
+      }
+
+      .icon-button {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 10px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .library {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        gap: 16px;
+        padding: 20px 16px;
+        border-right: 1px solid var(--line);
+        background: rgba(21, 26, 32, 0.64);
+      }
+
+      .panel-head {
+        display: grid;
+        gap: 12px;
+      }
+
+      .panel-head h1,
+      .workspace-title h2,
+      .queue-card h3 {
+        margin: 0;
+        letter-spacing: -0.04em;
+      }
+
+      .panel-head h1 {
+        font-size: 24px;
+      }
+
+      .search {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        height: 40px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.055);
+      }
+
+      .search input {
+        min-width: 0;
+        border: 0;
+        color: var(--text);
+        background: transparent;
+        outline: none;
+      }
+
+      .search input::placeholder {
+        color: var(--faint);
+      }
+
+      .library-metrics {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .metric {
+        display: grid;
+        gap: 5px;
+        min-height: 78px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .metric strong {
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: -0.05em;
+      }
+
+      .metric span {
+        font-size: 12px;
+      }
+
+      .folder-list {
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        min-height: 0;
+        overflow: auto;
+        padding-right: 2px;
+      }
+
+      .section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 4px 2px 2px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .folder-row {
+        display: grid;
+        grid-template-columns: 46px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        min-height: 62px;
+        padding: 8px;
+        border-radius: var(--radius);
+        color: var(--text);
+        background: transparent;
+        text-align: left;
+      }
+
+      .folder-row.active {
+        background: rgba(255, 255, 255, 0.085);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      }
+
+      .cover {
+        position: relative;
+        overflow: hidden;
+        border-radius: 12px;
+        background: #29313b;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+      }
+
+      .folder-cover {
+        width: 46px;
+        height: 46px;
+      }
+
+      .cover img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0.96;
+      }
+
+      .folder-row span,
+      .track-copy,
+      .queue-row span {
+        display: grid;
+        min-width: 0;
+        gap: 3px;
+      }
+
+      .folder-row strong,
+      .track-copy strong,
+      .queue-row strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .folder-row strong {
+        font-size: 13px;
+      }
+
+      .workspace {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        gap: 16px;
+        padding: 20px 22px 18px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 220px),
+          rgba(16, 20, 25, 0.48);
+      }
+
+      .workspace-toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .workspace-title {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .workspace-title h2 {
+        font-size: clamp(26px, 3vw, 42px);
+        line-height: 1.02;
+      }
+
+      .workspace-title p {
+        max-width: 58ch;
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .primary-button,
+      .ghost-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
+        padding: 0 15px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+
+      .primary-button {
+        color: #f8fbff;
+        background: linear-gradient(145deg, #5c9bf1, #3d77cc);
+        box-shadow: 0 12px 26px rgba(79, 143, 232, 0.24);
+      }
+
+      .ghost-button {
+        border: 1px solid var(--line);
+        color: var(--text-body);
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 16px;
+        min-height: 176px;
+      }
+
+      .hero-card {
+        position: relative;
+        display: grid;
+        grid-template-columns: 132px minmax(0, 1fr);
+        align-items: end;
+        gap: 18px;
+        overflow: hidden;
+        padding: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.11);
+        border-radius: 20px;
+        background:
+          radial-gradient(circle at 82% 15%, rgba(79, 143, 232, 0.2), transparent 34%),
+          linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035));
+      }
+
+      .hero-cover {
+        width: 132px;
+        height: 132px;
+        border-radius: 18px;
+        transform: rotate(-2deg);
+      }
+
+      .hero-copy {
+        display: grid;
+        gap: 10px;
+      }
+
+      .hero-copy h3 {
+        max-width: 9em;
+        margin: 0;
+        font-size: clamp(26px, 3vw, 46px);
+        line-height: 0.98;
+        letter-spacing: -0.06em;
+      }
+
+      .hero-copy p {
+        max-width: 42ch;
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .insight-card {
+        display: grid;
+        align-content: space-between;
+        gap: 16px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .insight-card h3 {
+        max-width: 12em;
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.1;
+        letter-spacing: -0.04em;
+      }
+
+      .wave {
+        display: flex;
+        align-items: end;
+        gap: 5px;
+        height: 58px;
+      }
+
+      .wave i {
+        width: 7px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 72%, #d7e8ff);
+        opacity: 0.86;
+      }
+
+      .wave i:nth-child(1) { height: 18px; }
+      .wave i:nth-child(2) { height: 34px; }
+      .wave i:nth-child(3) { height: 25px; }
+      .wave i:nth-child(4) { height: 50px; }
+      .wave i:nth-child(5) { height: 42px; }
+      .wave i:nth-child(6) { height: 28px; }
+      .wave i:nth-child(7) { height: 54px; }
+      .wave i:nth-child(8) { height: 36px; }
+      .wave i:nth-child(9) { height: 22px; }
+
+      .track-panel {
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .track-head,
+      .track-row {
+        display: grid;
+        grid-template-columns: 44px minmax(260px, 1.3fr) minmax(130px, 0.72fr) minmax(120px, 0.62fr) 70px 42px;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .track-head {
+        min-height: 42px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--line);
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .track-list {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      .track-row {
+        min-height: 58px;
+        padding: 0 14px;
+        color: var(--text-body);
+      }
+
+      .track-row.active {
+        color: var(--text);
+        background: linear-gradient(90deg, rgba(79, 143, 232, 0.18), rgba(255, 255, 255, 0.04));
+      }
+
+      .track-index {
+        color: var(--faint);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .track-title {
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr);
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+      }
+
+      .track-cover {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+      }
+
+      .track-copy strong {
+        color: currentColor;
+        font-size: 13px;
+      }
+
+      .track-meta,
+      .track-row time {
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .like {
+        color: #ec7f9b;
+        font-size: 15px;
+      }
+
+      .dock {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(240px, 1fr) minmax(280px, 420px) minmax(240px, 1fr);
+        align-items: center;
+        gap: 20px;
+        padding: 12px 22px;
+        border-top: 1px solid rgba(255, 255, 255, 0.11);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.045)),
+          rgba(20, 25, 31, 0.82);
+        backdrop-filter: blur(26px) saturate(140%);
+      }
+
+      .progress {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: linear-gradient(90deg, var(--accent) 0 42%, rgba(255, 255, 255, 0.13) 42% 100%);
+      }
+
+      .now {
+        display: grid;
+        grid-template-columns: 58px minmax(0, 1fr);
+        align-items: center;
+        gap: 13px;
+        min-width: 0;
+      }
+
+      .now .cover {
+        width: 58px;
+        height: 58px;
+        border-radius: 15px;
+      }
+
+      .now strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .now small {
+        color: var(--muted);
+      }
+
+      .transport {
+        display: grid;
+        justify-items: center;
+        gap: 8px;
+      }
+
+      .transport-buttons {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .transport button {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border-radius: 999px;
+        color: var(--text-body);
+        background: transparent;
+      }
+
+      .transport .play {
+        width: 48px;
+        height: 48px;
+        color: #f8fbff;
+        background: linear-gradient(145deg, #5c9bf1, #3d77cc);
+      }
+
+      .time {
+        display: grid;
+        grid-template-columns: 44px 1fr 44px;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        color: var(--muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .time span:nth-child(2) {
+        height: 4px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .time span:nth-child(2)::before {
+        display: block;
+        width: 42%;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--accent);
+        content: "";
+      }
+
+      .dock-tools {
+        display: inline-flex;
+        justify-content: end;
+        gap: 9px;
+      }
+
+      .queue-card {
+        position: absolute;
+        right: 22px;
+        bottom: 108px;
+        display: grid;
+        gap: 12px;
+        width: 344px;
+        padding: 14px;
+        border: 1px solid var(--line-strong);
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.045)),
+          rgba(25, 30, 37, 0.9);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(22px) saturate(140%);
+      }
+
+      .queue-card header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .queue-card h3 {
+        font-size: 16px;
+      }
+
+      .queue-card header span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .queue-list {
+        display: grid;
+        gap: 5px;
+      }
+
+      .queue-row {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        min-height: 44px;
+        padding: 0 7px;
+        border-radius: 11px;
+        color: var(--text-body);
+        background: transparent;
+        text-align: left;
+      }
+
+      .queue-row.active {
+        color: var(--text);
+        background: var(--accent-soft);
+      }
+
+      .queue-row b {
+        color: var(--faint);
+        font-size: 12px;
+        font-weight: 640;
+      }
+
+      @media (max-width: 1100px) {
+        .app-frame {
+          width: calc(100vw - 24px);
+          height: calc(100dvh - 24px);
+          min-height: 680px;
+          border-radius: 18px;
+        }
+
+        .prototype {
+          padding: 12px;
+        }
+
+        .app-grid {
+          grid-template-columns: 84px minmax(260px, 300px) minmax(0, 1fr);
+        }
+
+        .brand-copy,
+        .nav button span:nth-child(2),
+        .nav button count,
+        .account span {
+          display: none;
+        }
+
+        .sidebar {
+          padding-inline: 12px;
+        }
+
+        .nav button {
+          grid-template-columns: 1fr;
+          justify-items: center;
+          padding: 0;
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+        }
+
+        .insight-card {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="prototype">
+      <main class="app-frame" aria-label="Mono Player redesign prototype">
+        <header class="titlebar">
+          <span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span>
+          <strong>Mono Player 视觉原型</strong>
+          <span class="window-tools">
+            <span class="tool-pill">深色主题</span>
+            <span class="tool-pill">本地资料库</span>
+          </span>
+        </header>
+
+        <section class="app-grid">
+          <aside class="sidebar">
+            <div class="brand">
+              <div class="brand-mark">M</div>
+              <span class="brand-copy">
+                <strong>Mono Player</strong>
+                <span>本地音乐工作台</span>
+              </span>
+            </div>
+
+            <nav class="nav" aria-label="主导航">
+              <div class="nav-group">
+                <button class="active"><span class="glyph">S</span><span>发现音乐</span><count>12</count></button>
+                <button><span class="glyph">L</span><span>本地音乐</span><count>286</count></button>
+                <button><span class="glyph">A</span><span>艺术家</span><count>48</count></button>
+                <button><span class="glyph">R</span><span>最近播放</span><count>32</count></button>
+                <button><span class="glyph">D</span><span>下载管理</span><count>7</count></button>
+              </div>
+
+              <div class="nav-group">
+                <div class="nav-label">歌单</div>
+                <button><span class="glyph">F</span><span>我喜欢的音乐</span><count>64</count></button>
+                <button><span class="glyph">N</span><span>夜间通勤</span><count>28</count></button>
+                <button><span class="glyph">W</span><span>写代码时听</span><count>41</count></button>
+              </div>
+            </nav>
+
+            <div class="account">
+              <div class="avatar">M</div>
+              <span>
+                <strong>Mono</strong>
+                <small>插件已启用</small>
+              </span>
+              <button class="icon-button" aria-label="设置">SET</button>
+            </div>
+          </aside>
+
+          <aside class="library">
+            <div class="panel-head">
+              <h1>音乐库</h1>
+              <label class="search">
+                <span>搜索</span>
+                <input value="" placeholder="歌曲、艺术家、专辑" />
+                <span>⌘K</span>
+              </label>
+            </div>
+
+            <div class="library-metrics">
+              <div class="metric">
+                <strong>286</strong>
+                <span>本地歌曲</span>
+              </div>
+              <div class="metric">
+                <strong>18h</strong>
+                <span>可播放时长</span>
+              </div>
+            </div>
+
+            <div class="folder-list">
+              <div class="section-title"><span>本地文件夹</span><span>扫描</span></div>
+              <button class="folder-row active">
+                <span class="cover folder-cover"><img src="https://picsum.photos/seed/mono-library-night/120/120" alt="" /></span>
+                <span><strong>Music</strong><small>162 首歌曲</small></span>
+              </button>
+              <button class="folder-row">
+                <span class="cover folder-cover"><img src="https://picsum.photos/seed/mono-library-desk/120/120" alt="" /></span>
+                <span><strong>Lo-fi Archive</strong><small>54 首歌曲</small></span>
+              </button>
+              <button class="folder-row">
+                <span class="cover folder-cover"><img src="https://picsum.photos/seed/mono-library-road/120/120" alt="" /></span>
+                <span><strong>Road Collection</strong><small>38 首歌曲</small></span>
+              </button>
+              <button class="folder-row">
+                <span class="cover folder-cover"><img src="https://picsum.photos/seed/mono-library-studio/120/120" alt="" /></span>
+                <span><strong>Studio Exports</strong><small>32 首歌曲</small></span>
+              </button>
+            </div>
+          </aside>
+
+          <section class="workspace">
+            <div class="workspace-toolbar">
+              <div class="workspace-title">
+                <h2>Music</h2>
+                <p>把资料库当成一个清晰的播放工作台：重点在当前集合、可读列表和不打扰的播放控制。</p>
+              </div>
+              <div class="actions">
+                <button class="ghost-button">定位当前</button>
+                <button class="primary-button">播放全部</button>
+              </div>
+            </div>
+
+            <section class="hero">
+              <div class="hero-card">
+                <span class="cover hero-cover"><img src="https://picsum.photos/seed/mono-player-hero-cover/360/360" alt="" /></span>
+                <div class="hero-copy">
+                  <h3>晚间播放队列</h3>
+                  <p>162 首歌曲，已按最近播放和收藏状态重新排序。</p>
+                  <div class="actions">
+                    <button class="primary-button">继续播放</button>
+                    <button class="ghost-button">打开歌词</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="insight-card">
+                <h3>播放状态更像系统控件，而不是网页卡片。</h3>
+                <div class="wave" aria-hidden="true">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                </div>
+              </div>
+            </section>
+
+            <section class="track-panel">
+              <div class="track-head">
+                <span>#</span><span>歌曲</span><span>艺术家</span><span>专辑</span><span>时长</span><span></span>
+              </div>
+              <div class="track-list">
+                <div class="track-row active">
+                  <span class="track-index">01</span>
+                  <span class="track-title">
+                    <span class="cover track-cover"><img src="https://picsum.photos/seed/mono-track-aurora/90/90" alt="" /></span>
+                    <span class="track-copy"><strong>Afterglow Station</strong><span class="track-meta">正在播放</span></span>
+                  </span>
+                  <span class="track-meta">Nora Vale</span>
+                  <span class="track-meta">Blue Room</span>
+                  <time>03:42</time>
+                  <span class="like">♥</span>
+                </div>
+                <div class="track-row">
+                  <span class="track-index">02</span>
+                  <span class="track-title">
+                    <span class="cover track-cover"><img src="https://picsum.photos/seed/mono-track-cobalt/90/90" alt="" /></span>
+                    <span class="track-copy"><strong>Glass Harbor</strong><span class="track-meta">FLAC</span></span>
+                  </span>
+                  <span class="track-meta">Jun Park</span>
+                  <span class="track-meta">Signals</span>
+                  <time>04:16</time>
+                  <span></span>
+                </div>
+                <div class="track-row">
+                  <span class="track-index">03</span>
+                  <span class="track-title">
+                    <span class="cover track-cover"><img src="https://picsum.photos/seed/mono-track-silver/90/90" alt="" /></span>
+                    <span class="track-copy"><strong>Low Battery Moon</strong><span class="track-meta">MP3</span></span>
+                  </span>
+                  <span class="track-meta">Mika Rowan</span>
+                  <span class="track-meta">Desk Light</span>
+                  <time>02:58</time>
+                  <span class="like">♥</span>
+                </div>
+                <div class="track-row">
+                  <span class="track-index">04</span>
+                  <span class="track-title">
+                    <span class="cover track-cover"><img src="https://picsum.photos/seed/mono-track-night/90/90" alt="" /></span>
+                    <span class="track-copy"><strong>Soft Console</strong><span class="track-meta">M4A</span></span>
+                  </span>
+                  <span class="track-meta">Ari Kim</span>
+                  <span class="track-meta">No Window</span>
+                  <time>03:31</time>
+                  <span></span>
+                </div>
+                <div class="track-row">
+                  <span class="track-index">05</span>
+                  <span class="track-title">
+                    <span class="cover track-cover"><img src="https://picsum.photos/seed/mono-track-grid/90/90" alt="" /></span>
+                    <span class="track-copy"><strong>Northline</strong><span class="track-meta">WAV</span></span>
+                  </span>
+                  <span class="track-meta">Vera Lin</span>
+                  <span class="track-meta">Later Maps</span>
+                  <time>05:04</time>
+                  <span></span>
+                </div>
+                <div class="track-row">
+                  <span class="track-index">06</span>
+                  <span class="track-title">
+                    <span class="cover track-cover"><img src="https://picsum.photos/seed/mono-track-circuit/90/90" alt="" /></span>
+                    <span class="track-copy"><strong>Quiet Cache</strong><span class="track-meta">OPUS</span></span>
+                  </span>
+                  <span class="track-meta">Theo Sands</span>
+                  <span class="track-meta">Runtime</span>
+                  <time>03:09</time>
+                  <span class="like">♥</span>
+                </div>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <footer class="dock">
+          <div class="progress"></div>
+          <div class="now">
+            <span class="cover"><img src="https://picsum.photos/seed/mono-track-aurora/160/160" alt="" /></span>
+            <span>
+              <strong>Afterglow Station</strong>
+              <small>Nora Vale</small>
+            </span>
+          </div>
+
+          <div class="transport">
+            <div class="transport-buttons">
+              <button aria-label="随机">SH</button>
+              <button aria-label="上一首">PR</button>
+              <button class="play" aria-label="播放">▶</button>
+              <button aria-label="下一首">NX</button>
+              <button aria-label="循环">RP</button>
+            </div>
+            <div class="time"><span>01:38</span><span></span><span>03:42</span></div>
+          </div>
+
+          <div class="dock-tools">
+            <button class="icon-button">HQ</button>
+            <button class="icon-button">1x</button>
+            <button class="icon-button">VOL</button>
+            <button class="icon-button">Q</button>
+          </div>
+
+          <aside class="queue-card">
+            <header>
+              <h3>播放队列</h3>
+              <span>24 首</span>
+            </header>
+            <div class="queue-list">
+              <button class="queue-row active"><b>01</b><span><strong>Afterglow Station</strong><small>Nora Vale</small></span><time>03:42</time></button>
+              <button class="queue-row"><b>02</b><span><strong>Glass Harbor</strong><small>Jun Park</small></span><time>04:16</time></button>
+              <button class="queue-row"><b>03</b><span><strong>Low Battery Moon</strong><small>Mika Rowan</small></span><time>02:58</time></button>
+            </div>
+          </aside>
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

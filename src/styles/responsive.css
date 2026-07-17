@@ -1,0 +1,175 @@
+@media (max-width: 1100px) {
+  :root {
+    --sidebar-width: 214px;
+    --sidebar-collapsed-width: 72px;
+    --library-width: 214px;
+  }
+
+  .player-dock {
+    grid-template-columns: minmax(220px, 1fr) 240px minmax(220px, 1fr);
+  }
+
+  .lyrics-stage {
+    grid-template-columns: minmax(220px, 320px) minmax(320px, 1fr);
+    gap: 42px;
+  }
+
+  .lyrics-cover {
+    width: min(320px, 34vw);
+  }
+
+  .playback-meta {
+    grid-column: 3;
+    justify-content: end;
+  }
+}
+
+@media (max-width: 820px) {
+  .mono-window {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .app-grid {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .app-grid.settings-grid,
+  .app-grid.theme-grid,
+  .app-grid.plugins-grid,
+  .app-grid.downloads-grid,
+  .app-grid.discover-grid,
+  .app-grid.favorites-grid,
+  .app-grid.artists-grid,
+  .sidebar-collapsed .app-grid.settings-grid,
+  .sidebar-collapsed .app-grid.theme-grid,
+  .sidebar-collapsed .app-grid.plugins-grid,
+  .sidebar-collapsed .app-grid.downloads-grid,
+  .sidebar-collapsed .app-grid.discover-grid,
+  .sidebar-collapsed .app-grid.favorites-grid,
+  .sidebar-collapsed .app-grid.artists-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-grid .settings-view,
+  .theme-grid .theme-view,
+  .plugins-grid .plugin-manager-view,
+  .downloads-grid .download-manager-view,
+  .discover-grid .discover-music-view,
+  .discover-grid .plugin-search-view,
+  .favorites-grid .workspace,
+  .artists-grid .artists-view {
+    grid-column: auto;
+  }
+
+  .primary-sidebar,
+  .library-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--smw-border);
+  }
+
+  .primary-sidebar {
+    gap: 16px;
+  }
+
+  .primary-sidebar.collapsed {
+    align-items: stretch;
+  }
+
+  .main-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .primary-sidebar.collapsed .main-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .primary-sidebar.collapsed .main-nav a {
+    width: auto;
+    margin-left: 0;
+  }
+
+  .account {
+    margin-top: 0;
+  }
+
+  .workspace {
+    padding-bottom: 118px;
+  }
+
+  .settings-view,
+  .theme-view,
+  .download-manager-view {
+    padding: 20px 18px 128px;
+  }
+
+  .settings-header h1 {
+    font-size: 25px;
+  }
+
+  .settings-tabs {
+    gap: 22px;
+  }
+
+  .inline-options {
+    gap: 12px 24px;
+  }
+
+  .lyrics-stage,
+  .player-dock,
+  .playback-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .transport {
+    position: static;
+    transform: none;
+  }
+
+  .playback-meta {
+    grid-column: auto;
+  }
+
+  .lyrics-view {
+    overflow: auto;
+    padding: 18px 18px 120px;
+  }
+
+  .lyrics-heading {
+    padding-top: 48px;
+  }
+
+  .lyrics-stage {
+    height: auto;
+    justify-items: center;
+    gap: 34px;
+    margin-top: 34px;
+  }
+
+  .lyrics-cover {
+    width: min(280px, 72vw);
+  }
+
+  .lyrics-panel-wrap {
+    width: 100%;
+  }
+
+  .lyrics-panel {
+    height: 360px;
+    padding: 150px 0;
+  }
+
+  .lyrics-scrollbar {
+    display: none;
+  }
+
+  .player-dock {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    min-height: auto;
+    padding: 10px 14px;
+  }
+
+}
