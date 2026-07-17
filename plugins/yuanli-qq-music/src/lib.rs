@@ -29,7 +29,7 @@ pub extern "C" fn mono_last_len() -> usize {
 pub extern "C" fn mono_invoke(ptr: *const u8, len: usize) -> *mut u8 {
     let input = unsafe { std::slice::from_raw_parts(ptr, len) };
     let req: Value = serde_json::from_slice(input).unwrap_or_else(|_| json!({}));
-    let res = handle_request(req);
+    let res = wrap_plugin_response(handle_request(req));
     let bytes = res.to_string().into_bytes();
     let out_len = bytes.len();
     let out = mono_alloc(out_len);
@@ -50,6 +50,16 @@ fn handle_request(request: Value) -> Value {
         Some("host_response") => host_response(&request),
         action => json!({"error":format!("unsupported action: {:?}",action)}),
     }
+}
+
+fn wrap_plugin_response(response: Value) -> Value {
+    if response.get("hostRequest").is_some() {
+        return response;
+    }
+    if let Some(error) = response.get("error").and_then(Value::as_str).map(str::trim).filter(|value| !value.is_empty()) {
+        return json!({"code":0,"message":error,"data":null});
+    }
+    json!({"code":1,"message":"OK","data":response})
 }
 
 fn metadata_response() -> Value {

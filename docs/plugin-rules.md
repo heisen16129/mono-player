@@ -47,18 +47,34 @@ Rust 会读取 `.wasm` 并调用：
 { "action": "metadata" }
 ```
 
-插件必须返回：
+插件最终业务响应必须使用现有 `ApiResponse` envelope：
+
+```ts
+type ApiResponse<T> = {
+  code: 1 | 0;
+  message: string;
+  data: T | null;
+};
+```
+
+成功响应的业务字段放在 `data` 中；失败响应使用 `code: 0` 和 `message`，不再返回裸 `{ "error": "..." }`。
+
+`metadata` 必须返回：
 
 ```json
 {
-  "id": "mono-plugin-example",
-  "name": "示例音乐",
-  "version": "1.0.0",
-  "kind": "music",
-  "author": "Mono",
-  "description": "示例插件",
-  "capabilities": ["search", "play", "lyrics"],
-  "permissions": ["network"]
+  "code": 1,
+  "message": "OK",
+  "data": {
+    "id": "mono-plugin-example",
+    "name": "示例音乐",
+    "version": "1.0.0",
+    "kind": "music",
+    "author": "Mono",
+    "description": "示例插件",
+    "capabilities": ["search", "play", "lyrics"],
+    "permissions": ["network"]
+  }
 }
 ```
 
@@ -92,6 +108,7 @@ Rust 不做业务推断：
 - 实现自己声明的能力。
 - 搜索结果保留 `raw`，供播放和歌词阶段继续使用。
 - 需要网络时返回 `hostRequest`，不要直接访问系统网络。
+- 最终业务响应统一返回 `ApiResponse`，中间网络请求才返回裸 `hostRequest`。
 
 ### Rust Host 负责
 
@@ -129,12 +146,12 @@ Rust 不做业务推断：
 
 | action | 入参摘要 | 返回摘要 |
 | --- | --- | --- |
-| `metadata` | `{ "action": "metadata" }` | 插件声明字段。 |
-| `search` | `keyword/page/pageSize` | `{ tracks, isEnd }`。 |
-| `qualities` | `track` | `{ qualities, defaultQuality }`。 |
-| `play` | `track/quality/includeMetadata` | `{ url, artwork?, quality?, lyrics? }`。 |
-| `lyrics` | `track/format` | `{ rawLyrics?, lyricsUrl?, formats?, defaultFormat?, format? }`。 |
-| `host_response` | 原请求、Host 请求、HTTP 响应 | 最终业务响应。 |
+| `metadata` | `{ "action": "metadata" }` | `ApiResponse<PluginMetadata>`。 |
+| `search` | `keyword/page/pageSize` | `ApiResponse<{ tracks, isEnd }>`。 |
+| `qualities` | `track` | `ApiResponse<{ qualities, defaultQuality }>`。 |
+| `play` | `track/quality/includeMetadata` | `ApiResponse<{ url, artwork?, quality?, lyrics? }>`。 |
+| `lyrics` | `track/format` | `ApiResponse<{ rawLyrics?, lyricsUrl?, formats?, defaultFormat?, format? }>`。 |
+| `host_response` | 原请求、Host 请求、HTTP 响应 | 最终 `ApiResponse`，或继续返回裸 `hostRequest`。 |
 
 详细字段见 [wasm-plugin-development.md](wasm-plugin-development.md)。
 
@@ -170,6 +187,8 @@ Host 规则：
 - 不要让 Rust 用文件名、URL、能力列表去猜 metadata。
 - 不要在插件里写死用户 Cookie、token 或隐私数据。
 - 不要让 catalog 字段覆盖插件自己的 metadata。
+- 不要返回裸业务对象作为最终响应，例如 `{ "tracks": [] }`。
+- 不要返回裸错误对象作为最终响应，例如 `{ "error": "..." }`。
 
 ## 验收规则
 

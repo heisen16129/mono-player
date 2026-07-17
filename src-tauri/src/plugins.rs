@@ -167,7 +167,11 @@ pub fn plugin_invoke(
     plugin_id: Option<String>,
     permissions: Option<Vec<String>>,
 ) -> ApiResponse<serde_json::Value> {
-    ApiResponse::from_result(worker.invoke_plugin(entry, request, plugin_id, permissions))
+    ApiResponse::from_result(
+        worker
+            .invoke_plugin(entry, request, plugin_id, permissions)
+            .and_then(unwrap_plugin_response_envelope),
+    )
 }
 
 #[tauri::command]
@@ -357,7 +361,7 @@ fn search_plugin_backend(
         plugin.permissions.clone(),
     )?;
 
-    normalize_plugin_search_page(response, &plugin)
+    normalize_plugin_search_page(unwrap_plugin_response_envelope(response)?, &plugin)
 }
 
 #[tauri::command]
@@ -439,7 +443,7 @@ fn resolve_plugin_playback_qualities_backend(
         plugin.permissions.clone(),
     )?;
 
-    normalize_plugin_playback_qualities(response)
+    normalize_plugin_playback_qualities(unwrap_plugin_response_envelope(response)?)
 }
 
 #[tauri::command]
@@ -536,7 +540,9 @@ pub(crate) fn resolve_plugin_playback_source_backend(
                         "response": response.clone(),
                     }),
                 );
-                match normalize_plugin_playback_source(response, &quality, &plugin_track, &plugin) {
+                match unwrap_plugin_response_envelope(response)
+                    .and_then(|data| normalize_plugin_playback_source(data, &quality, &plugin_track, &plugin))
+                {
                     Ok(mut source) => {
                         if include_metadata && playback_source_needs_lyrics(&source) {
                             source.lyrics = resolve_playback_lyrics_metadata(
@@ -655,7 +661,7 @@ pub(crate) fn resolve_plugin_lyrics_metadata_backend(
         plugin.permissions.clone(),
     )?;
 
-    normalize_plugin_lyrics_metadata(response)
+    normalize_plugin_lyrics_metadata(unwrap_plugin_response_envelope(response)?)
 }
 
 fn normalize_plugin_playback_source(
@@ -774,7 +780,7 @@ fn resolve_playback_lyrics_metadata(
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
     )?;
-    normalize_plugin_lyrics_metadata(response)
+    normalize_plugin_lyrics_metadata(unwrap_plugin_response_envelope(response)?)
 }
 
 fn json_duration_seconds(value: &serde_json::Value) -> Option<u64> {
@@ -1081,8 +1087,32 @@ fn read_plugin_metadata_backend(
             None,
             permissions.map(normalize_permissions).transpose()?,
         )
+        .and_then(unwrap_plugin_response_envelope)
         .and_then(|value| serde_json::from_value::<PluginMetadata>(value).map_err(|err| err.to_string()))
         .and_then(normalize_plugin_metadata)
+}
+
+fn unwrap_plugin_response_envelope(response: Value) -> Result<Value, String> {
+    let code = response
+        .get("code")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "plugin response missing ApiResponse code".to_string())?;
+    let message = response
+        .get("message")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(if code == 1 { "plugin call succeeded" } else { "plugin call failed" });
+
+    if code != 1 {
+        return Err(message.to_string());
+    }
+
+    response
+        .get("data")
+        .cloned()
+        .filter(|value| !value.is_null())
+        .ok_or_else(|| "plugin ApiResponse success missing data".to_string())
 }
 
 fn normalize_plugin_metadata(metadata: PluginMetadata) -> Result<PluginMetadata, String> {
@@ -1428,7 +1458,7 @@ fn resolve_playback_quality_attempts(
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
     )?;
-    let qualities = normalize_plugin_playback_qualities(response)?;
+    let qualities = normalize_plugin_playback_qualities(unwrap_plugin_response_envelope(response)?)?;
 
     let default_quality = qualities.default_quality;
     let available = qualities
