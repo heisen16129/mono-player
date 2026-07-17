@@ -317,6 +317,10 @@ const activeTrack = computed(() => {
   if (onlineActiveTrack.value) return onlineActiveTrack.value;
   return player.currentTrack ?? selectedTrack.value ?? visibleTracks.value[0] ?? null;
 });
+const lyricsViewKey = computed(() => {
+  const track = activeTrack.value;
+  return track ? `${track.id}:${track.path}` : '';
+});
 
 const currentPlaybackSource = computed(() => {
   if (onlineActiveTrack.value) return onlinePlaybackSource.value;
@@ -2434,7 +2438,9 @@ function finishLyricsEnter() {
 
     <Transition name="lyrics-slide" @after-enter="finishLyricsEnter" @after-leave="showLibraryAfterLyricsLeave">
       <LyricsView
-        v-if="isLyricsOpen"
+        v-if="activeTrack"
+        v-show="isLyricsOpen"
+        :key="lyricsViewKey"
         :active-track="activeTrack"
         :current-time="playbackTime"
         :is-playing="isAudioPlaying"
