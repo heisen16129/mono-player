@@ -54,17 +54,9 @@ export interface DownloadItem {
   createdAt: number;
   downloadRequest?: {
     taskId?: string;
-    url: string;
     downloadDir: string;
-    title: string;
-    artist: string | null;
-    album: string | null;
-    duration: number | null;
-    year?: number | null;
-    genre?: string | null;
-    trackNumber?: number | null;
-    lyrics: string | null;
-    artwork: string | null;
+    track: Track;
+    qualityFallback?: string | null;
   } | null;
   filePath?: string | null;
   lyricsPath?: string | null;

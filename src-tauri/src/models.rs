@@ -13,8 +13,39 @@ pub(crate) struct Track {
     pub(crate) added_at: Option<String>,
     #[serde(rename = "scanId")]
     pub(crate) scan_id: Option<String>,
+    pub(crate) year: Option<u32>,
+    pub(crate) genre: Option<String>,
+    #[serde(rename = "trackNumber")]
+    pub(crate) track_number: Option<u32>,
+    pub(crate) artwork: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) lyrics: Option<TrackLyrics>,
+    #[serde(rename = "rawLyrics")]
+    pub(crate) raw_lyrics: Option<String>,
+    #[serde(rename = "lyricsSourceName")]
+    pub(crate) lyrics_source_name: Option<String>,
+    #[serde(rename = "lyricsSourceUrl")]
+    pub(crate) lyrics_source_url: Option<String>,
+    #[serde(rename = "lyricsFormats", default)]
+    pub(crate) lyrics_formats: Vec<String>,
+    #[serde(rename = "lyricsDefaultFormat")]
+    pub(crate) lyrics_default_format: Option<String>,
+    #[serde(rename = "lyricsFormat")]
+    pub(crate) lyrics_format: Option<String>,
+    #[serde(rename = "lyricsProviderId")]
+    pub(crate) lyrics_provider_id: Option<String>,
+    #[serde(rename = "lyricsTrackId")]
+    pub(crate) lyrics_track_id: Option<String>,
+    #[serde(rename = "lyricsTrackRaw")]
+    pub(crate) lyrics_track_raw: Option<serde_json::Value>,
+    #[serde(rename = "sourceId")]
+    pub(crate) source_id: Option<String>,
+    #[serde(rename = "sourceName")]
+    pub(crate) source_name: Option<String>,
+    #[serde(rename = "sourceProviderId")]
+    pub(crate) source_provider_id: Option<String>,
+    #[serde(rename = "sourceRaw")]
+    pub(crate) source_raw: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

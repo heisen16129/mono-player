@@ -1,7 +1,7 @@
 use crate::{
     database::{delete_missing_tracks_for_dir, read_tracks, upsert_track},
     downloads::{DownloadTrackRequest, EnqueueDownloadResult},
-    models::Track,
+    models::{Track, TrackLyrics},
     state::AppState,
 };
 use serde::{Deserialize, Serialize};
@@ -814,7 +814,17 @@ fn online_track_metadata(
         album,
         duration,
         artwork,
-        raw_lyrics,
+        lyrics: raw_lyrics.map(|raw_lyrics| TrackLyrics {
+            raw_lyrics: Some(raw_lyrics),
+            lyrics_url: None,
+            formats: Vec::new(),
+            default_format: None,
+            format: None,
+            provider_id: source_provider_id.clone(),
+            provider_name: source_name.clone(),
+            track_id: source_id.clone(),
+            track_raw: track.cloned(),
+        }),
         source_id: source_id.or_else(|| Some(url.to_string())),
         source_name,
         source_provider_id,
@@ -866,47 +876,46 @@ fn get_cover(app: &AppHandle, params: Value) -> Result<Value, String> {
 }
 
 fn download_track(app: &AppHandle, params: Value) -> Result<Value, String> {
-    let url = string_arg(&params, "url")
-        .ok_or_else(|| "mono_download_track requires string argument: url".to_string())?;
-    validate_http_url(&url, "url")?;
-    let title = string_arg(&params, "title")
-        .ok_or_else(|| "mono_download_track requires string argument: title".to_string())?;
+    let track = params
+        .get("track")
+        .cloned()
+        .ok_or_else(|| "mono_download_track requires object argument: track".to_string())?;
+    let track = serde_json::from_value::<Track>(track).map_err(|err| err.to_string())?;
     let download_dir = string_arg(&params, "downloadDir")
         .or_else(|| read_download_dir(app).ok().flatten())
         .ok_or_else(|| {
             "mono_download_track requires downloadDir, or a download directory in settings."
                 .to_string()
         })?;
-    let request = DownloadTrackRequest {
-        task_id: string_arg(&params, "taskId"),
-        url,
-        download_dir,
-        title,
-        artist: string_arg(&params, "artist"),
-        album: string_arg(&params, "album"),
-        duration: params.get("duration").and_then(Value::as_u64),
-        year: params
-            .get("year")
-            .and_then(Value::as_u64)
-            .and_then(|value| u32::try_from(value).ok()),
-        genre: string_arg(&params, "genre"),
-        track_number: params
-            .get("trackNumber")
-            .or_else(|| params.get("track_number"))
-            .and_then(Value::as_u64)
-            .and_then(|value| u32::try_from(value).ok()),
-        lyrics: string_arg(&params, "lyrics").or_else(|| string_arg(&params, "rawLyrics")),
-        artwork: string_arg(&params, "artwork"),
-    };
-    let task_id = request
-        .task_id
-        .clone()
+    let task_id = string_arg(&params, "taskId")
         .unwrap_or_else(|| format!("mcp-download-{}", now_ms()));
+    let request = DownloadTrackRequest {
+        task_id: Some(task_id.clone()),
+        download_dir,
+        track,
+        quality_fallback: string_arg(&params, "qualityFallback")
+            .or_else(|| string_arg(&params, "quality")),
+        plugins: read_download_plugins(app)?,
+    };
 
-    app.state::<crate::workers::download::DownloadWorkerState>()
-        .enqueue_download_track(task_id.clone(), request)?;
+    let response = crate::downloads::enqueue_download_online_track(app.clone(), request);
+    if response.code != 1 {
+        return Err(response.message);
+    }
 
     Ok(json!(EnqueueDownloadResult { task_id }))
+}
+
+fn read_download_plugins(
+    app: &AppHandle,
+) -> Result<Vec<crate::plugins::PluginPlaybackPlanPlugin>, String> {
+    serde_json::from_value(
+        read_store(app)?
+            .get("plugins.installed")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+    )
+    .map_err(|err| err.to_string())
 }
 
 fn list_resources() -> Result<Value, String> {

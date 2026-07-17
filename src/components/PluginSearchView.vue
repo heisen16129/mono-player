@@ -10,6 +10,7 @@ const props = defineProps<{
   activePlaybackTrack: Track | null;
   activeTrackKey: string | null;
   downloadedTrackKeys: string[];
+  pendingDownloadTrackKeys: string[];
   error: string | null;
   favoriteTrackIds: number[];
   hasMore: boolean;
@@ -207,6 +208,7 @@ onBeforeUnmount(() => {
           :tracks="pluginTracks"
           :active-track="activeTrack"
           :downloaded-track-keys="downloadedTrackKeys"
+          :pending-download-track-keys="pendingDownloadTrackKeys"
           :preparing-track-id="preparingTrackId"
           :spectrum-levels="spectrumLevels"
           enable-download-action

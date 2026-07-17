@@ -20,7 +20,6 @@ pub(crate) mod methods {
     pub(crate) const PLAYER_SET_OUTPUT_DEVICE: &str = "player.setOutputDevice";
     pub(crate) const PLAYER_STATE: &str = "player.state";
 
-    pub(crate) const DOWNLOAD_TRACK: &str = "download.track";
     pub(crate) const DOWNLOAD_ENQUEUE: &str = "download.enqueue";
     pub(crate) const DOWNLOAD_EVENT: &str = "download.event";
 

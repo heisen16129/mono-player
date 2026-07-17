@@ -493,45 +493,29 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "mono_download_track",
-                "description": "下载一个已解析的在线歌曲 URL 到本地，默认进入下载队列。",
+                "description": "把在线 Track 下载到本地，默认进入下载队列。本地曲库歌曲已经在本地，无需下载。",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "url": {
+                        "track": {
+                            "type": "object",
+                            "description": "在线 Track 对象。path 可为真实 HTTP/HTTPS 地址或 plugin:// 来源；plugin:// Track 应包含 sourceProviderId/sourceRaw 以便后端解析播放源和歌词。"
+                        },
+                        "taskId": {
                             "type": "string",
-                            "description": "HTTP/HTTPS 音频下载地址。"
+                            "description": "可选下载任务 ID。"
                         },
                         "downloadDir": {
                             "type": "string",
                             "description": "可选下载目录；不传时使用 Mono Player 设置中的下载目录。"
                         },
-                        "title": {
+                        "qualityFallback": {
                             "type": "string",
-                            "description": "歌曲标题。"
-                        },
-                        "artist": {
-                            "type": "string",
-                            "description": "可选歌手。"
-                        },
-                        "album": {
-                            "type": "string",
-                            "description": "可选专辑。"
-                        },
-                        "duration": {
-                            "type": "integer",
-                            "description": "可选时长，单位秒。"
-                        },
-                        "lyrics": {
-                            "type": "string",
-                            "description": "可选歌词。"
-                        },
-                        "artwork": {
-                            "type": "string",
-                            "description": "可选封面 URL。"
+                            "description": "可选插件播放源兜底音质。"
                         }
                     },
-                    "required": ["url", "title"],
-                    "additionalProperties": true
+                    "required": ["track"],
+                    "additionalProperties": false
                 }
             }
         ]

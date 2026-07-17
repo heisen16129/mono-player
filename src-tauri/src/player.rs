@@ -1,4 +1,5 @@
 use crate::api_response::ApiResponse;
+use crate::models::TrackLyrics;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -79,7 +80,7 @@ pub(crate) struct McpOnlineTrackMetadata {
     pub(crate) album: Option<String>,
     pub(crate) duration: Option<f64>,
     pub(crate) artwork: Option<String>,
-    pub(crate) raw_lyrics: Option<String>,
+    pub(crate) lyrics: Option<TrackLyrics>,
     pub(crate) source_id: Option<String>,
     pub(crate) source_name: Option<String>,
     pub(crate) source_provider_id: Option<String>,
@@ -562,7 +563,7 @@ pub(crate) fn mcp_play_online_track(
         metadata.album,
         metadata.duration,
         metadata.artwork,
-        metadata.raw_lyrics,
+        metadata.lyrics,
         metadata.source_id,
         metadata.source_name,
         metadata.source_provider_id,

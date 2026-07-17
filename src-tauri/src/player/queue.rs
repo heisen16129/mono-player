@@ -1,3 +1,4 @@
+use crate::models::TrackLyrics;
 use serde::{Deserialize, Serialize};
 use std::{
     path::Path,
@@ -31,7 +32,7 @@ pub(crate) struct QueueTrack {
     album: Option<String>,
     duration: Option<f64>,
     artwork: Option<String>,
-    raw_lyrics: Option<String>,
+    lyrics: Option<TrackLyrics>,
     source_id: Option<String>,
     source_name: Option<String>,
     source_provider_id: Option<String>,
@@ -269,7 +270,7 @@ pub(super) fn online_queue_track(
     album: Option<String>,
     duration: Option<f64>,
     artwork: Option<String>,
-    raw_lyrics: Option<String>,
+    lyrics: Option<TrackLyrics>,
     source_id: Option<String>,
     source_name: Option<String>,
     source_provider_id: Option<String>,
@@ -282,7 +283,7 @@ pub(super) fn online_queue_track(
         album,
         duration,
         artwork,
-        raw_lyrics,
+        lyrics,
         source_id,
         source_name,
         source_provider_id,

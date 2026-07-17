@@ -1,24 +1,15 @@
 import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
+import { listInstalledPlugins } from './plugins';
+import type { Track } from '../types/music';
+import type { PluginManifest } from '../types/plugin';
 
 export interface DownloadOnlineTrackRequest {
   taskId?: string;
-  url: string;
   downloadDir: string;
-  title: string;
-  artist: string | null;
-  album: string | null;
-  duration: number | null;
-  year?: number | null;
-  genre?: string | null;
-  trackNumber?: number | null;
-  lyrics: string | null;
-  artwork: string | null;
-}
-
-export interface DownloadOnlineTrackResult {
-  filePath: string;
-  lyricsPath: string | null;
+  track: Track;
+  qualityFallback?: string | null;
+  plugins?: PluginManifest[];
 }
 
 export interface DownloadLyricsFileRequest {
@@ -69,20 +60,19 @@ export interface DownloadQueueEvent {
   error: string | null;
 }
 
-export function downloadOnlineTrack(request: DownloadOnlineTrackRequest): Promise<DownloadOnlineTrackResult> {
-  if (!isTauriRuntime()) {
-    return Promise.reject(new Error('请在 Tauri 桌面窗口中下载音乐。'));
-  }
-
-  return invokeApi<DownloadOnlineTrackResult>('download_online_track', { request });
+async function withInstalledPlugins(request: DownloadOnlineTrackRequest): Promise<DownloadOnlineTrackRequest> {
+  return {
+    ...request,
+    plugins: request.plugins ?? await listInstalledPlugins(),
+  };
 }
 
-export function enqueueDownloadOnlineTrack(request: DownloadOnlineTrackRequest): Promise<EnqueueDownloadResult> {
+export async function enqueueDownloadOnlineTrack(request: DownloadOnlineTrackRequest): Promise<EnqueueDownloadResult> {
   if (!isTauriRuntime()) {
     return Promise.reject(new Error('请在 Tauri 桌面窗口中下载音乐。'));
   }
 
-  return invokeApi<EnqueueDownloadResult>('enqueue_download_online_track', { request });
+  return invokeApi<EnqueueDownloadResult>('enqueue_download_online_track', { request: await withInstalledPlugins(request) });
 }
 
 export function downloadLyricsFile(request: DownloadLyricsFileRequest): Promise<DownloadLyricsFileResult> {

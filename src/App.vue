@@ -49,7 +49,7 @@ import type { DownloadItem, PlaybackMode, Track } from './types/music';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption, PluginSearchProvider, PluginSearchTrack } from './types/plugin';
 import { getErrorMessage } from './utils/error';
 import { folderTitle, normalizePath } from './utils/path';
-import { normalizeTrackLyrics, trackRawLyrics } from './utils/trackLyrics';
+import { normalizeTrackLyrics } from './utils/trackLyrics';
 import { shouldSkipWindowDrag } from './utils/windowDrag';
 
 const player = usePlayerStore();
@@ -135,6 +135,11 @@ const shouldShowDownloadsMenu = computed(() => player.settings.enablePlugins || 
 const downloadedTrackKeys = computed(() => (
   downloadItems.value
     .filter((item) => item.status === 'downloaded')
+    .map((item) => item.id)
+));
+const pendingDownloadTrackKeys = computed(() => (
+  downloadItems.value
+    .filter((item) => item.status === 'downloading' || item.status === 'paused')
     .map((item) => item.id)
 ));
 
@@ -326,6 +331,9 @@ const shouldShowOnlineQuality = computed(() => {
 const shouldShowActiveTrackDownload = computed(() => Boolean(player.settings.enablePlugins && onlineActiveTrack.value && onlineActivePluginTrack.value));
 const isActiveOnlineTrackDownloaded = computed(() => (
   onlineActiveTrack.value ? isTrackDownloaded(onlineActiveTrack.value) : false
+));
+const isActiveOnlineTrackDownloading = computed(() => (
+  onlineActiveTrack.value ? isTrackDownloadPending(onlineActiveTrack.value) : false
 ));
 const isPreparingActiveTrack = computed(() => Boolean(
   onlineActiveTrack.value
@@ -1374,6 +1382,9 @@ function createOnlineQueueTrack(track: PluginSearchTrack, source?: {
   album?: string;
   duration?: number | null;
   artwork?: string | null;
+  year?: number | null;
+  genre?: string | null;
+  trackNumber?: number | null;
   lyrics?: {
     rawLyrics?: string | null;
     lyricsUrl?: string | null;
@@ -1406,6 +1417,9 @@ function createOnlineQueueTrack(track: PluginSearchTrack, source?: {
     album: source?.album ?? track.album,
     duration: source?.duration ?? track.duration,
     artwork: source?.artwork ?? track.artwork ?? null,
+    year: source?.year ?? track.year ?? null,
+    genre: source?.genre ?? track.genre ?? null,
+    trackNumber: source?.trackNumber ?? track.trackNumber ?? null,
     lyrics,
     sourceId: source?.sourceId ?? track.id,
     sourceName: source?.sourceName ?? track.providerName,
@@ -1758,7 +1772,7 @@ function pauseDownloadItem(item: DownloadItem) {
 
 async function enqueueDownloadItemRequest(item: DownloadItem, actionLabel: string) {
   const request = item.downloadRequest;
-  if (!request?.url) {
+  if (!request?.track) {
     showOnlineToast(`${item.title} 缺少下载信息，请重新从搜索结果下载`);
     return;
   }
@@ -1792,6 +1806,10 @@ function isTrackDownloaded(track: Track) {
   return downloadedTrackKeys.value.includes(getDownloadTrackKey(track));
 }
 
+function isTrackDownloadPending(track: Track) {
+  return pendingDownloadTrackKeys.value.includes(getDownloadTrackKey(track));
+}
+
 function downloadActiveOnlineTrack() {
   if (!onlineActiveTrack.value || !isRemoteTrack(onlineActiveTrack.value)) return;
   downloadTrack(onlineActiveTrack.value);
@@ -1800,14 +1818,21 @@ function downloadActiveOnlineTrack() {
 function downloadTrack(track: Track) {
   const sourceName = track.sourceName ?? '本地';
   const sourceId = track.sourceId ?? String(track.id);
-  if (downloadedTrackKeys.value.includes(`${sourceName}:${sourceId}`)) {
+  const itemId = `${sourceName}:${sourceId}`;
+  if (downloadedTrackKeys.value.includes(itemId)) {
     closeContextMenus();
     showOnlineToast(`已下载：${track.title}`, 'success');
     return;
   }
 
+  if (pendingDownloadTrackKeys.value.includes(itemId)) {
+    closeContextMenus();
+    showOnlineToast(`正在下载：${track.title}`, 'success');
+    return;
+  }
+
   const item: DownloadItem = {
-    id: `${sourceName}:${sourceId}`,
+    id: itemId,
     title: track.title,
     artist: track.artist,
     album: track.album,
@@ -1837,23 +1862,11 @@ function downloadTrack(track: Track) {
 
 async function prepareAndEnqueueDownload(track: Track, item: DownloadItem) {
   try {
-    const pluginTrack = findPluginTrackForQueueTrack(track) ?? onlineActivePluginTrack.value;
-    const playback = pluginTrack
-      ? await resolvePluginPlaybackSource(pluginTrack, null)
-      : { url: track.path, artwork: track.artwork ?? null };
     const downloadRequest: DownloadOnlineTrackRequest = {
       taskId: item.id,
-      url: playback.url,
       downloadDir: player.settings.downloadDir,
-      title: track.title,
-      artist: track.artist,
-      album: track.album,
-      duration: track.duration,
-      year: playback.year ?? pluginTrack?.year ?? null,
-      genre: playback.genre ?? pluginTrack?.genre ?? null,
-      trackNumber: playback.trackNumber ?? pluginTrack?.trackNumber ?? null,
-      lyrics: trackRawLyrics(track),
-      artwork: playback.artwork ?? track.artwork ?? null,
+      qualityFallback: player.settings.qualityFallback,
+      track,
     };
     updateDownloadItem(item.id, { downloadRequest });
     await enqueueDownloadOnlineTrack(downloadRequest);
@@ -2364,6 +2377,7 @@ function finishLyricsEnter() {
             :active-playback-track="activeTrack"
             :active-track-key="onlineActiveTrackKey"
             :downloaded-track-keys="downloadedTrackKeys"
+            :pending-download-track-keys="pendingDownloadTrackKeys"
             :error="onlineSearchError"
             :favorite-track-ids="player.favoriteTrackIds"
             :has-more="onlineSearchHasMore"
@@ -2428,6 +2442,7 @@ function finishLyricsEnter() {
         :active-playback-track="activeTrack"
         :active-track-key="onlineActiveTrackKey"
         :downloaded-track-keys="downloadedTrackKeys"
+        :pending-download-track-keys="pendingDownloadTrackKeys"
         :error="onlineSearchError"
         :favorite-track-ids="player.favoriteTrackIds"
         :has-more="onlineSearchHasMore"
@@ -2553,6 +2568,7 @@ function finishLyricsEnter() {
       :is-preparing-active-track="isPreparingActiveTrack"
       :show-active-track-download="shouldShowActiveTrackDownload"
       :is-active-track-downloaded="isActiveOnlineTrackDownloaded"
+      :is-active-track-downloading="isActiveOnlineTrackDownloading"
       :show-online-quality="shouldShowOnlineQuality"
       :sleep-timer-request="sleepTimerRequest"
       :sleep-timer-request-id="sleepTimerRequestId"

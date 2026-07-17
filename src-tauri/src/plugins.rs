@@ -18,7 +18,7 @@ fn json_string_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
         .find_map(|key| value.get(*key).and_then(Value::as_str))
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginPlaybackPlanPlugin {
     id: String,
@@ -80,29 +80,29 @@ pub struct PluginSearchPage {
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginPlaybackSource {
-    url: String,
-    path: String,
-    title: String,
-    artist: String,
-    album: String,
-    duration: Option<u64>,
-    artwork: Option<String>,
-    lyrics: Option<PluginLyricsMetadata>,
-    quality: String,
-    source_id: String,
-    source_name: String,
-    source_provider_id: String,
-    source_raw: serde_json::Value,
+    pub(crate) url: String,
+    pub(crate) path: String,
+    pub(crate) title: String,
+    pub(crate) artist: String,
+    pub(crate) album: String,
+    pub(crate) duration: Option<u64>,
+    pub(crate) artwork: Option<String>,
+    pub(crate) lyrics: Option<PluginLyricsMetadata>,
+    pub(crate) quality: String,
+    pub(crate) source_id: String,
+    pub(crate) source_name: String,
+    pub(crate) source_provider_id: String,
+    pub(crate) source_raw: serde_json::Value,
 }
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginLyricsMetadata {
-    raw_lyrics: Option<String>,
-    lyrics_url: Option<String>,
-    formats: Vec<String>,
-    default_format: Option<String>,
-    format: Option<String>,
+    pub(crate) raw_lyrics: Option<String>,
+    pub(crate) lyrics_url: Option<String>,
+    pub(crate) formats: Vec<String>,
+    pub(crate) default_format: Option<String>,
+    pub(crate) format: Option<String>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -469,7 +469,7 @@ pub async fn resolve_plugin_playback_source(
     Ok(ApiResponse::from_result(result))
 }
 
-fn resolve_plugin_playback_source_backend(
+pub(crate) fn resolve_plugin_playback_source_backend(
     worker: &crate::workers::plugin::PluginWorkerState,
     provider_id: String,
     track: serde_json::Value,
@@ -613,7 +613,7 @@ pub async fn resolve_plugin_lyrics_metadata(
     Ok(ApiResponse::from_result(result))
 }
 
-fn resolve_plugin_lyrics_metadata_backend(
+pub(crate) fn resolve_plugin_lyrics_metadata_backend(
     worker: &crate::workers::plugin::PluginWorkerState,
     provider_id: String,
     track: serde_json::Value,

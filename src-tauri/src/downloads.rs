@@ -1,4 +1,5 @@
 use crate::api_response::ApiResponse;
+use crate::models::{Track, TrackLyrics};
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{MimeType, Picture, PictureType};
@@ -10,10 +11,22 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct DownloadTrackRequest {
+    #[serde(rename = "taskId")]
+    pub(crate) task_id: Option<String>,
+    #[serde(rename = "downloadDir")]
+    pub(crate) download_dir: String,
+    pub(crate) track: Track,
+    #[serde(rename = "qualityFallback")]
+    pub(crate) quality_fallback: Option<String>,
+    pub(crate) plugins: Vec<crate::plugins::PluginPlaybackPlanPlugin>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub(crate) struct ResolvedDownloadTrackRequest {
     #[serde(rename = "taskId")]
     pub(crate) task_id: Option<String>,
     pub(crate) url: String,
@@ -28,6 +41,8 @@ pub(crate) struct DownloadTrackRequest {
     #[serde(rename = "trackNumber")]
     pub(crate) track_number: Option<u32>,
     pub(crate) lyrics: Option<String>,
+    #[serde(rename = "lyricsFormat")]
+    pub(crate) lyrics_format: Option<String>,
     pub(crate) artwork: Option<String>,
 }
 
@@ -113,35 +128,45 @@ pub(crate) struct DownloadQueueEvent {
 static DOWNLOAD_TASK_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[tauri::command]
-pub(crate) fn download_online_track(
-    app: tauri::AppHandle,
-    request: DownloadTrackRequest,
-) -> ApiResponse<DownloadTrackResult> {
-    ApiResponse::from_result((|| {
-        let task_id = request
-            .task_id
-            .clone()
-            .unwrap_or_else(next_download_task_id);
-        app.state::<crate::workers::download::DownloadWorkerState>()
-            .download_track(&app, task_id, request)
-    })())
-}
-
-#[tauri::command]
 pub(crate) fn enqueue_download_online_track(
     app: tauri::AppHandle,
     request: DownloadTrackRequest,
 ) -> ApiResponse<EnqueueDownloadResult> {
-    ApiResponse::from_result((|| {
-        let task_id = request
-            .task_id
-            .clone()
-            .unwrap_or_else(next_download_task_id);
-        app.state::<crate::workers::download::DownloadWorkerState>()
-            .enqueue_download_track(task_id.clone(), request)?;
+    let task_id = request
+        .task_id
+        .clone()
+        .unwrap_or_else(next_download_task_id);
+    let app_for_task = app.clone();
+    let task_id_for_task = task_id.clone();
 
-        Ok(EnqueueDownloadResult { task_id })
-    })())
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = (|| {
+            let request = resolve_download_track_request(&app_for_task, request)?;
+            app_for_task
+                .state::<crate::workers::download::DownloadWorkerState>()
+                .enqueue_download_track(task_id_for_task.clone(), request)
+        })();
+
+        if let Err(error) = result {
+            emit_download_failure(&app_for_task, &task_id_for_task, error);
+        }
+    });
+
+    ApiResponse::success(EnqueueDownloadResult { task_id })
+}
+
+fn emit_download_failure(app: &tauri::AppHandle, task_id: &str, error: String) {
+    let _ = app.emit(
+        "download://event",
+        DownloadQueueEvent {
+            task_id: task_id.to_string(),
+            status: "failed".to_string(),
+            progress: 0,
+            file_path: None,
+            lyrics_path: None,
+            error: Some(error),
+        },
+    );
 }
 
 #[tauri::command]
@@ -200,16 +225,8 @@ pub(crate) fn download_lyrics_file(
             return Err("当前歌曲没有可下载的歌词。".to_string());
         }
 
-        let extension = match request.format.trim().to_ascii_lowercase().as_str() {
-            "lrc" => "lrc",
-            "txt" => "txt",
-            "trans" => "trans",
-            "yrc" => "yrc",
-            "qrc" => "qrc",
-            "krc" => "krc",
-            "a2" => "a2",
-            _ => return Err("不支持的歌词格式。".to_string()),
-        };
+        let extension = normalize_lyrics_extension(Some(&request.format))
+            .ok_or_else(|| "不支持的歌词格式。".to_string())?;
         let stem = make_download_stem_from_parts(request.artist.as_deref(), request.title.trim());
         let file_path = download_dir.join(format!("{stem}.{extension}"));
         fs::write(&file_path, lyrics).map_err(|err| err.to_string())?;
@@ -418,8 +435,220 @@ fn next_download_task_id() -> String {
     format!("download-{millis}-{index}")
 }
 
-pub(crate) fn download_online_track_blocking_with_progress<F: FnMut(u8)>(
+fn resolve_download_track_request(
+    app: &tauri::AppHandle,
     request: DownloadTrackRequest,
+) -> Result<ResolvedDownloadTrackRequest, String> {
+    let mut track = request.track;
+    let mut url = track.path.trim().to_string();
+    if track.lyrics.is_none() {
+        track.lyrics = legacy_track_lyrics(&track);
+    }
+    let quality_fallback = request
+        .quality_fallback
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("standard")
+        .to_string();
+
+    if !is_http_url(&url) {
+        let provider_id = track
+            .source_provider_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                if url.is_empty() {
+                    "歌曲缺少下载来源。".to_string()
+                } else if url.starts_with("plugin://") {
+                    "在线歌曲缺少插件来源信息，无法下载。".to_string()
+                } else {
+                    "本地歌曲无需下载。".to_string()
+                }
+            })?
+            .to_string();
+        let plugin_track = plugin_track_value(&track);
+        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
+        let source = crate::plugins::resolve_plugin_playback_source_backend(
+            &worker,
+            provider_id,
+            plugin_track,
+            None,
+            quality_fallback,
+            true,
+            request.plugins.clone(),
+        )?;
+        url = source.url.clone();
+        track.path = source.url;
+        if !source.title.trim().is_empty() {
+            track.title = source.title;
+        }
+        if !source.artist.trim().is_empty() {
+            track.artist = Some(source.artist);
+        }
+        if !source.album.trim().is_empty() {
+            track.album = Some(source.album);
+        }
+        track.duration = source.duration.or(track.duration);
+        track.artwork = source.artwork.or(track.artwork);
+        track.source_id = Some(source.source_id)
+            .filter(|value| !value.trim().is_empty())
+            .or(track.source_id);
+        track.source_name = Some(source.source_name)
+            .filter(|value| !value.trim().is_empty())
+            .or(track.source_name);
+        track.source_provider_id = Some(source.source_provider_id)
+            .filter(|value| !value.trim().is_empty())
+            .or(track.source_provider_id);
+        track.source_raw = Some(source.source_raw).or(track.source_raw);
+        if track_lyrics_raw(&track.lyrics).is_none() {
+            track.lyrics = source
+                .lyrics
+                .map(|lyrics| plugin_lyrics_to_track_lyrics(&track, lyrics));
+        }
+    }
+
+    if !is_http_url(&url) {
+        return Err("download url must start with http:// or https://".to_string());
+    }
+
+    if track_lyrics_raw(&track.lyrics).is_none() {
+        if let Some(lyrics) = resolve_missing_track_lyrics(app, &track, &request.plugins) {
+            track.lyrics = Some(lyrics);
+        }
+    }
+
+    let lyrics = track_lyrics_raw(&track.lyrics);
+    let lyrics_format = track
+        .lyrics
+        .as_ref()
+        .and_then(|lyrics| lyrics.format.clone().or_else(|| lyrics.default_format.clone()));
+
+    Ok(ResolvedDownloadTrackRequest {
+        task_id: request.task_id,
+        url,
+        download_dir: request.download_dir,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        duration: track.duration,
+        year: track.year,
+        genre: track.genre,
+        track_number: track.track_number,
+        lyrics,
+        lyrics_format,
+        artwork: track.artwork,
+    })
+}
+
+fn is_http_url(value: &str) -> bool {
+    value.starts_with("https://") || value.starts_with("http://")
+}
+
+fn track_lyrics_raw(lyrics: &Option<TrackLyrics>) -> Option<String> {
+    lyrics
+        .as_ref()
+        .and_then(|lyrics| lyrics.raw_lyrics.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn legacy_track_lyrics(track: &Track) -> Option<TrackLyrics> {
+    if track
+        .raw_lyrics
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none()
+        && track.lyrics_source_url.is_none()
+        && track.lyrics_formats.is_empty()
+        && track.lyrics_provider_id.is_none()
+        && track.lyrics_track_id.is_none()
+    {
+        return None;
+    }
+
+    Some(TrackLyrics {
+        raw_lyrics: track.raw_lyrics.clone(),
+        lyrics_url: track.lyrics_source_url.clone(),
+        formats: track.lyrics_formats.clone(),
+        default_format: track.lyrics_default_format.clone(),
+        format: track
+            .lyrics_format
+            .clone()
+            .or_else(|| track.lyrics_default_format.clone()),
+        provider_id: track.lyrics_provider_id.clone(),
+        provider_name: track.lyrics_source_name.clone(),
+        track_id: track.lyrics_track_id.clone(),
+        track_raw: track.lyrics_track_raw.clone(),
+    })
+}
+
+fn plugin_track_value(track: &Track) -> serde_json::Value {
+    track.source_raw.clone().unwrap_or_else(|| {
+        serde_json::json!({
+            "id": track.source_id.as_deref().unwrap_or_default(),
+            "providerId": track.source_provider_id.as_deref().unwrap_or_default(),
+            "providerName": track.source_name.as_deref().unwrap_or_default(),
+            "title": track.title.clone(),
+            "artist": track.artist.clone(),
+            "album": track.album.clone(),
+            "duration": track.duration,
+            "artwork": track.artwork.clone(),
+            "year": track.year,
+            "genre": track.genre.clone(),
+            "trackNumber": track.track_number,
+        })
+    })
+}
+
+fn resolve_missing_track_lyrics(
+    app: &tauri::AppHandle,
+    track: &Track,
+    plugins: &[crate::plugins::PluginPlaybackPlanPlugin],
+) -> Option<TrackLyrics> {
+    let provider_id = track
+        .source_provider_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
+    crate::plugins::resolve_plugin_lyrics_metadata_backend(
+        &worker,
+        provider_id,
+        plugin_track_value(track),
+        track
+            .lyrics
+            .as_ref()
+            .and_then(|lyrics| lyrics.format.clone().or_else(|| lyrics.default_format.clone())),
+        plugins.to_vec(),
+    )
+    .ok()
+    .map(|lyrics| plugin_lyrics_to_track_lyrics(track, lyrics))
+}
+
+fn plugin_lyrics_to_track_lyrics(
+    track: &Track,
+    lyrics: crate::plugins::PluginLyricsMetadata,
+) -> TrackLyrics {
+    TrackLyrics {
+        raw_lyrics: lyrics.raw_lyrics,
+        lyrics_url: lyrics.lyrics_url,
+        formats: lyrics.formats,
+        default_format: lyrics.default_format,
+        format: lyrics.format,
+        provider_id: track.source_provider_id.clone(),
+        provider_name: track.source_name.clone(),
+        track_id: track.source_id.clone(),
+        track_raw: track.source_raw.clone(),
+    }
+}
+
+pub(crate) fn download_online_track_blocking_with_progress<F: FnMut(u8)>(
+    request: ResolvedDownloadTrackRequest,
     mut report_progress: F,
 ) -> Result<DownloadTrackResult, String> {
     if !request.url.starts_with("https://") && !request.url.starts_with("http://") {
@@ -463,7 +692,12 @@ pub(crate) fn download_online_track_blocking_with_progress<F: FnMut(u8)>(
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or(&stem);
-    let lyrics_path = write_lyrics_file(&download_dir, lyrics_stem, request.lyrics.as_deref())?;
+    let lyrics_path = write_lyrics_file(
+        &download_dir,
+        lyrics_stem,
+        request.lyrics.as_deref(),
+        request.lyrics_format.as_deref(),
+    )?;
 
     Ok(DownloadTrackResult {
         file_path: file_path.to_string_lossy().to_string(),
@@ -509,7 +743,7 @@ where
 
 fn write_audio_metadata(
     path: &Path,
-    request: &DownloadTrackRequest,
+    request: &ResolvedDownloadTrackRequest,
     artwork: Option<CoverArtwork>,
 ) {
     let Ok(mut tagged_file) = lofty::read_from_path(path) else {
@@ -679,26 +913,41 @@ fn write_lyrics_file(
     download_dir: &Path,
     stem: &str,
     lyrics: Option<&str>,
+    format: Option<&str>,
 ) -> Result<Option<PathBuf>, String> {
     let Some(lyrics) = lyrics.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
 
-    let lyrics_path = unique_file_path(download_dir, stem, "lrc");
+    let extension = normalize_lyrics_extension(format).unwrap_or("lrc");
+    let lyrics_path = unique_file_path(download_dir, stem, extension);
     fs::write(&lyrics_path, lyrics).map_err(|err| err.to_string())?;
     Ok(Some(lyrics_path))
 }
 
-fn make_download_stem(request: &DownloadTrackRequest) -> String {
+fn normalize_lyrics_extension(format: Option<&str>) -> Option<&'static str> {
+    match format.unwrap_or("lrc").trim().to_ascii_lowercase().as_str() {
+        "" | "lrc" => Some("lrc"),
+        "txt" => Some("txt"),
+        "trans" => Some("trans"),
+        "yrc" => Some("yrc"),
+        "qrc" => Some("qrc"),
+        "krc" => Some("krc"),
+        "a2" => Some("a2"),
+        _ => None,
+    }
+}
+
+fn make_download_stem(request: &ResolvedDownloadTrackRequest) -> String {
     make_download_stem_from_parts(request.artist.as_deref(), request.title.trim())
 }
 
 fn make_download_stem_from_parts(artist: Option<&str>, title: &str) -> String {
     let mut parts = Vec::new();
+    parts.push(title.trim());
     if let Some(artist) = artist.filter(|value| !value.trim().is_empty()) {
         parts.push(artist.trim());
     }
-    parts.push(title.trim());
     sanitize_file_name(&parts.join(" - "))
 }
 

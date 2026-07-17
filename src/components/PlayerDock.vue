@@ -10,6 +10,7 @@ import {
   Gauge,
   ListMusic,
   LocateFixed,
+  Loader2,
   Pause,
   Play,
   Repeat1,
@@ -73,6 +74,7 @@ const props = defineProps<{
   isPreparingActiveTrack: boolean;
   showActiveTrackDownload: boolean;
   isActiveTrackDownloaded: boolean;
+  isActiveTrackDownloading: boolean;
   showOnlineQuality: boolean;
   sleepTimerRequest: { minutes: number; action: SleepTimerAction | null } | null;
   sleepTimerRequestId: number;
@@ -1137,14 +1139,15 @@ function handleCoverError() {
       <button
         v-if="showActiveTrackDownload"
         class="icon-button dock-download-button"
-        :class="{ 'is-downloaded': isActiveTrackDownloaded }"
+        :class="{ 'is-downloaded': isActiveTrackDownloaded, 'is-downloading': isActiveTrackDownloading }"
         type="button"
-        :disabled="isActiveTrackDownloaded"
-        :aria-label="isActiveTrackDownloaded ? '已下载' : '下载'"
-        :title="isActiveTrackDownloaded ? '已下载' : '下载'"
-        @click="emit('downloadActiveTrack')"
+        :disabled="isActiveTrackDownloaded || isActiveTrackDownloading"
+        :aria-label="isActiveTrackDownloaded ? '已下载' : isActiveTrackDownloading ? '下载中' : '下载'"
+        :title="isActiveTrackDownloaded ? '已下载' : isActiveTrackDownloading ? '下载中' : '下载'"
+        @click="!isActiveTrackDownloading && emit('downloadActiveTrack')"
       >
         <CheckCircle2 v-if="isActiveTrackDownloaded" :size="18" />
+        <Loader2 v-else-if="isActiveTrackDownloading" :size="18" />
         <Download v-else :size="18" />
       </button>
       <div v-if="showOnlineQuality && onlineQualityOptions.length > 0" ref="qualityControl" class="quality-control" @mouseleave="closeQualityPopover">
@@ -1796,6 +1799,27 @@ function handleCoverError() {
 .dock-download-button.is-downloaded:hover,
 .dock-download-button.is-downloaded:focus-visible {
   background: color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
+}
+
+.dock-download-button.is-downloading {
+  color: var(--smw-button-primary);
+  cursor: default;
+  opacity: 0.92;
+}
+
+.dock-download-button.is-downloading:hover,
+.dock-download-button.is-downloading:focus-visible {
+  background: color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
+}
+
+.dock-download-button.is-downloading svg {
+  animation: spin 760ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .quality-control {

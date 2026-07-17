@@ -1,7 +1,7 @@
 use crate::{
     downloads::{
-        download_online_track_blocking_with_progress, DownloadQueueEvent, DownloadTrackRequest,
-        DownloadTrackResult,
+        download_online_track_blocking_with_progress, DownloadQueueEvent,
+        ResolvedDownloadTrackRequest,
     },
     workers::lifecycle::{RestartPolicy, WorkerChild},
     workers::manager::{WorkerProcess, WorkerProcessParts},
@@ -41,40 +41,10 @@ impl DownloadWorkerState {
         RestartPolicy::RestartBeforeSendOnly
     }
 
-    pub(crate) fn download_track(
-        &self,
-        _app: &tauri::AppHandle,
-        task_id: String,
-        request: DownloadTrackRequest,
-    ) -> Result<DownloadTrackResult, String> {
-        let worker_request = WorkerRequest {
-            id: format!("download-{task_id}"),
-            method: methods::DOWNLOAD_TRACK.to_string(),
-            payload: json!({
-                "taskId": task_id,
-                "request": request,
-            }),
-        };
-
-        let response = self.request(worker_request)?;
-
-        match response {
-            WorkerMessage::Response {
-                ok: true,
-                payload: Some(payload),
-                ..
-            } => serde_json::from_value(payload).map_err(|err| err.to_string()),
-            WorkerMessage::Response {
-                error: Some(error), ..
-            } => Err(error),
-            message => Err(format!("unexpected download worker response: {message:?}")),
-        }
-    }
-
     pub(crate) fn enqueue_download_track(
         &self,
         task_id: String,
-        request: DownloadTrackRequest,
+        request: ResolvedDownloadTrackRequest,
     ) -> Result<(), String> {
         let worker_request = WorkerRequest {
             id: format!("download-enqueue-{task_id}"),
@@ -248,7 +218,7 @@ pub(crate) fn run() -> Result<(), String> {
         }
 
         let response = match decode_request(&line) {
-            Ok(request) => handle_request(&stdout, &queue_sender, request, started_at_ms)?,
+            Ok(request) => handle_request(&queue_sender, request, started_at_ms)?,
             Err(error) => WorkerMessage::Response {
                 id: "invalid-request".to_string(),
                 ok: false,
@@ -276,7 +246,6 @@ pub(crate) fn run() -> Result<(), String> {
 }
 
 fn handle_request(
-    stdout: &Arc<Mutex<io::Stdout>>,
     queue_sender: &mpsc::Sender<DownloadTrackPayload>,
     request: WorkerRequest,
     started_at_ms: u128,
@@ -303,11 +272,6 @@ fn handle_request(
             )),
             error: None,
         }),
-        methods::DOWNLOAD_TRACK => {
-            let payload = serde_json::from_value::<DownloadTrackPayload>(request.payload)
-                .map_err(|err| err.to_string())?;
-            Ok(download_track(stdout, request.id, payload))
-        }
         methods::DOWNLOAD_ENQUEUE => {
             let payload = serde_json::from_value::<DownloadTrackPayload>(request.payload)
                 .map_err(|err| err.to_string())?;
@@ -332,7 +296,7 @@ fn handle_request(
 #[serde(rename_all = "camelCase")]
 struct DownloadTrackPayload {
     task_id: String,
-    request: DownloadTrackRequest,
+    request: ResolvedDownloadTrackRequest,
 }
 
 fn start_worker_download_queue(
@@ -478,10 +442,8 @@ mod tests {
 
     #[test]
     fn handles_ping_request() {
-        let stdout = Arc::new(Mutex::new(io::stdout()));
         let (queue_sender, _queue_receiver) = mpsc::channel::<DownloadTrackPayload>();
         let response = handle_request(
-            &stdout,
             &queue_sender,
             WorkerRequest {
                 id: "ping-1".to_string(),

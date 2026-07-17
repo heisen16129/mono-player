@@ -148,7 +148,6 @@ pub fn run() {
             covers::read_cover_thumbnail,
             covers::clear_cover_thumbnail_cache,
             diagnostics::system_worker_health,
-            downloads::download_online_track,
             downloads::enqueue_download_online_track,
             downloads::download_lyrics_file,
             downloads::download_cover_file,

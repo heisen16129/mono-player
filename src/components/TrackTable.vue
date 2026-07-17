@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2, Clock3, Download, Heart } from '@lucide/vue';
+import { CheckCircle2, Clock3, Download, Heart, Loader2 } from '@lucide/vue';
 import type { ComponentPublicInstance } from 'vue';
 import { computed, nextTick, ref, watch } from 'vue';
 import { resolveLocale, t } from '../i18n';
@@ -12,6 +12,7 @@ const props = defineProps<{
   activeTrack: Track | null;
   disableInternalPaging?: boolean;
   downloadedTrackKeys?: string[];
+  pendingDownloadTrackKeys?: string[];
   enableDownloadAction?: boolean;
   enableArtistLinks?: boolean;
   extraColumns?: string;
@@ -53,6 +54,7 @@ const visibleTracks = computed(() => (
 ));
 const hasMoreTracks = computed(() => !props.disableInternalPaging && visibleCount.value < props.tracks.length);
 const downloadedTrackKeySet = computed(() => new Set(props.downloadedTrackKeys ?? []));
+const pendingDownloadTrackKeySet = computed(() => new Set(props.pendingDownloadTrackKeys ?? []));
 const trackTableStyle = computed(() => ({
   '--track-extra-columns': props.extraColumns ?? '0px',
   '--track-actions-column': props.hideActionsColumn ? '0px' : '54px',
@@ -87,6 +89,20 @@ function getDownloadTrackKey(track: Track) {
 
 function isDownloadedTrack(track: Track) {
   return downloadedTrackKeySet.value.has(getDownloadTrackKey(track));
+}
+
+function isPendingDownloadTrack(track: Track) {
+  return pendingDownloadTrackKeySet.value.has(getDownloadTrackKey(track));
+}
+
+function canDownloadTrack(track: Track) {
+  return !isDownloadedTrack(track) && !isPendingDownloadTrack(track);
+}
+
+function getDownloadActionLabel(track: Track) {
+  if (isDownloadedTrack(track)) return '已下载';
+  if (isPendingDownloadTrack(track)) return '下载中';
+  return '下载';
 }
 
 function handleTrackClick(event: MouseEvent, track: Track) {
@@ -220,14 +236,15 @@ defineExpose({
         <button
           v-if="enableDownloadAction"
           class="download-icon"
-          :class="{ 'is-downloaded': isDownloadedTrack(track) }"
+          :class="{ 'is-downloaded': isDownloadedTrack(track), 'is-downloading': isPendingDownloadTrack(track) }"
           type="button"
-          :aria-label="isDownloadedTrack(track) ? '已下载' : '下载'"
-          :disabled="isDownloadedTrack(track)"
-          :title="isDownloadedTrack(track) ? '已下载' : '下载'"
-          @click.stop="!isDownloadedTrack(track) && emit('downloadTrack', track)"
+          :aria-label="getDownloadActionLabel(track)"
+          :disabled="!canDownloadTrack(track)"
+          :title="getDownloadActionLabel(track)"
+          @click.stop="canDownloadTrack(track) && emit('downloadTrack', track)"
         >
           <CheckCircle2 v-if="isDownloadedTrack(track)" :size="17" />
+          <Loader2 v-else-if="isPendingDownloadTrack(track)" :size="17" />
           <Download v-else :size="17" />
         </button>
       </span>
@@ -455,6 +472,26 @@ defineExpose({
 
 .track-row .download-icon.is-downloaded:hover {
   background: color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
+}
+
+.track-row .download-icon.is-downloading {
+  color: var(--smw-button-primary);
+  cursor: default;
+  opacity: 0.92;
+}
+
+.track-row .download-icon.is-downloading:hover {
+  background: color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
+}
+
+.track-row .download-icon.is-downloading svg {
+  animation: spin 760ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .track-actions,
