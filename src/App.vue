@@ -413,6 +413,16 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => [activeTrack.value?.id, activeTrack.value?.path, Boolean(onlineActiveTrack.value)] as const,
+  ([, , isOnlineTrack]) => {
+    const track = activeTrack.value;
+    if (!track || isOnlineTrack || isRemoteTrack(track)) return;
+    void loadLocalTrackLyricsInBackground(track);
+  },
+  { immediate: true },
+);
+
 function resolveDesktopLyricColor() {
   if (!player.settings.useThemeLyricColor) {
     return player.settings.lyricFontColor;
