@@ -2,7 +2,7 @@ import type { Track, TrackLyrics } from '../types/music';
 
 export function normalizeTrackLyrics(track?: Track | null): TrackLyrics | null {
   if (!track) return null;
-  const lyrics = track.lyrics ?? null;
+  const lyrics = track.associatedLyrics ?? track.lyrics ?? null;
   if (lyrics) {
     return {
       rawLyrics: lyrics.rawLyrics ?? null,

@@ -144,6 +144,7 @@ pub fn run() {
             scan_music_dir,
             cancel_scan_music_dir,
             lyrics::resolve_lyrics_source,
+            lyrics::resolve_local_track_lyrics,
             covers::read_cover,
             covers::read_cover_thumbnail,
             covers::clear_cover_thumbnail_cache,

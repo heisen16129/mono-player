@@ -285,7 +285,9 @@ pub(crate) fn read_tracks(db: &Connection) -> Result<Vec<Track>, String> {
                 genre: None,
                 track_number: None,
                 artwork: None,
+                associated_artwork: None,
                 lyrics: None,
+                associated_lyrics: None,
                 raw_lyrics: None,
                 lyrics_source_name: None,
                 lyrics_source_url: None,
@@ -304,7 +306,6 @@ pub(crate) fn read_tracks(db: &Connection) -> Result<Vec<Track>, String> {
         .map_err(|err| err.to_string())?;
 
     rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map(enrich_tracks_with_local_lyrics)
         .map_err(|err| err.to_string())
 }
 
@@ -345,7 +346,9 @@ pub(crate) fn read_latest_added_tracks(db: &Connection) -> Result<Vec<Track>, St
                 genre: None,
                 track_number: None,
                 artwork: None,
+                associated_artwork: None,
                 lyrics: None,
+                associated_lyrics: None,
                 raw_lyrics: None,
                 lyrics_source_name: None,
                 lyrics_source_url: None,
@@ -364,22 +367,7 @@ pub(crate) fn read_latest_added_tracks(db: &Connection) -> Result<Vec<Track>, St
         .map_err(|err| err.to_string())?;
 
     rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map(enrich_tracks_with_local_lyrics)
         .map_err(|err| err.to_string())
-}
-
-fn enrich_tracks_with_local_lyrics(mut tracks: Vec<Track>) -> Vec<Track> {
-    for track in &mut tracks {
-        track.lyrics = crate::lyrics::read_local_lyrics_bundle_for_track(
-            &track.path,
-            Some(&track.title),
-            track.artist.as_deref(),
-            None,
-        )
-        .ok()
-        .flatten();
-    }
-    tracks
 }
 
 pub(crate) fn upsert_track(

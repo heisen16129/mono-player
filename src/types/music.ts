@@ -24,7 +24,9 @@ export interface Track {
   trackNumber?: number | null;
   coverVersion?: number;
   artwork?: string | null;
+  associatedArtwork?: string | null;
   lyrics?: TrackLyrics | null;
+  associatedLyrics?: TrackLyrics | null;
   rawLyrics?: string | null;
   lyricsSourceName?: string | null;
   lyricsSourceUrl?: string | null;

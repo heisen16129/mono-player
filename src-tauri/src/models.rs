@@ -18,8 +18,12 @@ pub(crate) struct Track {
     #[serde(rename = "trackNumber")]
     pub(crate) track_number: Option<u32>,
     pub(crate) artwork: Option<String>,
+    #[serde(rename = "associatedArtwork", skip_serializing_if = "Option::is_none")]
+    pub(crate) associated_artwork: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) lyrics: Option<TrackLyrics>,
+    #[serde(rename = "associatedLyrics", skip_serializing_if = "Option::is_none")]
+    pub(crate) associated_lyrics: Option<TrackLyrics>,
     #[serde(rename = "rawLyrics")]
     pub(crate) raw_lyrics: Option<String>,
     #[serde(rename = "lyricsSourceName")]

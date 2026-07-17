@@ -39,13 +39,13 @@ import {
   type DesktopLyricsAction,
 } from './services/desktopLyrics';
 import { deleteDownloadedTrackFile, enqueueDownloadOnlineTrack, openDownloadedTrackInFolder, type DownloadOnlineTrackRequest, type DownloadQueueEvent } from './services/downloads';
-import { clearCoverThumbnailCache, exitApp, isTauriRuntime, refreshTrackDuration, updateTrackCover, updateTrackMetadata } from './services/music';
+import { clearCoverThumbnailCache, exitApp, isTauriRuntime, refreshTrackDuration, resolveLocalTrackLyrics, updateTrackCover, updateTrackMetadata } from './services/music';
 import { getPluginLyricsMetadata, listPluginSearchProviders, resolvePluginPlaybackQualitiesWithRust, resolvePluginPlaybackSourceWithRust, searchPluginMusic } from './services/pluginSearch';
 import { getRustBackendDefaultCacheDir, listenRustBackendQueue, playRustBackendNext, playRustBackendPrevious, setRustBackendCacheDir, setRustBackendQueue, startRustBackendQueue, stopRustBackend, type RustQueueSnapshot } from './services/playerBackend';
 import { readPersistentValue, writePersistentValue } from './services/persistentStore';
 import { clearSystemMedia, listenSystemMediaAction, updateSystemMedia, type SystemMediaAction } from './services/systemMedia';
 import { usePlayerStore } from './stores/player';
-import type { DownloadItem, PlaybackMode, Track } from './types/music';
+import type { DownloadItem, PlaybackMode, Track, TrackLyrics } from './types/music';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption, PluginSearchProvider, PluginSearchTrack } from './types/plugin';
 import { getErrorMessage } from './utils/error';
 import { folderTitle, normalizePath } from './utils/path';
@@ -162,7 +162,9 @@ function mergeTrackRuntimeMetadata(track: Track, candidates: Track[]) {
   if (!existing) return track;
   return {
     ...track,
-    lyrics: track.lyrics ?? normalizeTrackLyrics(existing),
+    lyrics: track.lyrics ?? existing.lyrics ?? null,
+    associatedLyrics: track.associatedLyrics ?? existing.associatedLyrics ?? null,
+    associatedArtwork: track.associatedArtwork ?? existing.associatedArtwork ?? null,
     artwork: track.artwork ?? existing.artwork ?? null,
   };
 }
@@ -326,6 +328,22 @@ const shouldShowOnlineQuality = computed(() => {
     onlineActiveTrack.value
     && onlineActivePluginTrack.value
     && isRemoteTrack(onlineActiveTrack.value),
+  );
+});
+const activeLyricFormats = computed(() => {
+  const formats = normalizeTrackLyrics(activeTrack.value)?.formats ?? [];
+  return formats.filter((format, index) => format && formats.indexOf(format) === index);
+});
+const activeLyricFormat = computed(() => {
+  const lyrics = normalizeTrackLyrics(activeTrack.value);
+  return lyrics?.format ?? lyrics?.defaultFormat ?? activeLyricFormats.value[0] ?? null;
+});
+const shouldShowLyricFormat = computed(() => {
+  const active = activeTrack.value;
+  return Boolean(
+    activeLyricFormats.value.length > 1
+    && active
+    && (findPluginTrackForQueueTrack(active) || !isRemoteTrack(active)),
   );
 });
 const shouldShowActiveTrackDownload = computed(() => Boolean(player.settings.enablePlugins && onlineActiveTrack.value && onlineActivePluginTrack.value));
@@ -1516,6 +1534,40 @@ async function changeOnlinePlaybackQuality(quality: PluginPlaybackQuality) {
   }
 }
 
+async function changeLyricFormat(format: string) {
+  const active = activeTrack.value;
+  if (!active || format === activeLyricFormat.value) return;
+
+  try {
+    const pluginTrack = findPluginTrackForQueueTrack(active);
+    const source = pluginTrack
+      ? await getPluginLyricsMetadata(pluginTrack, format)
+      : !isRemoteTrack(active)
+        ? await resolveLocalTrackLyrics(active, format)
+        : null;
+    const rawLyrics = source?.rawLyrics?.trim();
+    if (!source || !rawLyrics) {
+      showOnlineToast('这个歌词格式没有可用内容', 'error');
+      return;
+    }
+
+    updateActiveTrackLyrics(
+      rawLyrics,
+      active.associatedArtwork ?? null,
+      pluginTrack?.providerName ?? null,
+      source.lyricsUrl ?? (pluginTrack ? `${pluginTrack.providerName}@${pluginTrack.providerId}` : null),
+      source.formats ?? activeLyricFormats.value,
+      source.defaultFormat ?? normalizeTrackLyrics(active)?.defaultFormat ?? null,
+      source.format ?? format,
+      pluginTrack?.providerId ?? null,
+      pluginTrack?.id ?? null,
+      pluginTrack?.raw ?? pluginTrack ?? null,
+    );
+  } catch (error) {
+    showOnlineToast(getErrorMessage(error), 'error');
+  }
+}
+
 async function resolvePluginPlaybackSource(
   track: PluginSearchTrack,
   preferredQuality?: PluginPlaybackQuality | null,
@@ -1537,7 +1589,7 @@ async function loadOnlineTrackLyricsInBackground(track: PluginSearchTrack, playb
     if (!rawLyrics || onlineActiveTrackKey.value !== trackKey || activeTrack.value?.id !== playbackTrack.id) {
       return;
     }
-    updateActiveTrackLyrics(
+    updateActiveTrackSourceLyrics(
       rawLyrics,
       playbackTrack.artwork ?? track.artwork ?? null,
       track.providerName,
@@ -1557,6 +1609,41 @@ async function loadOnlineTrackLyricsInBackground(track: PluginSearchTrack, playb
       title: track.title,
       error,
     });
+  }
+}
+
+async function loadLocalTrackLyricsInBackground(track: Track) {
+  if (normalizeTrackLyrics(track)?.rawLyrics?.trim()) return;
+
+  try {
+    const lyrics = await resolveLocalTrackLyrics(track);
+    const rawLyrics = lyrics?.rawLyrics?.trim();
+    if (!lyrics || !rawLyrics) return;
+    updateCurrentLocalTrackLyrics(track, lyrics);
+  } catch (error) {
+    console.warn('[local-lyrics] background lyrics load failed', {
+      path: track.path,
+      title: track.title,
+      error,
+    });
+  }
+}
+
+function updateCurrentLocalTrackLyrics(track: Track, lyrics: TrackLyrics) {
+  if (onlineActiveTrack.value) return;
+  const current = player.currentTrack ?? selectedTrack.value;
+  if (!current) return;
+  const sameTrack = current.id === track.id || normalizePath(current.path) === normalizePath(track.path);
+  if (!sameTrack) return;
+
+  const nextTrack: Track = {
+    ...current,
+    lyrics,
+    artwork: current.artwork ?? track.artwork ?? null,
+  };
+  player.setCurrentTrack(nextTrack);
+  if (selectedTrack.value && (selectedTrack.value.id === track.id || normalizePath(selectedTrack.value.path) === normalizePath(track.path))) {
+    selectedTrack.value = nextTrack;
   }
 }
 
@@ -1942,6 +2029,7 @@ function handleSeamlessAdvance(track: Track) {
     onlineActivePluginTrack.value = null;
     onlinePlaybackSource.value = '';
     onlineActiveTrackKey.value = null;
+    void loadLocalTrackLyricsInBackground(nextTrack);
   }
 
   selectedTrack.value = nextTrack;
@@ -1960,6 +2048,7 @@ function handleRustQueueSnapshot(snapshot: RustQueueSnapshot) {
 
 function withTrackLyrics(
   track: Track,
+  target: 'lyrics' | 'associatedLyrics',
   rawLyrics: string,
   artwork?: string | null,
   sourceName?: string | null,
@@ -1972,25 +2061,31 @@ function withTrackLyrics(
   lyricsTrackRaw?: unknown,
 ): Track {
   const nextArtwork = artwork?.trim() || null;
-  const previousLyrics = normalizeTrackLyrics(track);
+  const previousLyrics = target === 'lyrics'
+    ? track.lyrics ?? null
+    : track.associatedLyrics ?? track.lyrics ?? null;
+  const lyrics: TrackLyrics = {
+    rawLyrics,
+    lyricsUrl: sourceUrl ?? previousLyrics?.lyricsUrl ?? null,
+    formats: formats ?? previousLyrics?.formats ?? [],
+    defaultFormat: defaultFormat ?? previousLyrics?.defaultFormat ?? null,
+    format: format ?? previousLyrics?.format ?? defaultFormat ?? null,
+    providerId: lyricsProviderId ?? previousLyrics?.providerId ?? null,
+    providerName: sourceName ?? previousLyrics?.providerName ?? null,
+    trackId: lyricsTrackId ?? previousLyrics?.trackId ?? null,
+    trackRaw: lyricsTrackRaw ?? previousLyrics?.trackRaw,
+  };
   return {
     ...track,
-    lyrics: {
-      rawLyrics,
-      lyricsUrl: sourceUrl ?? previousLyrics?.lyricsUrl ?? null,
-      formats: formats ?? previousLyrics?.formats ?? [],
-      defaultFormat: defaultFormat ?? previousLyrics?.defaultFormat ?? null,
-      format: format ?? previousLyrics?.format ?? defaultFormat ?? null,
-      providerId: lyricsProviderId ?? previousLyrics?.providerId ?? null,
-      providerName: sourceName ?? previousLyrics?.providerName ?? null,
-      trackId: lyricsTrackId ?? previousLyrics?.trackId ?? null,
-      trackRaw: lyricsTrackRaw ?? previousLyrics?.trackRaw,
-    },
-    artwork: nextArtwork ?? track.artwork ?? null,
+    [target]: lyrics,
+    ...(target === 'associatedLyrics'
+      ? { associatedArtwork: nextArtwork ?? track.associatedArtwork ?? null }
+      : { artwork: nextArtwork ?? track.artwork ?? null }),
   };
 }
 
-function updateActiveTrackLyrics(
+function updateTrackLyricsState(
+  target: 'lyrics' | 'associatedLyrics',
   rawLyrics: string,
   artwork?: string | null,
   sourceName?: string | null,
@@ -2005,7 +2100,7 @@ function updateActiveTrackLyrics(
   const active = activeTrack.value;
   if (!active) return;
 
-  const nextTrack = withTrackLyrics(active, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
+  const nextTrack = withTrackLyrics(active, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
   if (onlineActiveTrack.value?.id === active.id) {
     onlineActiveTrack.value = nextTrack;
   }
@@ -2016,16 +2111,46 @@ function updateActiveTrackLyrics(
     player.setCurrentTrack(nextTrack);
   }
 
-  player.tracks = player.tracks.map((track) => (track.id === active.id ? withTrackLyrics(track, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
-  player.queue = player.queue.map((track) => (track.id === active.id ? withTrackLyrics(track, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
-  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (track.id === active.id ? withTrackLyrics(track, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
+  player.tracks = player.tracks.map((track) => (track.id === active.id ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
+  player.queue = player.queue.map((track) => (track.id === active.id ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
+  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (track.id === active.id ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
 }
 
-function withoutTrackLyrics(track: Track): Track {
+function updateActiveTrackSourceLyrics(
+  rawLyrics: string,
+  artwork?: string | null,
+  sourceName?: string | null,
+  sourceUrl?: string | null,
+  formats?: string[],
+  defaultFormat?: string | null,
+  format?: string | null,
+  lyricsProviderId?: string | null,
+  lyricsTrackId?: string | null,
+  lyricsTrackRaw?: unknown,
+) {
+  updateTrackLyricsState('lyrics', rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
+}
+
+function updateActiveTrackLyrics(
+  rawLyrics: string,
+  artwork?: string | null,
+  sourceName?: string | null,
+  sourceUrl?: string | null,
+  formats?: string[],
+  defaultFormat?: string | null,
+  format?: string | null,
+  lyricsProviderId?: string | null,
+  lyricsTrackId?: string | null,
+  lyricsTrackRaw?: unknown,
+) {
+  updateTrackLyricsState('associatedLyrics', rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
+}
+
+function withoutAssociatedTrackLyrics(track: Track): Track {
   return {
     ...track,
-    lyrics: null,
-    artwork: null,
+    associatedLyrics: null,
+    associatedArtwork: null,
   };
 }
 
@@ -2033,7 +2158,7 @@ function clearActiveTrackLyrics() {
   const active = activeTrack.value;
   if (!active) return;
 
-  const nextTrack = withoutTrackLyrics(active);
+  const nextTrack = withoutAssociatedTrackLyrics(active);
   if (onlineActiveTrack.value?.id === active.id) {
     onlineActiveTrack.value = nextTrack;
   }
@@ -2044,9 +2169,9 @@ function clearActiveTrackLyrics() {
     player.setCurrentTrack(nextTrack);
   }
 
-  player.tracks = player.tracks.map((track) => (track.id === active.id ? withoutTrackLyrics(track) : track));
-  player.queue = player.queue.map((track) => (track.id === active.id ? withoutTrackLyrics(track) : track));
-  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (track.id === active.id ? withoutTrackLyrics(track) : track));
+  player.tracks = player.tracks.map((track) => (track.id === active.id ? withoutAssociatedTrackLyrics(track) : track));
+  player.queue = player.queue.map((track) => (track.id === active.id ? withoutAssociatedTrackLyrics(track) : track));
+  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (track.id === active.id ? withoutAssociatedTrackLyrics(track) : track));
 }
 
 function togglePlaybackMode() {
@@ -2558,6 +2683,8 @@ function finishLyricsEnter() {
       :playback-mode="player.playbackMode"
       :playback-mode-label="player.playbackModeLabel"
       :play-request-id="playRequestId"
+      :lyric-format="activeLyricFormat"
+      :lyric-formats="activeLyricFormats"
       :online-quality="onlinePlaybackQuality"
       :online-quality-options="onlinePlaybackQualityOptions"
       :queue="rustPlaybackQueue"
@@ -2569,6 +2696,7 @@ function finishLyricsEnter() {
       :show-active-track-download="shouldShowActiveTrackDownload"
       :is-active-track-downloaded="isActiveOnlineTrackDownloaded"
       :is-active-track-downloading="isActiveOnlineTrackDownloading"
+      :show-lyric-format="shouldShowLyricFormat"
       :show-online-quality="shouldShowOnlineQuality"
       :sleep-timer-request="sleepTimerRequest"
       :sleep-timer-request-id="sleepTimerRequestId"
@@ -2578,6 +2706,7 @@ function finishLyricsEnter() {
       @download-active-track="downloadActiveOnlineTrack"
       @open-desktop-lyrics="openDesktopLyrics"
       @open-lyrics="toggleLyricsView"
+      @lyric-format-change="changeLyricFormat"
       @online-quality-change="changeOnlinePlaybackQuality"
       @play-next="playNextTrack"
       @play-previous="playPreviousTrack"

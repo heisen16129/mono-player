@@ -1,5 +1,5 @@
 ﻿import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import type { CoverImage, CustomTheme, LyricLine, SystemThemeState, Track, WallpaperThemeColor } from '../types/music';
+import type { CoverImage, CustomTheme, LyricLine, SystemThemeState, Track, TrackLyrics, WallpaperThemeColor } from '../types/music';
 import { invokeApi } from './api';
 import { normalizeTrackLyrics } from '../utils/trackLyrics';
 
@@ -174,6 +174,14 @@ export function resolveLyricsSource(track?: LyricsSourceInput | null): Promise<L
       format: lyrics?.format ?? track.lyricsFormat ?? null,
     },
   });
+}
+
+export function resolveLocalTrackLyrics(track?: Track | null, format?: string | null): Promise<TrackLyrics | null> {
+  if (!isTauriRuntime() || !track?.path) {
+    return Promise.resolve(null);
+  }
+
+  return invokeApi<TrackLyrics | null>('resolve_local_track_lyrics', { track, format: format?.trim() || null });
 }
 
 export function readCover(path: string): Promise<CoverImage | null> {

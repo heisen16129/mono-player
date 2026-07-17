@@ -1,4 +1,7 @@
-use crate::{api_response::ApiResponse, models::{LyricLine, LyricWord, TrackLyrics}};
+use crate::{
+    api_response::ApiResponse,
+    models::{LyricLine, LyricWord, Track, TrackLyrics},
+};
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -18,6 +21,39 @@ pub(crate) struct LyricsResolveInfo {
 #[tauri::command]
 pub(crate) fn resolve_lyrics_source(lyrics: LyricsResolveInfo) -> ApiResponse<Vec<LyricLine>> {
     ApiResponse::from_result(resolve_lyrics_source_backend(&lyrics))
+}
+
+#[tauri::command]
+pub(crate) fn resolve_local_track_lyrics(
+    track: Track,
+    format: Option<String>,
+) -> ApiResponse<Option<TrackLyrics>> {
+    eprintln!(
+        "[local-lyrics] request path={} title={} artist={} format={}",
+        track.path,
+        track.title,
+        track.artist.as_deref().unwrap_or(""),
+        format.as_deref().unwrap_or("")
+    );
+    let result = read_local_lyrics_bundle_for_track(
+        &track.path,
+        Some(&track.title),
+        track.artist.as_deref(),
+        format.as_deref(),
+    );
+    match &result {
+        Ok(Some(lyrics)) => eprintln!(
+            "[local-lyrics] response hasLyrics=true url={} formats={:?} format={} defaultFormat={} rawLength={}",
+            lyrics.lyrics_url.as_deref().unwrap_or(""),
+            lyrics.formats,
+            lyrics.format.as_deref().unwrap_or(""),
+            lyrics.default_format.as_deref().unwrap_or(""),
+            lyrics.raw_lyrics.as_deref().map(str::len).unwrap_or(0)
+        ),
+        Ok(None) => eprintln!("[local-lyrics] response hasLyrics=false"),
+        Err(error) => eprintln!("[local-lyrics] response error={error}"),
+    }
+    ApiResponse::from_result(result)
 }
 
 pub(crate) fn parse_lyrics_content_with_format(
@@ -561,6 +597,9 @@ fn normalize_lyrics_format(format: Option<&str>) -> Option<&'static str> {
         "qrc" => Some("qrc"),
         "krc" => Some("krc"),
         "a2" => Some("a2"),
+        "lrc" => Some("lrc"),
+        "txt" => Some("txt"),
+        "trans" => Some("trans"),
         _ => None,
     }
 }

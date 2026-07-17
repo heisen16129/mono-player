@@ -63,6 +63,8 @@ const props = defineProps<{
   isFavorite: boolean;
   onlineQuality: PluginPlaybackQuality;
   onlineQualityOptions: PluginPlaybackQualityOption[];
+  lyricFormat: string | null;
+  lyricFormats: string[];
   playbackMode: PlaybackMode;
   playbackModeLabel: string;
   playRequestId: number;
@@ -76,6 +78,7 @@ const props = defineProps<{
   isActiveTrackDownloaded: boolean;
   isActiveTrackDownloading: boolean;
   showOnlineQuality: boolean;
+  showLyricFormat: boolean;
   sleepTimerRequest: { minutes: number; action: SleepTimerAction | null } | null;
   sleepTimerRequestId: number;
   togglePlaybackRequestId: number;
@@ -87,6 +90,7 @@ const emit = defineEmits<{
   openDesktopLyrics: [];
   openLyrics: [];
   onlineQualityChange: [quality: PluginPlaybackQuality];
+  lyricFormatChange: [format: string];
   downloadActiveTrack: [];
   playNext: [];
   playPrevious: [];
@@ -129,6 +133,7 @@ const sleepTimerTotalSeconds = ref(Math.max(60, player.settings.sleepTimerMinute
 const volumeControl = ref<HTMLElement | null>(null);
 const speedControl = ref<HTMLElement | null>(null);
 const qualityControl = ref<HTMLElement | null>(null);
+const lyricFormatControl = ref<HTMLElement | null>(null);
 const isQueueOpen = ref(false);
 const queueControl = ref<HTMLElement | null>(null);
 const queueTrackRefs = ref(new Map<number, HTMLElement>());
@@ -203,6 +208,7 @@ const playbackRateLabel = computed(() => `${playbackRate.value}x`);
 const onlineQualityLabel = computed(() => {
   return props.onlineQualityOptions.find((option) => option.id === props.onlineQuality)?.name ?? props.onlineQuality;
 });
+const lyricFormatLabel = computed(() => props.lyricFormat?.trim().toLowerCase() || props.lyricFormats[0] || '');
 const isSleepTimerActive = computed(() => sleepTimerEndsAt.value !== null);
 const isSleepTimerPaused = computed(() => sleepTimerPausedRemainingSeconds.value !== null);
 const sleepTimerRemainingLabel = computed(() => {
@@ -698,6 +704,13 @@ function closeQualityPopover() {
   }
 }
 
+function closeLyricFormatPopover() {
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLElement && lyricFormatControl.value?.contains(activeElement)) {
+    activeElement.blur();
+  }
+}
+
 function openSleepTimerDialog() {
   if (!isSleepTimerActive.value && !isSleepTimerPaused.value) {
     const totalMinutes = Math.max(1, Math.round(Number(sleepTimerMinutes.value) || player.settings.sleepTimerMinutes));
@@ -1173,6 +1186,29 @@ function handleCoverError() {
           :title="`音质：${onlineQualityLabel}`"
         >
           <span>{{ onlineQualityLabel }}</span>
+        </button>
+      </div>
+      <div v-if="showLyricFormat && lyricFormats.length > 1" ref="lyricFormatControl" class="quality-control" @mouseleave="closeLyricFormatPopover">
+        <div class="quality-popover" role="menu" aria-label="歌词格式">
+          <button
+            v-for="format in lyricFormats"
+            :key="format"
+            type="button"
+            role="menuitemradio"
+            :class="{ 'is-active': lyricFormat === format }"
+            :aria-checked="lyricFormat === format"
+            @click="emit('lyricFormatChange', format)"
+          >
+            {{ format }}
+          </button>
+        </div>
+        <button
+          class="quality-button"
+          type="button"
+          :aria-label="`歌词格式：${lyricFormatLabel}`"
+          :title="`歌词格式：${lyricFormatLabel}`"
+        >
+          <span>{{ lyricFormatLabel }}</span>
         </button>
       </div>
       <button
