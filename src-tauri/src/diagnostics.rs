@@ -1,4 +1,4 @@
-use crate::workers::lifecycle::WorkerRuntimeStatus;
+use crate::{api_response::ApiResponse, workers::lifecycle::WorkerRuntimeStatus};
 use serde::Serialize;
 use tauri::State;
 
@@ -15,8 +15,8 @@ pub(crate) fn system_worker_health(
     plugin: State<'_, crate::workers::plugin::PluginWorkerState>,
     mcp_api: State<'_, crate::workers::mcp_api::McpApiWorkerState>,
     scan: State<'_, crate::workers::scanner::ScanWorkerState>,
-) -> WorkerDiagnosticsSnapshot {
-    WorkerDiagnosticsSnapshot {
+) -> ApiResponse<WorkerDiagnosticsSnapshot> {
+    ApiResponse::success(WorkerDiagnosticsSnapshot {
         workers: vec![
             audio.status().with_restart_policy(audio.restart_policy()),
             WorkerRuntimeStatus::from_health_result("download", download.health())
@@ -27,5 +27,5 @@ pub(crate) fn system_worker_health(
                 .with_restart_policy(mcp_api.restart_policy()),
             scan.status().with_restart_policy(scan.restart_policy()),
         ],
-    }
+    })
 }

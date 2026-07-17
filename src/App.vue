@@ -47,6 +47,7 @@ import { clearSystemMedia, listenSystemMediaAction, updateSystemMedia, type Syst
 import { usePlayerStore } from './stores/player';
 import type { DownloadItem, PlaybackMode, Track } from './types/music';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption, PluginSearchProvider, PluginSearchTrack } from './types/plugin';
+import { getErrorMessage } from './utils/error';
 import { folderTitle, normalizePath } from './utils/path';
 import { normalizeTrackLyrics, trackRawLyrics } from './utils/trackLyrics';
 import { shouldSkipWindowDrag } from './utils/windowDrag';
@@ -473,7 +474,7 @@ function pruneRemovedLocalTracksFromQueue() {
     player.settings.crossfadePlayback,
     RUST_CROSSFADE_DURATION_MS,
   ).catch((error) => {
-    showOnlineToast(error instanceof Error ? error.message : String(error));
+    showOnlineToast(getErrorMessage(error));
   });
 }
 
@@ -881,7 +882,7 @@ async function saveTrackMetadata(value: TrackMetadataFormValue) {
     metadataEditingTrack.value = null;
     showOnlineToast('元数据已更新', 'success');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     trackMetadataError.value = null;
     showOnlineToast(`元数据更新失败：${message}`);
   } finally {
@@ -906,7 +907,7 @@ async function changeTrackCover(track: Track) {
     applyTrackCoverRefresh(track.id);
     showOnlineToast('封面已更新', 'success');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     showOnlineToast(`封面更新失败：${message}`);
   }
 }
@@ -920,13 +921,13 @@ async function refreshLocalTrackDuration(track: Track) {
     applyTrackDurationUpdate(track.id, result.duration);
     showOnlineToast('歌曲时长已更新', 'success');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     showOnlineToast(`读取歌曲时长失败：${message}`);
   }
 }
 
 function normalizeOnlineErrorMessage(error: unknown, fallback: string) {
-  const message = error instanceof Error ? error.message : String(error || fallback);
+  const message = getErrorMessage(error, fallback);
   if (
     message === 'Plugin for selected track is not installed.'
     || message === '插件未安装或已停用，无法播放当前在线歌曲。'
@@ -939,7 +940,7 @@ function normalizeOnlineErrorMessage(error: unknown, fallback: string) {
 }
 
 function normalizePlaybackErrorMessage(error: unknown, fallback = '播放失败') {
-  const message = error instanceof Error ? error.message : String(error || fallback);
+  const message = getErrorMessage(error, fallback);
   if (message.includes('No next queue source')) {
     return '没有下一首可播放';
   }
@@ -1715,7 +1716,7 @@ async function deleteDownloadedItem(item: DownloadItem) {
         artist: item.artist,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       showOnlineToast(`删除失败：${message}`);
       return;
     }
@@ -1744,7 +1745,7 @@ async function openDownloadedItemFolder(item: DownloadItem) {
       artist: item.artist,
     });
   } catch (error) {
-    player.error = error instanceof Error ? error.message : String(error);
+    player.error = getErrorMessage(error);
     showOnlineToast(player.error);
   }
 }
@@ -1767,7 +1768,7 @@ async function enqueueDownloadItemRequest(item: DownloadItem, actionLabel: strin
     await enqueueDownloadOnlineTrack({ ...request, taskId: item.id } as DownloadOnlineTrackRequest);
     showOnlineToast(`${actionLabel}：${item.title}`, 'success');
   } catch (error) {
-    const message = error instanceof Error ? error.message : '下载失败';
+    const message = getErrorMessage(error, '下载失败');
     updateDownloadItem(item.id, { status: 'failed', error: message });
     showOnlineToast(`${item.title} ${actionLabel}失败：${message}`);
   }
@@ -1858,7 +1859,7 @@ async function prepareAndEnqueueDownload(track: Track, item: DownloadItem) {
     await enqueueDownloadOnlineTrack(downloadRequest);
     updateDownloadItem(item.id, { status: 'downloading', progress: 1, error: null, downloadRequest });
   } catch (error) {
-    const message = error instanceof Error ? error.message : '下载失败';
+    const message = getErrorMessage(error, '下载失败');
     updateDownloadItem(item.id, { status: 'failed', error: message });
     showOnlineToast(`${track.title} 下载失败：${message}`);
   }

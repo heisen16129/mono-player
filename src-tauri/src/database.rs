@@ -1,5 +1,6 @@
 ﻿use crate::models::Track;
 use crate::state::AppState;
+use crate::api_response::ApiResponse;
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{MimeType, Picture, PictureType};
@@ -63,96 +64,112 @@ pub(crate) struct RefreshTrackDurationResult {
 //鏉╂瑤閲滅€瑰繐鐨㈢拠銉ュ毐閺佺増姣氶棁鑼舶閸撳秶顏?#[tauri::command]
 #[allow(unused_doc_comments)]
 #[tauri::command]
-pub(crate) fn list_tracks(state: State<'_, AppState>) -> Result<Vec<Track>, String> {
+pub(crate) fn list_tracks(state: State<'_, AppState>) -> ApiResponse<Vec<Track>> {
     eprintln!("[library:list_tracks] request");
     //  /瑜版挷缍橀崷銊ょ娑擃亣绻戦崶?Result 閻ㄥ嫬鍤遍弫棰佽厬娴ｈ法鏁?? 閺冭绱濈€瑰啰娈戦柅鏄忕帆缁涘鐜禍搴濅簰娑?match 鐞涖劏鎻蹇ョ窗
     //  let db = match state.db.lock().map_err(|err| err.to_string()) {
     //     Ok(value) => value, // 婵″倹鐏夐幋鎰閿涘矁袙閸栧懎鍤崐纭风礉缂佈呯敾閹笛嗩攽娑撳绔寸悰?    //     Err(error) => return Err(error), // 婵″倹鐏夋径杈Е閿涘矁鍤滈崝銊ょ矤瑜版挸澧犻崙鑺ユ殶鏉╂柨娲?Err!  楠炲爼娈ｅ蹇撴勾 return Err(...)閵?    //     };
 
     //     娑撯偓缁夊秷顕㈠▔鏇犵「閿涘湯yntactic Sugar閿涘绱濈€瑰啰娈戠拋鎹愵吀閸掓繆銆嬬亸杈ㄦЦ娑撹桨绨＄拋鈺€缍樼亸鎴濆晸閺嶉攱婢樻禒锝囩垳閿涘湐oilerplate閿涘鈧倸鐣犻幎濞锯偓婊勵梾閺屻儵鏁婄拠顖椻偓婵嗘嫲閳ユ粏绻戦崶鐐烘晩鐠囶垪鈧繆绻栨稉銈勯嚋閸斻劋缍旈崥鍫濊嫙閹存劒绨℃稉鈧稉顏勭摟缁楋负鈧?
-    let db = state.db.lock().map_err(|err| err.to_string())?;
+    let db = match state.db.lock().map_err(|err| err.to_string()) {
+        Ok(db) => db,
+        Err(error) => return ApiResponse::error(error),
+    };
     match read_tracks(&db) {
         Ok(tracks) => {
             eprintln!("[library:list_tracks] response count={}", tracks.len());
-            Ok(tracks)
+            ApiResponse::success(tracks)
         }
         Err(error) => {
             eprintln!("[library:list_tracks] error={error}");
-            Err(error)
+            ApiResponse::error(error)
         }
     }
 }
 
 #[tauri::command]
-pub(crate) fn list_latest_added_tracks(state: State<'_, AppState>) -> Result<Vec<Track>, String> {
-    let db = state.db.lock().map_err(|err| err.to_string())?;
-    read_latest_added_tracks(&db)
+pub(crate) fn list_latest_added_tracks(state: State<'_, AppState>) -> ApiResponse<Vec<Track>> {
+    ApiResponse::from_result((|| {
+        let db = state.db.lock().map_err(|err| err.to_string())?;
+        read_latest_added_tracks(&db)
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn remove_music_dir(
     state: State<'_, AppState>,
     path: String,
-) -> Result<Vec<Track>, String> {
-    let root = PathBuf::from(path.trim());
-    let db = state.db.lock().map_err(|err| err.to_string())?;
-    delete_tracks_for_dir(&db, &root)?;
-    read_tracks(&db)
+) -> ApiResponse<Vec<Track>> {
+    ApiResponse::from_result((|| {
+        let root = PathBuf::from(path.trim());
+        let db = state.db.lock().map_err(|err| err.to_string())?;
+        delete_tracks_for_dir(&db, &root)?;
+        read_tracks(&db)
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn update_track_metadata(
     state: State<'_, AppState>,
     request: UpdateTrackMetadataRequest,
-) -> Result<UpdateTrackMetadataResult, String> {
-    let title = normalize_required_text(request.title, "歌曲名称不能为空。")?;
-    let artist = normalize_optional_text(request.artist);
-    let album = normalize_optional_text(request.album);
-    let genre = normalize_optional_text(request.genre);
-    let year = request.year.filter(|value| (1000..=9999).contains(value));
-    let track_number = request.track_number.filter(|value| *value > 0);
-    write_track_file_metadata(
-        &request.path,
-        &title,
-        artist.as_deref(),
-        album.as_deref(),
-        year,
-        genre.as_deref(),
-        track_number,
-    )?;
+) -> ApiResponse<UpdateTrackMetadataResult> {
+    ApiResponse::from_result((|| {
+        let title = normalize_required_text(request.title, "歌曲名称不能为空。")?;
+        let artist = normalize_optional_text(request.artist);
+        let album = normalize_optional_text(request.album);
+        let genre = normalize_optional_text(request.genre);
+        let year = request.year.filter(|value| (1000..=9999).contains(value));
+        let track_number = request.track_number.filter(|value| *value > 0);
+        write_track_file_metadata(
+            &request.path,
+            &title,
+            artist.as_deref(),
+            album.as_deref(),
+            year,
+            genre.as_deref(),
+            track_number,
+        )?;
 
-    let db = state.db.lock().map_err(|err| err.to_string())?;
-    let changed = db
-        .execute(
-            "UPDATE tracks
-             SET title = ?1, artist = ?2, album = ?3, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?4 OR path = ?5",
-            params![title, artist, album, request.id, request.path],
-        )
-        .map_err(|err| err.to_string())?;
+        let db = state.db.lock().map_err(|err| err.to_string())?;
+        let changed = db
+            .execute(
+                "UPDATE tracks
+                 SET title = ?1, artist = ?2, album = ?3, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?4 OR path = ?5",
+                params![title, artist, album, request.id, request.path],
+            )
+            .map_err(|err| err.to_string())?;
 
-    if changed == 0 {
-        return Err("没有找到要更新的歌曲。".to_string());
-    }
+        if changed == 0 {
+            return Err("没有找到要更新的歌曲。".to_string());
+        }
 
-    Ok(UpdateTrackMetadataResult {
-        id: request.id,
-        title,
-        artist,
-        album,
-        year,
-        genre,
-        track_number,
-    })
+        Ok(UpdateTrackMetadataResult {
+            id: request.id,
+            title,
+            artist,
+            album,
+            year,
+            genre,
+            track_number,
+        })
+    })())
 }
 
 #[tauri::command]
-pub(crate) fn update_track_cover(request: UpdateTrackCoverRequest) -> Result<(), String> {
-    write_track_cover_metadata(&request.path, &request.cover_path)
+pub(crate) fn update_track_cover(request: UpdateTrackCoverRequest) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(write_track_cover_metadata(&request.path, &request.cover_path))
 }
 
 #[tauri::command]
 pub(crate) fn refresh_track_duration(
+    state: State<'_, AppState>,
+    request: RefreshTrackDurationRequest,
+) -> ApiResponse<RefreshTrackDurationResult> {
+    ApiResponse::from_result(refresh_track_duration_inner(state, request))
+}
+
+fn refresh_track_duration_inner(
     state: State<'_, AppState>,
     request: RefreshTrackDurationRequest,
 ) -> Result<RefreshTrackDurationResult, String> {

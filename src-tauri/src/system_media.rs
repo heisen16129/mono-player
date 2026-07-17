@@ -1,3 +1,4 @@
+use crate::api_response::ApiResponse;
 use serde::Deserialize;
 use souvlaki::{
     MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, MediaPosition, PlatformConfig,
@@ -80,6 +81,14 @@ pub(crate) fn system_media_update(
     app: AppHandle,
     state: tauri::State<SystemMediaState>,
     request: SystemMediaUpdateRequest,
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(system_media_update_inner(app, state, request))
+}
+
+fn system_media_update_inner(
+    app: AppHandle,
+    state: tauri::State<SystemMediaState>,
+    request: SystemMediaUpdateRequest,
 ) -> Result<(), String> {
     let cover_url = resolve_cover_url(&app, &request);
     let mut guard = state.controls.lock().map_err(|err| err.to_string())?;
@@ -132,7 +141,11 @@ pub(crate) fn system_media_update(
 }
 
 #[tauri::command]
-pub(crate) fn system_media_clear(state: tauri::State<SystemMediaState>) -> Result<(), String> {
+pub(crate) fn system_media_clear(state: tauri::State<SystemMediaState>) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(system_media_clear_inner(state))
+}
+
+fn system_media_clear_inner(state: tauri::State<SystemMediaState>) -> Result<(), String> {
     state.clear_metadata_key()?;
     let mut guard = state.controls.lock().map_err(|err| err.to_string())?;
     let Some(controls) = guard.as_mut() else {

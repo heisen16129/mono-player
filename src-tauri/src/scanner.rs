@@ -2,6 +2,7 @@ use crate::database::{
     delete_missing_tracks_for_dir, delete_tracks_without_files, read_latest_added_tracks,
     read_tracks, upsert_track,
 };
+use crate::api_response::ApiResponse;
 use crate::models::Track;
 use crate::state::AppState;
 use lofty::file::{AudioFile, TaggedFileExt};
@@ -23,6 +24,15 @@ pub(crate) struct ScanMusicDirResult {
 
 #[tauri::command]
 pub(crate) async fn scan_music_dir(
+    path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+    scan_worker: State<'_, crate::workers::scanner::ScanWorkerState>,
+) -> Result<ApiResponse<ScanMusicDirResult>, String> {
+    Ok(ApiResponse::from_result(scan_music_dir_inner(path, app, state, scan_worker).await))
+}
+
+async fn scan_music_dir_inner(
     path: String,
     app: AppHandle,
     state: State<'_, AppState>,
@@ -64,8 +74,8 @@ pub(crate) async fn scan_music_dir(
 #[tauri::command]
 pub(crate) fn cancel_scan_music_dir(
     scan_worker: State<'_, crate::workers::scanner::ScanWorkerState>,
-) -> Result<bool, String> {
-    scan_worker.cancel()
+) -> ApiResponse<bool> {
+    ApiResponse::from_result(scan_worker.cancel())
 }
 
 async fn scan_music_dir_in_worker(

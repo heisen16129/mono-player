@@ -10,6 +10,7 @@ import { getPluginLyricsMetadata, listPluginLyricSearchProviders, searchPluginLy
 import { t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import type { PluginSearchProvider, PluginSearchTrack } from '../types/plugin';
+import { getErrorMessage } from '../utils/error';
 import { parseRawLyrics } from '../utils/lyrics';
 import { getPlayerOriginalCoverCache, playerCoverCacheKey } from '../services/playerCoverCache';
 import { normalizeTrackLyrics, trackRawLyrics } from '../utils/trackLyrics';
@@ -574,7 +575,7 @@ async function openLyricSearchDialog() {
       await searchPluginLyrics();
     }
   } catch (error) {
-    lyricSearchStatus.value = error instanceof Error ? error.message : String(error);
+    lyricSearchStatus.value = getErrorMessage(error);
   }
 }
 
@@ -612,7 +613,7 @@ async function searchPluginLyrics() {
   } catch (error) {
     lyricSearchResults.value = [];
     isLyricSearchEnd.value = true;
-    lyricSearchStatus.value = error instanceof Error ? error.message : String(error);
+    lyricSearchStatus.value = getErrorMessage(error);
   } finally {
     isSearchingPluginLyrics.value = false;
   }
@@ -633,7 +634,7 @@ async function loadMorePluginLyrics() {
     lyricSearchPage.value = nextPage;
     isLyricSearchEnd.value = result.isEnd || nextTracks.length === 0;
   } catch (error) {
-    lyricSearchStatus.value = error instanceof Error ? error.message : String(error);
+    lyricSearchStatus.value = getErrorMessage(error);
   } finally {
     isLoadingMorePluginLyrics.value = false;
   }
@@ -686,7 +687,7 @@ async function applyPluginLyrics(track: PluginSearchTrack) {
     closeLyricSearchDialog();
     await scrollToActiveLyric();
   } catch (error) {
-    lyricSearchStatus.value = error instanceof Error ? error.message : String(error);
+    lyricSearchStatus.value = getErrorMessage(error);
   } finally {
     if (resolvingLyricTrackKey.value === key) {
       resolvingLyricTrackKey.value = null;
@@ -818,7 +819,7 @@ async function downloadLyrics(format: string) {
     emit('notify', '下载成功', 'success');
     closeFontMenu();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     emit('notify', `歌词下载失败：${message}`);
   }
 }
@@ -900,7 +901,7 @@ async function switchLyricFormat(format: string) {
     );
     await scrollToActiveLyric();
   } catch (error) {
-    emit('notify', error instanceof Error ? error.message : String(error), 'error');
+    emit('notify', getErrorMessage(error), 'error');
   } finally {
     switchingLyricFormat.value = null;
   }
@@ -939,7 +940,7 @@ async function downloadCover() {
     emit('notify', result.embeddedInTrack ? '封面已写入歌曲文件' : '封面已保存为图片', 'success');
     closeFontMenu();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     emit('notify', `封面下载失败：${message}`);
   }
 }

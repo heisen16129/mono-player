@@ -1,4 +1,4 @@
-use crate::models::{ImportedTheme, SystemThemeState, ThemePackageManifest, WallpaperThemeColor};
+use crate::{api_response::ApiResponse, models::{ImportedTheme, SystemThemeState, ThemePackageManifest, WallpaperThemeColor}};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -16,17 +16,20 @@ use windows_sys::Win32::System::Registry::{
 use windows_sys::Win32::UI::WindowsAndMessaging::{SystemParametersInfoW, SPI_GETDESKWALLPAPER};
 
 #[tauri::command]
-pub(crate) async fn get_wallpaper_theme_color() -> Result<WallpaperThemeColor, String> {
-    tauri::async_runtime::spawn_blocking(current_wallpaper_theme_color)
+pub(crate) async fn get_wallpaper_theme_color() -> ApiResponse<WallpaperThemeColor> {
+    let result = tauri::async_runtime::spawn_blocking(current_wallpaper_theme_color)
         .await
-        .map_err(|err| err.to_string())?
+        .map_err(|err| err.to_string())
+        .and_then(|result| result);
+    ApiResponse::from_result(result)
 }
 
 #[tauri::command]
-pub(crate) async fn get_system_theme_state() -> Result<SystemThemeState, String> {
-    tauri::async_runtime::spawn_blocking(current_system_theme_payload)
+pub(crate) async fn get_system_theme_state() -> ApiResponse<SystemThemeState> {
+    let result = tauri::async_runtime::spawn_blocking(current_system_theme_payload)
         .await
-        .map_err(|err| err.to_string())
+        .map_err(|err| err.to_string());
+    ApiResponse::from_result(result)
 }
 
 #[cfg(target_os = "windows")]
@@ -43,7 +46,11 @@ pub(crate) fn start_system_theme_watcher(app: AppHandle) {
 pub(crate) fn start_system_theme_watcher(_app: tauri::AppHandle) {}
 
 #[tauri::command]
-pub(crate) fn import_theme_folder(path: String) -> Result<ImportedTheme, String> {
+pub(crate) fn import_theme_folder(path: String) -> ApiResponse<ImportedTheme> {
+    ApiResponse::from_result(import_theme_folder_inner(path))
+}
+
+fn import_theme_folder_inner(path: String) -> Result<ImportedTheme, String> {
     let root = resolve_theme_package_root(PathBuf::from(path))?;
 
     let manifest_content = fs::read_to_string(root.join("theme.json"))

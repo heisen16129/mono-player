@@ -1,5 +1,5 @@
-﻿import { invoke } from '@tauri-apps/api/core';
 import type { PluginManifest, PluginPlaybackQualities, PluginPlaybackQuality, PluginSearchProvider, PluginSearchTrack } from '../types/plugin';
+import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
 import { listInstalledPlugins } from './plugins';
 
@@ -153,7 +153,7 @@ export async function getPluginLyricsMetadata(track: PluginSearchTrack, format?:
   const plugins = await listInstalledPlugins();
   if (!isTauriRuntime()) throw new Error('Plugin lyrics are only available in the desktop runtime.');
 
-  return invoke<PluginLyricsMetadata>('resolve_plugin_lyrics_metadata', {
+  return invokeApi<PluginLyricsMetadata>('resolve_plugin_lyrics_metadata', {
     providerId: track.providerId,
     track,
     format: format?.trim() || null,
@@ -170,7 +170,7 @@ export async function resolvePluginPlaybackSourceWithRust(
   const plugins = await listInstalledPlugins();
   if (!isTauriRuntime()) throw new Error('Plugin playback is only available in the desktop runtime.');
 
-  return invoke<PluginPlaybackSource>('resolve_plugin_playback_source', {
+  return invokeApi<PluginPlaybackSource>('resolve_plugin_playback_source', {
     providerId: track.providerId,
     track,
     preferredQuality: preferredQuality?.trim() || null,
@@ -184,7 +184,7 @@ export async function resolvePluginPlaybackQualitiesWithRust(track: PluginSearch
   const plugins = await listInstalledPlugins();
   if (!isTauriRuntime()) throw new Error('Plugin playback is only available in the desktop runtime.');
 
-  return invoke<PluginPlaybackQualities>('resolve_plugin_playback_qualities', {
+  return invokeApi<PluginPlaybackQualities>('resolve_plugin_playback_qualities', {
     providerId: track.providerId,
     track,
     plugins,
@@ -217,7 +217,7 @@ async function searchWithPlugin(plugin: PluginManifest, keyword: string, page: n
   if (!isTauriRuntime()) throw new Error('Plugin search is only available in the desktop runtime.');
 
   const plugins = await listInstalledPlugins();
-  return invoke<PluginSearchPage>('search_plugin', {
+  return invokeApi<PluginSearchPage>('search_plugin', {
     providerId: plugin.id,
     keyword,
     page,

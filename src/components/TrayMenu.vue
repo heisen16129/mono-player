@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChevronRight, Pause, Play, Settings, SkipBack, SkipForward, X } from '@lucide/vue';
-import { invoke } from '@tauri-apps/api/core';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { invokeApi } from '../services/api';
 import { readPersistentValue } from '../services/persistentStore';
 
 const TRAY_STATE_KEY = 'mono-player-tray-state';
@@ -27,7 +27,7 @@ const artist = computed(() => state.value.artist || 'Mono Player');
 const playLabel = computed(() => (state.value.isPlaying ? '\u6682\u505c' : '\u64ad\u653e'));
 
 async function runAction(action: string) {
-  await invoke('tray_popup_action', { action });
+  await invokeApi<void>('tray_popup_action', { action });
 }
 
 async function refreshTrayState() {

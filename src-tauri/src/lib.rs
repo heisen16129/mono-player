@@ -1,3 +1,5 @@
+mod api_response;
+mod app_error;
 mod covers;
 mod database;
 mod diagnostics;

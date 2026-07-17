@@ -23,6 +23,7 @@ import {
 } from '@lucide/vue';
 import type { PlaybackMode, Track } from '../types/music';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption } from '../types/plugin';
+import { getErrorMessage } from '../utils/error';
 import { readCover, readCoverThumbnail } from '../services/music';
 import {
   canUseRustAudioBackend,
@@ -342,8 +343,7 @@ function syncPlaybackTimeFromRust(position: number, playing: boolean) {
 }
 
 function playbackErrorText(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || '');
-  return message.trim() || '未知错误';
+  return getErrorMessage(error, '未知错误');
 }
 
 function clearPlaybackError() {

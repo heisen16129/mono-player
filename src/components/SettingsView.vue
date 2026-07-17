@@ -6,6 +6,7 @@ import { systemWorkerHealth, type WorkerDiagnostic } from '../services/music';
 import { clearRustBackendCache, getRustBackendCacheStatus, getRustBackendDefaultCacheDir, getRustBackendSystemTempCacheDir, listRustBackendOutputDevices, pruneRustBackendCache } from '../services/playerBackend';
 import { usePlayerStore } from '../stores/player';
 import type { Locale, PlaybackQualityFallback } from '../types/music';
+import { getErrorMessage } from '../utils/error';
 
 const player = usePlayerStore();
 const tabKeys = ['settings', 'playback', 'lyrics', 'mcp', 'plugins', 'shortcuts', 'network', 'backup'] as const;
@@ -231,7 +232,7 @@ async function refreshMcpStatus() {
     mcpStatus.value = snapshot.workers.find((worker) => worker.worker === 'mcp-api') ?? null;
   } catch (error) {
     mcpStatus.value = null;
-    mcpStatusError.value = error instanceof Error ? error.message : String(error);
+    mcpStatusError.value = getErrorMessage(error);
   } finally {
     isRefreshingMcpStatus.value = false;
   }

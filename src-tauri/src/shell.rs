@@ -1,8 +1,13 @@
+use crate::api_response::ApiResponse;
 use std::path::PathBuf;
 use std::process::Command;
 
 #[tauri::command]
-pub(crate) fn open_track_in_folder(path: String) -> Result<(), String> {
+pub(crate) fn open_track_in_folder(path: String) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(open_track_in_folder_inner(path))
+}
+
+fn open_track_in_folder_inner(path: String) -> Result<(), String> {
     let track_path = PathBuf::from(path.trim());
     if !track_path.is_file() {
         return Err("歌曲文件不存在。".to_string());

@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { resolveLocale } from '../i18n';
 import { cancelScanMusicDir, isTauriRuntime } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
+import { getErrorMessage } from '../utils/error';
 
 type PlayerStore = ReturnType<typeof usePlayerStore>;
 
@@ -131,7 +132,7 @@ export function useScanFolders({ activeFolderPath, player }: ScanFoldersOptions)
         try {
           await player.scanLibrary(folder);
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
+          const message = getErrorMessage(err);
           if (message.includes('Scan canceled')) {
             scanCanceled = true;
             break;
@@ -163,7 +164,7 @@ export function useScanFolders({ activeFolderPath, player }: ScanFoldersOptions)
     try {
       await cancelScanMusicDir();
     } catch (err) {
-      player.error = err instanceof Error ? err.message : String(err);
+      player.error = getErrorMessage(err);
     }
   }
 

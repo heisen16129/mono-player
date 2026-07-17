@@ -3,7 +3,7 @@ import type {
   PluginManifest,
   PluginSubscription,
 } from '../types/plugin';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
 import { readPersistentValue, writePersistentValue } from './persistentStore';
 
@@ -95,7 +95,7 @@ export async function restoreDeletedPluginsFromCatalog(plugins: PluginCatalogIte
 
 export async function installCatalogPlugin(item: PluginCatalogItem): Promise<PluginManifest[]> {
   const installed = await listInstalledPlugins();
-  const manifest = await invoke<PluginManifest>('build_plugin_manifest_from_catalog', {
+  const manifest = await invokeApi<PluginManifest>('build_plugin_manifest_from_catalog', {
     item,
     installedAt: new Date().toISOString(),
     enabled: true,
@@ -112,7 +112,7 @@ export async function installLocalPlugin(filePath: string): Promise<PluginManife
   }
 
   const installed = await listInstalledPlugins();
-  const manifest = await invoke<PluginManifest>('build_local_plugin_manifest', {
+  const manifest = await invokeApi<PluginManifest>('build_local_plugin_manifest', {
     filePath,
     installedAt: new Date().toISOString(),
     enabled: true,
@@ -145,7 +145,7 @@ export async function fetchPluginCatalog(subscription: PluginSubscription): Prom
     throw new Error('插件目录需要桌面运行时读取 WASM metadata。');
   }
 
-  return invoke<PluginCatalogItem[]>('fetch_plugin_catalog_items', { url: subscription.url });
+  return invokeApi<PluginCatalogItem[]>('fetch_plugin_catalog_items', { url: subscription.url });
 }
 
 export async function fetchAllPluginCatalogs(subscriptions: PluginSubscription[]): Promise<PluginCatalogItem[]> {
@@ -182,11 +182,11 @@ function mergeCatalogPlugins(plugins: PluginCatalogItem[]) {
 }
 
 function normalizeCatalogItems(plugins: PluginCatalogItem[]): Promise<PluginCatalogItem[]> {
-  return invoke<PluginCatalogItem[]>('normalize_plugin_catalog_items', { plugins });
+  return invokeApi<PluginCatalogItem[]>('normalize_plugin_catalog_items', { plugins });
 }
 
 function normalizeManifests(plugins: PluginManifest[]): Promise<PluginManifest[]> {
-  return invoke<PluginManifest[]>('normalize_plugin_manifests', { plugins });
+  return invokeApi<PluginManifest[]>('normalize_plugin_manifests', { plugins });
 }
 
 

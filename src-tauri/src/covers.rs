@@ -1,4 +1,5 @@
 use crate::{
+    api_response::ApiResponse,
     models::CoverImage,
     player::{mono_cache_dir, PlayerState},
 };
@@ -16,7 +17,11 @@ use tauri::Url;
 use tauri::{AppHandle, Manager, State};
 
 #[tauri::command]
-pub(crate) fn read_cover(path: String) -> Result<Option<CoverImage>, String> {
+pub(crate) fn read_cover(path: String) -> ApiResponse<Option<CoverImage>> {
+    ApiResponse::from_result(read_cover_backend(path))
+}
+
+pub(crate) fn read_cover_backend(path: String) -> Result<Option<CoverImage>, String> {
     let audio_path = PathBuf::from(path);
     read_cover_uncached(&audio_path)
 }
@@ -25,11 +30,13 @@ pub(crate) fn read_cover(path: String) -> Result<Option<CoverImage>, String> {
 pub(crate) async fn read_cover_thumbnail(
     state: State<'_, PlayerState>,
     path: String,
-) -> Result<Option<CoverImage>, String> {
-    let cache_root = state.cache_dir()?;
-    tauri::async_runtime::spawn_blocking(move || read_cover_thumbnail_blocking(&cache_root, &path))
-        .await
-        .map_err(|err| err.to_string())?
+) -> Result<ApiResponse<Option<CoverImage>>, String> {
+    Ok(ApiResponse::from_result((|| async {
+        let cache_root = state.cache_dir()?;
+        tauri::async_runtime::spawn_blocking(move || read_cover_thumbnail_blocking(&cache_root, &path))
+            .await
+            .map_err(|err| err.to_string())?
+    })().await))
 }
 
 fn read_cover_thumbnail_blocking(
@@ -63,14 +70,16 @@ fn read_cover_thumbnail_blocking(
 pub(crate) fn clear_cover_thumbnail_cache(
     state: State<'_, PlayerState>,
     path: String,
-) -> Result<(), String> {
-    let audio_path = PathBuf::from(path);
-    let cache_path = cached_cover_thumbnail_path(&state.cache_dir()?, &audio_path)?;
-    if cache_path.is_file() {
-        fs::remove_file(cache_path).map_err(|err| err.to_string())?;
-    }
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        let audio_path = PathBuf::from(path);
+        let cache_path = cached_cover_thumbnail_path(&state.cache_dir()?, &audio_path)?;
+        if cache_path.is_file() {
+            fs::remove_file(cache_path).map_err(|err| err.to_string())?;
+        }
 
-    Ok(())
+        Ok(())
+    })())
 }
 
 pub(crate) fn cached_cover_thumbnail_file_url(

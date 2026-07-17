@@ -1,3 +1,4 @@
+use crate::{api_response::ApiResponse, app_error::AppResult};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::PathBuf;
@@ -34,25 +35,29 @@ fn write_store(app: &AppHandle, values: &Map<String, Value>) -> Result<(), Strin
     fs::write(path, content).map_err(|err| err.to_string())
 }
 
-pub(crate) fn read_value(app: &AppHandle, key: &str) -> Result<Option<Value>, String> {
+pub(crate) fn read_value(app: &AppHandle, key: &str) -> AppResult<Option<Value>> {
     Ok(read_store(app)?.remove(key))
 }
 
 #[tauri::command]
-pub fn store_get(app: AppHandle, key: String) -> Result<Option<Value>, String> {
-    read_value(&app, &key)
+pub fn store_get(app: AppHandle, key: String) -> ApiResponse<Option<Value>> {
+    ApiResponse::from_app_result(read_value(&app, &key))
 }
 
 #[tauri::command]
-pub fn store_set(app: AppHandle, key: String, value: Value) -> Result<(), String> {
-    let mut values = read_store(&app)?;
-    values.insert(key, value);
-    write_store(&app, &values)
+pub fn store_set(app: AppHandle, key: String, value: Value) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        let mut values = read_store(&app)?;
+        values.insert(key, value);
+        write_store(&app, &values)
+    })())
 }
 
 #[tauri::command]
-pub fn store_delete(app: AppHandle, key: String) -> Result<(), String> {
-    let mut values = read_store(&app)?;
-    values.remove(&key);
-    write_store(&app, &values)
+pub fn store_delete(app: AppHandle, key: String) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        let mut values = read_store(&app)?;
+        values.remove(&key);
+        write_store(&app, &values)
+    })())
 }

@@ -1,4 +1,4 @@
-use crate::models::{LyricLine, LyricWord, TrackLyrics};
+use crate::{api_response::ApiResponse, models::{LyricLine, LyricWord, TrackLyrics}};
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,8 +16,8 @@ pub(crate) struct LyricsResolveInfo {
 }
 
 #[tauri::command]
-pub(crate) fn resolve_lyrics_source(lyrics: LyricsResolveInfo) -> Result<Vec<LyricLine>, String> {
-    resolve_lyrics_source_backend(&lyrics)
+pub(crate) fn resolve_lyrics_source(lyrics: LyricsResolveInfo) -> ApiResponse<Vec<LyricLine>> {
+    ApiResponse::from_result(resolve_lyrics_source_backend(&lyrics))
 }
 
 pub(crate) fn parse_lyrics_content_with_format(

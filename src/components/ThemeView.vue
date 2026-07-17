@@ -12,6 +12,7 @@ import { resolveLocale, t } from '../i18n';
 import { getSystemThemeState, importThemeFolder } from '../services/music';
 import { usePlayerStore } from '../stores/player';
 import type { AppTheme, CustomTheme, SystemThemeState } from '../types/music';
+import { getErrorMessage } from '../utils/error';
 
 const player = usePlayerStore();
 const activeThemeTab = ref<'local' | 'market'>('local');
@@ -311,7 +312,7 @@ async function importCustomTheme() {
     const theme = await importThemeFolder(selected);
     player.addCustomTheme(theme);
   } catch (err) {
-    player.error = err instanceof Error ? err.message : String(err);
+    player.error = getErrorMessage(err);
   }
 }
 </script>

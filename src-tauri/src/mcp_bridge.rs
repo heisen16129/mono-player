@@ -858,7 +858,7 @@ fn get_cover(app: &AppHandle, params: Value) -> Result<Value, String> {
     }
 
     let path = track_path_from_params(app, &params)?;
-    let cover = crate::covers::read_cover(path)?;
+    let cover = crate::covers::read_cover_backend(path)?;
     Ok(json!({
         "source": "local",
         "cover": cover

@@ -1,9 +1,14 @@
+use crate::api_response::ApiResponse;
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 
 #[tauri::command]
-pub(crate) fn hide_main_window_to_tray(app: AppHandle) -> Result<(), String> {
+pub(crate) fn hide_main_window_to_tray(app: AppHandle) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(hide_main_window_to_tray_inner(app))
+}
+
+fn hide_main_window_to_tray_inner(app: AppHandle) -> Result<(), String> {
     let Some(window) = app.get_webview_window("main") else {
         return Err("main window not found".to_string());
     };
@@ -82,7 +87,7 @@ pub(crate) fn show_tray_menu_window(app: &AppHandle, x: f64, y: f64) -> Result<(
 }
 
 #[tauri::command]
-pub(crate) fn tray_popup_action(app: AppHandle, action: String) {
+pub(crate) fn tray_popup_action(app: AppHandle, action: String) -> ApiResponse<()> {
     if let Some(window) = app.get_webview_window("tray-menu") {
         let _ = window.hide();
     }
@@ -96,10 +101,16 @@ pub(crate) fn tray_popup_action(app: AppHandle, action: String) {
         "exit" => app.exit(0),
         value => emit_tray_action(&app, value),
     }
+
+    ApiResponse::ok()
 }
 
 #[tauri::command]
-pub(crate) fn update_tray_now_playing(app: AppHandle, title: String) -> Result<(), String> {
+pub(crate) fn update_tray_now_playing(app: AppHandle, title: String) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(update_tray_now_playing_inner(app, title))
+}
+
+fn update_tray_now_playing_inner(app: AppHandle, title: String) -> Result<(), String> {
     let Some(tray) = app.tray_by_id("main-tray") else {
         return Ok(());
     };

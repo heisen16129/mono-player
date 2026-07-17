@@ -1,3 +1,4 @@
+use crate::api_response::ApiResponse;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -85,13 +86,13 @@ pub(crate) struct McpOnlineTrackMetadata {
 }
 
 #[tauri::command]
-pub(crate) fn player_system_temp_cache_dir() -> String {
-    system_temp_cache_dir().to_string_lossy().to_string()
+pub(crate) fn player_system_temp_cache_dir() -> ApiResponse<String> {
+    ApiResponse::success(system_temp_cache_dir().to_string_lossy().to_string())
 }
 
 #[tauri::command]
-pub(crate) fn player_default_cache_dir(state: State<'_, PlayerState>) -> String {
-    state.default_cache_dir.to_string_lossy().to_string()
+pub(crate) fn player_default_cache_dir(state: State<'_, PlayerState>) -> ApiResponse<String> {
+    ApiResponse::success(state.default_cache_dir.to_string_lossy().to_string())
 }
 
 fn normalize_cache_dir_path(path: &str) -> String {
@@ -114,52 +115,60 @@ pub(crate) fn player_set_cache_dir(
     state: State<'_, PlayerState>,
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
     cache_dir: Option<String>,
-) -> Result<CacheDirSnapshot, String> {
-    let next_cache_dir = match cache_dir
-        .as_deref()
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-    {
-        Some(path) => PathBuf::from(normalize_cache_dir_path(path)),
-        None => state.default_cache_dir.clone(),
-    };
+) -> ApiResponse<CacheDirSnapshot> {
+    ApiResponse::from_result((|| {
+        let next_cache_dir = match cache_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+        {
+            Some(path) => PathBuf::from(normalize_cache_dir_path(path)),
+            None => state.default_cache_dir.clone(),
+        };
 
-    fs::create_dir_all(&next_cache_dir).map_err(|err| err.to_string())?;
-    cleanup_online_audio_cache_files(&next_cache_dir, None);
-    let mut current_cache_dir = state.cache_dir.lock().map_err(|err| err.to_string())?;
-    *current_cache_dir = next_cache_dir.clone();
-    audio_worker.set_cache_dir(online_audio_cache_dir(&next_cache_dir))?;
-    Ok(CacheDirSnapshot {
-        cache_dir: next_cache_dir.to_string_lossy().to_string(),
-    })
+        fs::create_dir_all(&next_cache_dir).map_err(|err| err.to_string())?;
+        cleanup_online_audio_cache_files(&next_cache_dir, None);
+        let mut current_cache_dir = state.cache_dir.lock().map_err(|err| err.to_string())?;
+        *current_cache_dir = next_cache_dir.clone();
+        audio_worker.set_cache_dir(online_audio_cache_dir(&next_cache_dir))?;
+        Ok(CacheDirSnapshot {
+            cache_dir: next_cache_dir.to_string_lossy().to_string(),
+        })
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn player_clear_cache(
     state: State<'_, PlayerState>,
-) -> Result<CacheCleanupSnapshot, String> {
-    let cache_dir = state.cache_dir()?;
-    let active_paths = active_cache_paths();
-    Ok(clear_cache_files(&cache_dir, &active_paths))
+) -> ApiResponse<CacheCleanupSnapshot> {
+    ApiResponse::from_result((|| {
+        let cache_dir = state.cache_dir()?;
+        let active_paths = active_cache_paths();
+        Ok(clear_cache_files(&cache_dir, &active_paths))
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn player_prune_cache(
     state: State<'_, PlayerState>,
     max_bytes: u64,
-) -> Result<CacheCleanupSnapshot, String> {
-    let cache_dir = state.cache_dir()?;
-    let active_paths = active_cache_paths();
-    Ok(prune_cache_files(&cache_dir, &active_paths, max_bytes))
+) -> ApiResponse<CacheCleanupSnapshot> {
+    ApiResponse::from_result((|| {
+        let cache_dir = state.cache_dir()?;
+        let active_paths = active_cache_paths();
+        Ok(prune_cache_files(&cache_dir, &active_paths, max_bytes))
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn player_cache_status(
     state: State<'_, PlayerState>,
-) -> Result<CacheStatusSnapshot, String> {
-    let cache_dir = state.cache_dir()?;
-    let active_paths = active_cache_paths();
-    Ok(cache_status(&cache_dir, &active_paths))
+) -> ApiResponse<CacheStatusSnapshot> {
+    ApiResponse::from_result((|| {
+        let cache_dir = state.cache_dir()?;
+        let active_paths = active_cache_paths();
+        Ok(cache_status(&cache_dir, &active_paths))
+    })())
 }
 
 #[tauri::command]
@@ -171,18 +180,20 @@ pub(crate) fn player_set_queue(
     seamless_playback: bool,
     crossfade_playback: bool,
     crossfade_duration_ms: u64,
-) -> Result<QueueSnapshot, String> {
-    let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-    set_queue_backend(
-        &mut backend,
-        tracks,
-        current_source.as_deref(),
-        playback_mode,
-        seamless_playback,
-        crossfade_playback,
-        crossfade_duration_ms,
-    );
-    Ok(queue_snapshot_from_backend(&backend))
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+        set_queue_backend(
+            &mut backend,
+            tracks,
+            current_source.as_deref(),
+            playback_mode,
+            seamless_playback,
+            crossfade_playback,
+            crossfade_duration_ms,
+        );
+        Ok(queue_snapshot_from_backend(&backend))
+    })())
 }
 
 #[tauri::command]
@@ -196,64 +207,72 @@ pub(crate) fn player_start_queue(
     crossfade_playback: bool,
     crossfade_duration_ms: u64,
     start_position: f64,
-) -> Result<QueueSnapshot, String> {
-    let (source, queue_index) = {
-        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-        set_queue_backend(
-            &mut backend,
-            tracks,
-            None,
-            playback_mode,
-            seamless_playback,
-            crossfade_playback,
-            crossfade_duration_ms,
-        );
-        let Some((source, queue_index)) =
-            initial_queue_source(&mut backend, requested_source.as_deref())
-        else {
-            return Err("No playable queue source.".to_string());
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let (source, queue_index) = {
+            let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+            set_queue_backend(
+                &mut backend,
+                tracks,
+                None,
+                playback_mode,
+                seamless_playback,
+                crossfade_playback,
+                crossfade_duration_ms,
+            );
+            let Some((source, queue_index)) =
+                initial_queue_source(&mut backend, requested_source.as_deref())
+            else {
+                return Err("No playable queue source.".to_string());
+            };
+            backend.queue_index = Some(queue_index);
+            (source, queue_index)
         };
-        backend.queue_index = Some(queue_index);
-        (source, queue_index)
-    };
 
-    play_worker_queue_source_by_index_at_position(
-        &state.inner,
-        &app,
-        source,
-        Some(queue_index),
-        start_position,
-        false,
-        None,
-    )
+        play_worker_queue_source_by_index_at_position(
+            &state.inner,
+            &app,
+            source,
+            Some(queue_index),
+            start_position,
+            false,
+            None,
+        )
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn player_queue_snapshot(
     state: State<'_, PlayerState>,
-) -> Result<QueueSnapshot, String> {
-    let backend = state.inner.lock().map_err(|err| err.to_string())?;
-    Ok(queue_snapshot_from_backend(&backend))
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let backend = state.inner.lock().map_err(|err| err.to_string())?;
+        Ok(queue_snapshot_from_backend(&backend))
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn player_next(
     state: State<'_, PlayerState>,
     app: AppHandle,
-) -> Result<QueueSnapshot, String> {
-    let (source, next_index) =
-        next_queue_source(&state.inner)?.ok_or_else(|| "No next queue source.".to_string())?;
-    play_worker_queue_source_by_index(&state.inner, &app, source, Some(next_index))
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let (source, next_index) =
+            next_queue_source(&state.inner)?.ok_or_else(|| "No next queue source.".to_string())?;
+        play_worker_queue_source_by_index(&state.inner, &app, source, Some(next_index))
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn player_previous(
     state: State<'_, PlayerState>,
     app: AppHandle,
-) -> Result<QueueSnapshot, String> {
-    let (source, previous_index) = previous_queue_source(&state.inner)?
-        .ok_or_else(|| "No previous queue source.".to_string())?;
-    play_worker_queue_source_by_index(&state.inner, &app, source, Some(previous_index))
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let (source, previous_index) = previous_queue_source(&state.inner)?
+            .ok_or_else(|| "No previous queue source.".to_string())?;
+        play_worker_queue_source_by_index(&state.inner, &app, source, Some(previous_index))
+    })())
 }
 
 #[tauri::command]
@@ -261,17 +280,19 @@ pub(crate) fn player_play_queue_source(
     state: State<'_, PlayerState>,
     app: AppHandle,
     source: String,
-) -> Result<QueueSnapshot, String> {
-    let source = normalize_queue_source(&source)
-        .ok_or_else(|| "Queue source is not playable.".to_string())?;
-    let queue_index = {
-        let backend = state.inner.lock().map_err(|err| err.to_string())?;
-        backend
-            .queue_sources
-            .iter()
-            .position(|item| item == &source)
-    };
-    play_worker_queue_source_by_index(&state.inner, &app, source, queue_index)
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let source = normalize_queue_source(&source)
+            .ok_or_else(|| "Queue source is not playable.".to_string())?;
+        let queue_index = {
+            let backend = state.inner.lock().map_err(|err| err.to_string())?;
+            backend
+                .queue_sources
+                .iter()
+                .position(|item| item == &source)
+        };
+        play_worker_queue_source_by_index(&state.inner, &app, source, queue_index)
+    })())
 }
 
 #[tauri::command]
@@ -279,24 +300,26 @@ pub(crate) fn player_queue_insert_next(
     state: State<'_, PlayerState>,
     app: AppHandle,
     track: QueueTrack,
-) -> Result<QueueSnapshot, String> {
-    let track =
-        normalize_queue_track(track).ok_or_else(|| "Queue track is not playable.".to_string())?;
-    let source = track.path.clone();
-    let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-    backend.queue_tracks.retain(|item| item.path != source);
-    backend.queue_sources.retain(|item| item != &source);
-    let insert_index = backend
-        .queue_index
-        .map(|index| index.saturating_add(1).min(backend.queue_sources.len()))
-        .unwrap_or(0);
-    backend.queue_tracks.insert(insert_index, track);
-    backend.queue_sources.insert(insert_index, source.clone());
-    backend.queued_next_source = Some(source);
-    refresh_queue_index(&mut backend);
-    let snapshot = queue_snapshot_from_backend(&backend);
-    let _ = app.emit("player://queue", &snapshot);
-    Ok(snapshot)
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let track = normalize_queue_track(track)
+            .ok_or_else(|| "Queue track is not playable.".to_string())?;
+        let source = track.path.clone();
+        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+        backend.queue_tracks.retain(|item| item.path != source);
+        backend.queue_sources.retain(|item| item != &source);
+        let insert_index = backend
+            .queue_index
+            .map(|index| index.saturating_add(1).min(backend.queue_sources.len()))
+            .unwrap_or(0);
+        backend.queue_tracks.insert(insert_index, track);
+        backend.queue_sources.insert(insert_index, source.clone());
+        backend.queued_next_source = Some(source);
+        refresh_queue_index(&mut backend);
+        let snapshot = queue_snapshot_from_backend(&backend);
+        let _ = app.emit("player://queue", &snapshot);
+        Ok(snapshot)
+    })())
 }
 
 #[tauri::command]
@@ -304,19 +327,21 @@ pub(crate) fn player_queue_append(
     state: State<'_, PlayerState>,
     app: AppHandle,
     track: QueueTrack,
-) -> Result<QueueSnapshot, String> {
-    let track =
-        normalize_queue_track(track).ok_or_else(|| "Queue track is not playable.".to_string())?;
-    let source = track.path.clone();
-    let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-    backend.queue_tracks.retain(|item| item.path != source);
-    backend.queue_sources.retain(|item| item != &source);
-    backend.queue_tracks.push(track);
-    backend.queue_sources.push(source);
-    refresh_queue_index(&mut backend);
-    let snapshot = queue_snapshot_from_backend(&backend);
-    let _ = app.emit("player://queue", &snapshot);
-    Ok(snapshot)
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let track = normalize_queue_track(track)
+            .ok_or_else(|| "Queue track is not playable.".to_string())?;
+        let source = track.path.clone();
+        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+        backend.queue_tracks.retain(|item| item.path != source);
+        backend.queue_sources.retain(|item| item != &source);
+        backend.queue_tracks.push(track);
+        backend.queue_sources.push(source);
+        refresh_queue_index(&mut backend);
+        let snapshot = queue_snapshot_from_backend(&backend);
+        let _ = app.emit("player://queue", &snapshot);
+        Ok(snapshot)
+    })())
 }
 
 #[tauri::command]
@@ -324,19 +349,21 @@ pub(crate) fn player_queue_remove(
     state: State<'_, PlayerState>,
     app: AppHandle,
     source: String,
-) -> Result<QueueSnapshot, String> {
-    let source = normalize_queue_source(&source)
-        .ok_or_else(|| "Queue source is not playable.".to_string())?;
-    let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-    backend.queue_tracks.retain(|item| item.path != source);
-    backend.queue_sources.retain(|item| item != &source);
-    if backend.queued_next_source.as_deref() == Some(source.as_str()) {
-        backend.queued_next_source = None;
-    }
-    refresh_queue_index(&mut backend);
-    let snapshot = queue_snapshot_from_backend(&backend);
-    let _ = app.emit("player://queue", &snapshot);
-    Ok(snapshot)
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let source = normalize_queue_source(&source)
+            .ok_or_else(|| "Queue source is not playable.".to_string())?;
+        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+        backend.queue_tracks.retain(|item| item.path != source);
+        backend.queue_sources.retain(|item| item != &source);
+        if backend.queued_next_source.as_deref() == Some(source.as_str()) {
+            backend.queued_next_source = None;
+        }
+        refresh_queue_index(&mut backend);
+        let snapshot = queue_snapshot_from_backend(&backend);
+        let _ = app.emit("player://queue", &snapshot);
+        Ok(snapshot)
+    })())
 }
 
 #[tauri::command]
@@ -345,33 +372,35 @@ pub(crate) fn player_queue_move(
     app: AppHandle,
     from_index: usize,
     to_index: usize,
-) -> Result<QueueSnapshot, String> {
-    let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-    if from_index >= backend.queue_sources.len() {
-        return Ok(queue_snapshot_from_backend(&backend));
-    }
-    let source = backend.queue_sources.remove(from_index);
-    let track = if from_index < backend.queue_tracks.len() {
-        Some(backend.queue_tracks.remove(from_index))
-    } else {
-        None
-    };
-    let insert_index = to_index.min(backend.queue_sources.len());
-    backend.queue_sources.insert(insert_index, source);
-    if let Some(track) = track {
-        backend.queue_tracks.insert(insert_index, track);
-    }
-    refresh_queue_index(&mut backend);
-    let snapshot = queue_snapshot_from_backend(&backend);
-    let _ = app.emit("player://queue", &snapshot);
-    Ok(snapshot)
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+        if from_index >= backend.queue_sources.len() {
+            return Ok(queue_snapshot_from_backend(&backend));
+        }
+        let source = backend.queue_sources.remove(from_index);
+        let track = if from_index < backend.queue_tracks.len() {
+            Some(backend.queue_tracks.remove(from_index))
+        } else {
+            None
+        };
+        let insert_index = to_index.min(backend.queue_sources.len());
+        backend.queue_sources.insert(insert_index, source);
+        if let Some(track) = track {
+            backend.queue_tracks.insert(insert_index, track);
+        }
+        refresh_queue_index(&mut backend);
+        let snapshot = queue_snapshot_from_backend(&backend);
+        let _ = app.emit("player://queue", &snapshot);
+        Ok(snapshot)
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn player_output_devices(
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
-) -> Result<Vec<AudioOutputDevice>, String> {
-    audio_worker.list_output_devices()
+) -> ApiResponse<Vec<AudioOutputDevice>> {
+    ApiResponse::from_result(audio_worker.list_output_devices())
 }
 
 pub(crate) fn list_output_devices_backend() -> Result<Vec<AudioOutputDevice>, String> {
@@ -402,8 +431,8 @@ pub(crate) fn player_set_output_device(
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
     _app: AppHandle,
     device_id: Option<String>,
-) -> Result<(), String> {
-    audio_worker.set_output_device(device_id)
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(audio_worker.set_output_device(device_id))
 }
 
 #[tauri::command]
@@ -413,10 +442,12 @@ pub(crate) fn player_play_path(
     path: String,
     restart: bool,
     fade: bool,
-) -> Result<(), String> {
-    audio_worker.play_path(path, restart, fade, None)?;
-    spawn_audio_worker_state_watcher(app);
-    Ok(())
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        audio_worker.play_path(path, restart, fade, None)?;
+        spawn_audio_worker_state_watcher(app);
+        Ok(())
+    })())
 }
 
 #[tauri::command]
@@ -426,18 +457,20 @@ pub(crate) fn player_play_url(
     url: String,
     restart: bool,
     fade: bool,
-) -> Result<(), String> {
-    audio_worker.play_url(url, restart, fade, None)?;
-    spawn_audio_worker_state_watcher(app);
-    Ok(())
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        audio_worker.play_url(url, restart, fade, None)?;
+        spawn_audio_worker_state_watcher(app);
+        Ok(())
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn player_pause(
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
     fade: bool,
-) -> Result<(), String> {
-    audio_worker.pause(fade)
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(audio_worker.pause(fade))
 }
 
 #[tauri::command]
@@ -445,43 +478,45 @@ pub(crate) fn player_stop(
     state: State<'_, PlayerState>,
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
     fade: bool,
-) -> Result<(), String> {
-    audio_worker.stop(fade)?;
-    let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-    backend.current_source = None;
-    refresh_queue_index(&mut backend);
-    Ok(())
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        audio_worker.stop(fade)?;
+        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+        backend.current_source = None;
+        refresh_queue_index(&mut backend);
+        Ok(())
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn player_seek(
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
     seconds: f64,
-) -> Result<(), String> {
-    audio_worker.seek(seconds)
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(audio_worker.seek(seconds))
 }
 
 #[tauri::command]
 pub(crate) fn player_set_volume(
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
     volume: f32,
-) -> Result<(), String> {
-    audio_worker.set_volume(volume)
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(audio_worker.set_volume(volume))
 }
 
 #[tauri::command]
 pub(crate) fn player_set_speed(
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
     speed: f32,
-) -> Result<(), String> {
-    audio_worker.set_speed(speed)
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(audio_worker.set_speed(speed))
 }
 
 #[tauri::command]
 pub(crate) fn player_state(
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
-) -> Result<PlayerSnapshot, String> {
-    audio_worker.state()
+) -> ApiResponse<PlayerSnapshot> {
+    ApiResponse::from_result(audio_worker.state())
 }
 
 pub(crate) fn mcp_player_state(app: &AppHandle) -> Result<PlayerSnapshot, String> {

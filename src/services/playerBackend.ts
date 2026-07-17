@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
 import type { Track } from '../types/music';
 
@@ -61,31 +61,31 @@ export function isRustPlayableUrl(source: string): boolean {
 }
 
 export function playPathWithRustBackend(path: string, restart = false, fade = false): Promise<void> {
-  return invoke('player_play_path', { path, restart, fade });
+  return invokeApi<void>('player_play_path', { path, restart, fade });
 }
 
 export function playUrlWithRustBackend(url: string, restart = false, fade = false): Promise<void> {
-  return invoke('player_play_url', { url, restart, fade });
+  return invokeApi<void>('player_play_url', { url, restart, fade });
 }
 
 export function pauseRustBackend(fade = false): Promise<void> {
-  return invoke('player_pause', { fade });
+  return invokeApi<void>('player_pause', { fade });
 }
 
 export function stopRustBackend(fade = false): Promise<void> {
-  return invoke('player_stop', { fade });
+  return invokeApi<void>('player_stop', { fade });
 }
 
 export function seekRustBackend(seconds: number): Promise<void> {
-  return invoke('player_seek', { seconds });
+  return invokeApi<void>('player_seek', { seconds });
 }
 
 export function setRustBackendVolume(volume: number): Promise<void> {
-  return invoke('player_set_volume', { volume });
+  return invokeApi<void>('player_set_volume', { volume });
 }
 
 export function setRustBackendSpeed(speed: number): Promise<void> {
-  return invoke('player_set_speed', { speed });
+  return invokeApi<void>('player_set_speed', { speed });
 }
 
 export function getRustBackendSystemTempCacheDir(): Promise<string> {
@@ -93,7 +93,7 @@ export function getRustBackendSystemTempCacheDir(): Promise<string> {
     return Promise.resolve('');
   }
 
-  return invoke('player_system_temp_cache_dir');
+  return invokeApi<string>('player_system_temp_cache_dir');
 }
 
 export function getRustBackendDefaultCacheDir(): Promise<string> {
@@ -101,7 +101,7 @@ export function getRustBackendDefaultCacheDir(): Promise<string> {
     return Promise.resolve('');
   }
 
-  return invoke('player_default_cache_dir');
+  return invokeApi<string>('player_default_cache_dir');
 }
 
 export function setRustBackendCacheDir(cacheDir: string | null): Promise<RustCacheDirState> {
@@ -109,7 +109,7 @@ export function setRustBackendCacheDir(cacheDir: string | null): Promise<RustCac
     return Promise.resolve({ cacheDir: cacheDir ?? '' });
   }
 
-  return invoke('player_set_cache_dir', { cacheDir });
+  return invokeApi<RustCacheDirState>('player_set_cache_dir', { cacheDir });
 }
 
 export function clearRustBackendCache(): Promise<RustCacheCleanupState> {
@@ -117,7 +117,7 @@ export function clearRustBackendCache(): Promise<RustCacheCleanupState> {
     return Promise.resolve({ removedFiles: 0, removedBytes: 0, remainingBytes: 0 });
   }
 
-  return invoke('player_clear_cache');
+  return invokeApi<RustCacheCleanupState>('player_clear_cache');
 }
 
 export function pruneRustBackendCache(maxBytes: number): Promise<RustCacheCleanupState> {
@@ -125,7 +125,7 @@ export function pruneRustBackendCache(maxBytes: number): Promise<RustCacheCleanu
     return Promise.resolve({ removedFiles: 0, removedBytes: 0, remainingBytes: 0 });
   }
 
-  return invoke('player_prune_cache', { maxBytes });
+  return invokeApi<RustCacheCleanupState>('player_prune_cache', { maxBytes });
 }
 
 export function getRustBackendCacheStatus(): Promise<RustCacheStatusState> {
@@ -133,7 +133,7 @@ export function getRustBackendCacheStatus(): Promise<RustCacheStatusState> {
     return Promise.resolve({ files: 0, bytes: 0 });
   }
 
-  return invoke('player_cache_status');
+  return invokeApi<RustCacheStatusState>('player_cache_status');
 }
 
 export function setRustBackendQueue(
@@ -149,7 +149,7 @@ export function setRustBackendQueue(
     return Promise.resolve({ tracks, sources, currentSource, currentIndex: null, playbackMode });
   }
 
-  return invoke('player_set_queue', {
+  return invokeApi<RustQueueSnapshot>('player_set_queue', {
     tracks,
     currentSource,
     playbackMode,
@@ -182,7 +182,7 @@ export function startRustBackendQueue(
     });
   }
 
-  return invoke('player_start_queue', {
+  return invokeApi<RustQueueSnapshot>('player_start_queue', {
     tracks,
     requestedSource,
     playbackMode,
@@ -198,7 +198,7 @@ export function getRustBackendQueueSnapshot(): Promise<RustQueueSnapshot> {
     return Promise.resolve(emptyQueueSnapshot());
   }
 
-  return invoke('player_queue_snapshot');
+  return invokeApi<RustQueueSnapshot>('player_queue_snapshot');
 }
 
 export function playRustBackendNext(): Promise<RustQueueSnapshot> {
@@ -206,7 +206,7 @@ export function playRustBackendNext(): Promise<RustQueueSnapshot> {
     return Promise.resolve(emptyQueueSnapshot());
   }
 
-  return invoke('player_next');
+  return invokeApi<RustQueueSnapshot>('player_next');
 }
 
 export function playRustBackendPrevious(): Promise<RustQueueSnapshot> {
@@ -214,7 +214,7 @@ export function playRustBackendPrevious(): Promise<RustQueueSnapshot> {
     return Promise.resolve(emptyQueueSnapshot());
   }
 
-  return invoke('player_previous');
+  return invokeApi<RustQueueSnapshot>('player_previous');
 }
 
 export function playRustBackendQueueSource(source: string): Promise<RustQueueSnapshot> {
@@ -222,7 +222,7 @@ export function playRustBackendQueueSource(source: string): Promise<RustQueueSna
     return Promise.resolve({ ...emptyQueueSnapshot(), sources: [source], currentSource: source, currentIndex: 0 });
   }
 
-  return invoke('player_play_queue_source', { source });
+  return invokeApi<RustQueueSnapshot>('player_play_queue_source', { source });
 }
 
 export function insertRustBackendQueueNext(track: Track): Promise<RustQueueSnapshot> {
@@ -230,7 +230,7 @@ export function insertRustBackendQueueNext(track: Track): Promise<RustQueueSnaps
     return Promise.resolve({ ...emptyQueueSnapshot(), tracks: [track], sources: [track.path] });
   }
 
-  return invoke('player_queue_insert_next', { track });
+  return invokeApi<RustQueueSnapshot>('player_queue_insert_next', { track });
 }
 
 export function appendRustBackendQueue(track: Track): Promise<RustQueueSnapshot> {
@@ -238,7 +238,7 @@ export function appendRustBackendQueue(track: Track): Promise<RustQueueSnapshot>
     return Promise.resolve({ ...emptyQueueSnapshot(), tracks: [track], sources: [track.path] });
   }
 
-  return invoke('player_queue_append', { track });
+  return invokeApi<RustQueueSnapshot>('player_queue_append', { track });
 }
 
 export function removeRustBackendQueueSource(source: string): Promise<RustQueueSnapshot> {
@@ -246,7 +246,7 @@ export function removeRustBackendQueueSource(source: string): Promise<RustQueueS
     return Promise.resolve(emptyQueueSnapshot());
   }
 
-  return invoke('player_queue_remove', { source });
+  return invokeApi<RustQueueSnapshot>('player_queue_remove', { source });
 }
 
 export function moveRustBackendQueueSource(fromIndex: number, toIndex: number): Promise<RustQueueSnapshot> {
@@ -254,7 +254,7 @@ export function moveRustBackendQueueSource(fromIndex: number, toIndex: number): 
     return Promise.resolve(emptyQueueSnapshot());
   }
 
-  return invoke('player_queue_move', { fromIndex, toIndex });
+  return invokeApi<RustQueueSnapshot>('player_queue_move', { fromIndex, toIndex });
 }
 
 export function listRustBackendOutputDevices(): Promise<RustAudioOutputDevice[]> {
@@ -262,7 +262,7 @@ export function listRustBackendOutputDevices(): Promise<RustAudioOutputDevice[]>
     return Promise.resolve([]);
   }
 
-  return invoke('player_output_devices');
+  return invokeApi<RustAudioOutputDevice[]>('player_output_devices');
 }
 
 export function setRustBackendOutputDevice(deviceId: string | null): Promise<void> {
@@ -270,11 +270,11 @@ export function setRustBackendOutputDevice(deviceId: string | null): Promise<voi
     return Promise.resolve();
   }
 
-  return invoke('player_set_output_device', { deviceId });
+  return invokeApi<void>('player_set_output_device', { deviceId });
 }
 
 export function getRustBackendState(): Promise<RustPlayerState> {
-  return invoke('player_state');
+  return invokeApi<RustPlayerState>('player_state');
 }
 
 export function listenRustBackendEnded(callback: () => void): Promise<() => void> {

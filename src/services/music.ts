@@ -1,5 +1,6 @@
 ﻿import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import type { CoverImage, CustomTheme, LyricLine, SystemThemeState, Track, WallpaperThemeColor } from '../types/music';
+import { invokeApi } from './api';
 import { normalizeTrackLyrics } from '../utils/trackLyrics';
 
 export interface WorkerDiagnostic {
@@ -72,7 +73,7 @@ export function listTracks(): Promise<Track[]> {
     return Promise.resolve([]);
   }
 
-  return invoke<Track[]>('list_tracks');
+  return invokeApi<Track[]>('list_tracks');
 }
 
 export function listLatestAddedTracks(): Promise<Track[]> {
@@ -80,7 +81,7 @@ export function listLatestAddedTracks(): Promise<Track[]> {
     return Promise.resolve([]);
   }
 
-  return invoke<Track[]>('list_latest_added_tracks');
+  return invokeApi<Track[]>('list_latest_added_tracks');
 }
 
 export function removeMusicDir(path: string): Promise<Track[]> {
@@ -88,7 +89,7 @@ export function removeMusicDir(path: string): Promise<Track[]> {
     return Promise.resolve([]);
   }
 
-  return invoke<Track[]>('remove_music_dir', { path });
+  return invokeApi<Track[]>('remove_music_dir', { path });
 }
 
 export function updateTrackMetadata(request: UpdateTrackMetadataRequest): Promise<UpdateTrackMetadataResult> {
@@ -96,7 +97,7 @@ export function updateTrackMetadata(request: UpdateTrackMetadataRequest): Promis
     return Promise.reject(new Error('请在 Tauri 桌面窗口中更改歌曲元数据。'));
   }
 
-  return invoke<UpdateTrackMetadataResult>('update_track_metadata', { request });
+  return invokeApi<UpdateTrackMetadataResult>('update_track_metadata', { request });
 }
 
 export function updateTrackCover(request: UpdateTrackCoverRequest): Promise<void> {
@@ -104,7 +105,7 @@ export function updateTrackCover(request: UpdateTrackCoverRequest): Promise<void
     return Promise.reject(new Error('请在 Tauri 桌面窗口中更换歌曲封面。'));
   }
 
-  return invoke('update_track_cover', { request });
+  return invokeApi<void>('update_track_cover', { request });
 }
 
 export function refreshTrackDuration(request: RefreshTrackDurationRequest): Promise<RefreshTrackDurationResult> {
@@ -112,7 +113,7 @@ export function refreshTrackDuration(request: RefreshTrackDurationRequest): Prom
     return Promise.reject(new Error('请在 Tauri 桌面窗口中重新读取歌曲时长。'));
   }
 
-  return invoke<RefreshTrackDurationResult>('refresh_track_duration', { request });
+  return invokeApi<RefreshTrackDurationResult>('refresh_track_duration', { request });
 }
 
 export function systemWorkerHealth(): Promise<WorkerDiagnosticsSnapshot> {
@@ -120,7 +121,7 @@ export function systemWorkerHealth(): Promise<WorkerDiagnosticsSnapshot> {
     return Promise.resolve({ workers: [] });
   }
 
-  return invoke<WorkerDiagnosticsSnapshot>('system_worker_health');
+  return invokeApi<WorkerDiagnosticsSnapshot>('system_worker_health');
 }
 
 export async function scanMusicDir(path: string): Promise<ScanMusicDirResult> {
@@ -128,7 +129,7 @@ export async function scanMusicDir(path: string): Promise<ScanMusicDirResult> {
     return Promise.reject(new Error('请在 Tauri 桌面窗口中扫描本地音乐目录。'));
   }
 
-  const result = await invoke<RawScanMusicDirResult>('scan_music_dir', { path });
+  const result = await invokeApi<RawScanMusicDirResult>('scan_music_dir', { path });
   if (Array.isArray(result)) {
     return { tracks: result, addedTracks: [], addedTrackIds: [] };
   }
@@ -145,7 +146,7 @@ export function cancelScanMusicDir(): Promise<boolean> {
     return Promise.resolve(false);
   }
 
-  return invoke<boolean>('cancel_scan_music_dir');
+  return invokeApi<boolean>('cancel_scan_music_dir');
 }
 
 export interface LyricsSourceInput {
@@ -163,7 +164,7 @@ export function resolveLyricsSource(track?: LyricsSourceInput | null): Promise<L
   }
 
   const lyrics = normalizeTrackLyrics(track as Track);
-  return invoke<LyricLine[]>('resolve_lyrics_source', {
+  return invokeApi<LyricLine[]>('resolve_lyrics_source', {
     lyrics: {
       rawLyrics: lyrics?.rawLyrics ?? track.rawLyrics ?? null,
       sourceUrl: lyrics?.lyricsUrl ?? track.lyricsSourceUrl ?? null,
@@ -180,7 +181,7 @@ export function readCover(path: string): Promise<CoverImage | null> {
     return Promise.resolve(null);
   }
 
-  return invoke<CoverImage | null>('read_cover', { path });
+  return invokeApi<CoverImage | null>('read_cover', { path });
 }
 
 export function readCoverThumbnail(path: string): Promise<CoverImage | null> {
@@ -188,7 +189,7 @@ export function readCoverThumbnail(path: string): Promise<CoverImage | null> {
     return Promise.resolve(null);
   }
 
-  return invoke<CoverImage | null>('read_cover_thumbnail', { path });
+  return invokeApi<CoverImage | null>('read_cover_thumbnail', { path });
 }
 
 export function clearCoverThumbnailCache(path: string): Promise<void> {
@@ -196,7 +197,7 @@ export function clearCoverThumbnailCache(path: string): Promise<void> {
     return Promise.resolve();
   }
 
-  return invoke('clear_cover_thumbnail_cache', { path });
+  return invokeApi<void>('clear_cover_thumbnail_cache', { path });
 }
 
 export function getWallpaperThemeColor(): Promise<WallpaperThemeColor | null> {
@@ -204,7 +205,7 @@ export function getWallpaperThemeColor(): Promise<WallpaperThemeColor | null> {
     return Promise.resolve(null);
   }
 
-  return invoke<WallpaperThemeColor>('get_wallpaper_theme_color');
+  return invokeApi<WallpaperThemeColor>('get_wallpaper_theme_color');
 }
 
 export function getSystemThemeState(): Promise<SystemThemeState> {
@@ -212,7 +213,7 @@ export function getSystemThemeState(): Promise<SystemThemeState> {
     return Promise.resolve({ mode: 'light', appsUseLightTheme: true, systemUsesLightTheme: true, wallpaperColor: null });
   }
 
-  return invoke<SystemThemeState>('get_system_theme_state');
+  return invokeApi<SystemThemeState>('get_system_theme_state');
 }
 
 export function importThemeFolder(path: string): Promise<CustomTheme> {
@@ -220,7 +221,7 @@ export function importThemeFolder(path: string): Promise<CustomTheme> {
     return Promise.reject(new Error('请在 Tauri 桌面窗口中导入主题。'));
   }
 
-  return invoke<CustomTheme>('import_theme_folder', { path });
+  return invokeApi<CustomTheme>('import_theme_folder', { path });
 }
 
 export function openTrackInFolder(path: string): Promise<void> {
@@ -228,7 +229,7 @@ export function openTrackInFolder(path: string): Promise<void> {
     return Promise.resolve();
   }
 
-  return invoke('open_track_in_folder', { path });
+  return invokeApi<void>('open_track_in_folder', { path });
 }
 
 export function hideMainWindowToTray(): Promise<void> {
@@ -236,7 +237,7 @@ export function hideMainWindowToTray(): Promise<void> {
     return Promise.resolve();
   }
 
-  return invoke('hide_main_window_to_tray');
+  return invokeApi<void>('hide_main_window_to_tray');
 }
 
 export function exitApp(): Promise<void> {
@@ -252,7 +253,7 @@ export function updateTrayNowPlaying(title: string): Promise<void> {
     return Promise.resolve();
   }
 
-  return invoke('update_tray_now_playing', { title });
+  return invokeApi<void>('update_tray_now_playing', { title });
 }
 
 export function toAudioSource(path: string): string {

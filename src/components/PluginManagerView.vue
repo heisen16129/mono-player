@@ -25,6 +25,7 @@ import {
   uninstallPlugin,
 } from '../services/plugins';
 import type { PluginCapability, PluginCatalogItem, PluginManifest, PluginRuntime, PluginSubscription } from '../types/plugin';
+import { getErrorMessage } from '../utils/error';
 
 interface PluginRow {
   id: string;
@@ -250,7 +251,7 @@ async function refreshCatalogs(showRefreshState = true) {
     const visibleCount = visiblePlugins.value.length;
     statusMessage.value = visibleCount > 0 ? `已更新 ${visibleCount} 个可显示插件` : '订阅已更新，暂无可显示插件';
   } catch (error) {
-    statusMessage.value = error instanceof Error ? `更新失败：${error.message}` : '更新失败';
+    statusMessage.value = `更新失败：${getErrorMessage(error, '更新失败')}`;
   } finally {
     isLoading.value = false;
     if (showRefreshState) isRefreshingSubscriptions.value = false;
@@ -368,7 +369,7 @@ async function addSubscription() {
     const visibleCount = visiblePlugins.value.length;
     statusMessage.value = `已添加 ${addedPlugins.length} 个插件，当前共 ${visibleCount} 个可显示插件`;
   } catch (error) {
-    statusMessage.value = error instanceof Error ? `订阅失败：${error.message}` : '订阅失败';
+    statusMessage.value = `订阅失败：${getErrorMessage(error, '订阅失败')}`;
   } finally {
     isAddingSubscription.value = false;
   }

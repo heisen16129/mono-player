@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
 
 export interface DownloadOnlineTrackRequest {
@@ -74,7 +74,7 @@ export function downloadOnlineTrack(request: DownloadOnlineTrackRequest): Promis
     return Promise.reject(new Error('请在 Tauri 桌面窗口中下载音乐。'));
   }
 
-  return invoke<DownloadOnlineTrackResult>('download_online_track', { request });
+  return invokeApi<DownloadOnlineTrackResult>('download_online_track', { request });
 }
 
 export function enqueueDownloadOnlineTrack(request: DownloadOnlineTrackRequest): Promise<EnqueueDownloadResult> {
@@ -82,7 +82,7 @@ export function enqueueDownloadOnlineTrack(request: DownloadOnlineTrackRequest):
     return Promise.reject(new Error('请在 Tauri 桌面窗口中下载音乐。'));
   }
 
-  return invoke<EnqueueDownloadResult>('enqueue_download_online_track', { request });
+  return invokeApi<EnqueueDownloadResult>('enqueue_download_online_track', { request });
 }
 
 export function downloadLyricsFile(request: DownloadLyricsFileRequest): Promise<DownloadLyricsFileResult> {
@@ -90,7 +90,7 @@ export function downloadLyricsFile(request: DownloadLyricsFileRequest): Promise<
     return Promise.reject(new Error('请在桌面窗口中下载歌词。'));
   }
 
-  return invoke<DownloadLyricsFileResult>('download_lyrics_file', { request });
+  return invokeApi<DownloadLyricsFileResult>('download_lyrics_file', { request });
 }
 
 export function downloadCoverFile(request: DownloadCoverFileRequest): Promise<DownloadCoverFileResult> {
@@ -98,7 +98,7 @@ export function downloadCoverFile(request: DownloadCoverFileRequest): Promise<Do
     return Promise.reject(new Error('请在桌面窗口中下载封面。'));
   }
 
-  return invoke<DownloadCoverFileResult>('download_cover_file', { request });
+  return invokeApi<DownloadCoverFileResult>('download_cover_file', { request });
 }
 
 export function deleteDownloadedTrackFile(request: DeleteDownloadedTrackFileRequest): Promise<void> {
@@ -106,7 +106,7 @@ export function deleteDownloadedTrackFile(request: DeleteDownloadedTrackFileRequ
     return Promise.resolve();
   }
 
-  return invoke('delete_downloaded_track_file', { request });
+  return invokeApi<void>('delete_downloaded_track_file', { request });
 }
 
 export function openDownloadedTrackInFolder(request: DeleteDownloadedTrackFileRequest): Promise<void> {
@@ -114,5 +114,5 @@ export function openDownloadedTrackInFolder(request: DeleteDownloadedTrackFileRe
     return Promise.resolve();
   }
 
-  return invoke('open_downloaded_track_in_folder', { request });
+  return invokeApi<void>('open_downloaded_track_in_folder', { request });
 }

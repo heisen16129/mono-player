@@ -7,6 +7,7 @@ import { getSystemThemeState, listLatestAddedTracks, listTracks, removeMusicDir,
 import { setRustBackendQueue } from '../services/playerBackend';
 import { readPersistentValue, removePersistentValue, writePersistentValue } from '../services/persistentStore';
 import type { AppTheme, CustomTheme, Locale, PlaybackMode, PlaybackSession, PlayerSettings, SystemThemeState, Track, UserPlaylist } from '../types/music';
+import { getErrorMessage } from '../utils/error';
 import { normalizeTrackLyrics } from '../utils/trackLyrics';
 
 const SETTINGS_KEY = 'mono-player-settings';
@@ -507,7 +508,7 @@ const latestAddedTracks = ref<Track[]>([]);
       latestAddedTracks.value = dedupeTracksByPath(await listLatestAddedTracks());
       queue.value = [...tracks.value];
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = getErrorMessage(err);
       if (message.includes('Scan canceled')) {
         throw err;
       }
@@ -556,7 +557,7 @@ const latestAddedTracks = ref<Track[]>([]);
           null;
       }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err);
+      error.value = getErrorMessage(err);
     } finally {
       loading.value = false;
     }
@@ -1166,7 +1167,7 @@ const latestAddedTracks = ref<Track[]>([]);
         settings.value.crossfadePlayback,
         3000,
       ).catch((err) => {
-        error.value = err instanceof Error ? err.message : String(err);
+        error.value = getErrorMessage(err);
       });
     }
   }
@@ -1184,6 +1185,10 @@ const latestAddedTracks = ref<Track[]>([]);
   function createPlaylist(name: string, initialTracks: Array<number | Track> = []) {
     const title = name.trim();
     if (!title) return false;
+    if (settings.value.playlists.some((playlist) => playlist.name.trim() === title)) {
+      return false;
+    }
+
     const trackIds = initialTracks.map((track) => (typeof track === 'number' ? track : track.id));
     const snapshots = initialTracks
       .filter((track): track is Track => typeof track !== 'number' && !tracks.value.some((item) => item.id === track.id))
@@ -1206,6 +1211,9 @@ const latestAddedTracks = ref<Track[]>([]);
   function renamePlaylist(playlistId: string, name: string) {
     const title = name.trim();
     if (!title) return false;
+    if (settings.value.playlists.some((playlist) => playlist.id !== playlistId && playlist.name.trim() === title)) {
+      return false;
+    }
 
     let renamed = false;
     settings.value.playlists = settings.value.playlists.map((playlist) => {

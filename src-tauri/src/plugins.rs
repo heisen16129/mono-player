@@ -1,3 +1,4 @@
+use crate::api_response::ApiResponse;
 use serde_json::json;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -165,31 +166,40 @@ pub fn plugin_invoke(
     request: serde_json::Value,
     plugin_id: Option<String>,
     permissions: Option<Vec<String>>,
-) -> Result<serde_json::Value, String> {
-    worker.invoke_plugin(entry, request, plugin_id, permissions)
+) -> ApiResponse<serde_json::Value> {
+    ApiResponse::from_result(worker.invoke_plugin(entry, request, plugin_id, permissions))
 }
 
 #[tauri::command]
-pub fn normalize_plugin_manifests(plugins: Vec<serde_json::Value>) -> Vec<PluginManifest> {
-    plugins
+pub fn normalize_plugin_manifests(plugins: Vec<serde_json::Value>) -> ApiResponse<Vec<PluginManifest>> {
+    ApiResponse::success(plugins
         .into_iter()
         .filter_map(normalize_plugin_manifest_value)
-        .collect()
+        .collect())
 }
 
 #[tauri::command]
-pub fn normalize_plugin_catalog_items(plugins: Vec<serde_json::Value>) -> Vec<PluginCatalogItem> {
-    normalize_catalog_values(plugins)
+pub fn normalize_plugin_catalog_items(plugins: Vec<serde_json::Value>) -> ApiResponse<Vec<PluginCatalogItem>> {
+    ApiResponse::success(normalize_catalog_values(plugins))
 }
 
 #[tauri::command]
-pub fn normalize_plugin_catalog_text(catalog_text: String) -> Result<Vec<PluginCatalogItem>, String> {
-    let catalog = serde_json::from_str::<Value>(&catalog_text).map_err(|err| err.to_string())?;
-    Ok(normalize_catalog_values(catalog_values(catalog)))
+pub fn normalize_plugin_catalog_text(catalog_text: String) -> ApiResponse<Vec<PluginCatalogItem>> {
+    ApiResponse::from_result((|| {
+        let catalog = serde_json::from_str::<Value>(&catalog_text).map_err(|err| err.to_string())?;
+        Ok(normalize_catalog_values(catalog_values(catalog)))
+    })())
 }
 
 #[tauri::command]
 pub fn fetch_plugin_catalog_items(
+    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    url: String,
+) -> ApiResponse<Vec<PluginCatalogItem>> {
+    ApiResponse::from_result(fetch_plugin_catalog_items_inner(worker, url))
+}
+
+fn fetch_plugin_catalog_items_inner(
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     url: String,
 ) -> Result<Vec<PluginCatalogItem>, String> {
@@ -214,12 +224,21 @@ pub fn read_plugin_metadata_normalized(
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     entry: String,
     permissions: Option<Vec<String>>,
-) -> Result<PluginMetadata, String> {
-    read_plugin_metadata_backend(&worker, entry, permissions)
+) -> ApiResponse<PluginMetadata> {
+    ApiResponse::from_result(read_plugin_metadata_backend(&worker, entry, permissions))
 }
 
 #[tauri::command]
 pub fn build_plugin_manifest_from_catalog(
+    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    item: PluginCatalogItem,
+    installed_at: String,
+    enabled: bool,
+) -> ApiResponse<PluginManifest> {
+    ApiResponse::from_result(build_plugin_manifest_from_catalog_inner(worker, item, installed_at, enabled))
+}
+
+fn build_plugin_manifest_from_catalog_inner(
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     item: PluginCatalogItem,
     installed_at: String,
@@ -250,6 +269,15 @@ pub fn build_plugin_manifest_from_catalog(
 
 #[tauri::command]
 pub fn build_local_plugin_manifest(
+    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    file_path: String,
+    installed_at: String,
+    enabled: bool,
+) -> ApiResponse<PluginManifest> {
+    ApiResponse::from_result(build_local_plugin_manifest_inner(worker, file_path, installed_at, enabled))
+}
+
+fn build_local_plugin_manifest_inner(
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     file_path: String,
     installed_at: String,
@@ -286,13 +314,14 @@ pub async fn search_plugin(
     page: u64,
     page_size: u64,
     plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> Result<PluginSearchPage, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+) -> Result<ApiResponse<PluginSearchPage>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
         search_plugin_backend(&worker, provider_id, keyword, page, page_size, plugins)
     })
     .await
-    .map_err(|err| err.to_string())?
+    .map_err(|err| err.to_string())?;
+    Ok(ApiResponse::from_result(result))
 }
 
 fn search_plugin_backend(
@@ -337,6 +366,14 @@ pub fn resolve_plugin_playback_plan(
     preferred_quality: String,
     _quality_fallback: String,
     plugins: Vec<PluginPlaybackPlanPlugin>,
+) -> ApiResponse<PluginPlaybackPlan> {
+    ApiResponse::from_result(resolve_plugin_playback_plan_inner(provider_id, preferred_quality, plugins))
+}
+
+fn resolve_plugin_playback_plan_inner(
+    provider_id: String,
+    preferred_quality: String,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
 ) -> Result<PluginPlaybackPlan, String> {
     let plugin = plugins
         .into_iter()
@@ -368,13 +405,14 @@ pub async fn resolve_plugin_playback_qualities(
     provider_id: String,
     track: serde_json::Value,
     plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> Result<PluginPlaybackQualities, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+) -> Result<ApiResponse<PluginPlaybackQualities>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
         resolve_plugin_playback_qualities_backend(&worker, provider_id, track, plugins)
     })
     .await
-    .map_err(|err| err.to_string())?
+    .map_err(|err| err.to_string())?;
+    Ok(ApiResponse::from_result(result))
 }
 
 fn resolve_plugin_playback_qualities_backend(
@@ -413,8 +451,8 @@ pub async fn resolve_plugin_playback_source(
     _quality_fallback: String,
     include_metadata: bool,
     plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> Result<PluginPlaybackSource, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+) -> Result<ApiResponse<PluginPlaybackSource>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
         resolve_plugin_playback_source_backend(
             &worker,
@@ -427,7 +465,8 @@ pub async fn resolve_plugin_playback_source(
         )
     })
     .await
-    .map_err(|err| err.to_string())?
+    .map_err(|err| err.to_string())?;
+    Ok(ApiResponse::from_result(result))
 }
 
 fn resolve_plugin_playback_source_backend(
@@ -564,13 +603,14 @@ pub async fn resolve_plugin_lyrics_metadata(
     track: serde_json::Value,
     format: Option<String>,
     plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> Result<PluginLyricsMetadata, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+) -> Result<ApiResponse<PluginLyricsMetadata>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
         resolve_plugin_lyrics_metadata_backend(&worker, provider_id, track, format, plugins)
     })
     .await
-    .map_err(|err| err.to_string())?
+    .map_err(|err| err.to_string())?;
+    Ok(ApiResponse::from_result(result))
 }
 
 fn resolve_plugin_lyrics_metadata_backend(
@@ -1425,8 +1465,8 @@ fn resolve_playback_quality_attempts(
 pub fn fetch_plugin_catalog(
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     url: String,
-) -> Result<String, String> {
-    worker.fetch_plugin_catalog(url)
+) -> ApiResponse<String> {
+    ApiResponse::from_result(worker.fetch_plugin_catalog(url))
 }
 
 pub(crate) fn fetch_plugin_catalog_backend(url: String) -> Result<String, String> {
@@ -1453,8 +1493,8 @@ pub(crate) fn fetch_plugin_catalog_backend(url: String) -> Result<String, String
 pub fn read_plugin_wasm_bytes(
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     entry: String,
-) -> Result<Vec<u8>, String> {
-    worker.read_plugin_wasm_bytes(entry)
+) -> ApiResponse<Vec<u8>> {
+    ApiResponse::from_result(worker.read_plugin_wasm_bytes(entry))
 }
 
 pub(crate) fn read_plugin_wasm_bytes_backend(entry: String) -> Result<Vec<u8>, String> {
@@ -1508,8 +1548,8 @@ pub fn plugin_http_request(
     data: Option<String>,
     plugin_id: Option<String>,
     permissions: Option<Vec<String>>,
-) -> Result<PluginHttpResponse, String> {
-    worker.plugin_http_request(method, url, headers, data, plugin_id, permissions)
+) -> ApiResponse<PluginHttpResponse> {
+    ApiResponse::from_result(worker.plugin_http_request(method, url, headers, data, plugin_id, permissions))
 }
 
 pub(crate) fn plugin_http_request_backend(

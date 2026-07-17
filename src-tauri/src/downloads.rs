@@ -1,3 +1,4 @@
+use crate::api_response::ApiResponse;
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{MimeType, Picture, PictureType};
@@ -115,104 +116,118 @@ static DOWNLOAD_TASK_COUNTER: AtomicU64 = AtomicU64::new(1);
 pub(crate) fn download_online_track(
     app: tauri::AppHandle,
     request: DownloadTrackRequest,
-) -> Result<DownloadTrackResult, String> {
-    let task_id = request
-        .task_id
-        .clone()
-        .unwrap_or_else(next_download_task_id);
-    app.state::<crate::workers::download::DownloadWorkerState>()
-        .download_track(&app, task_id, request)
+) -> ApiResponse<DownloadTrackResult> {
+    ApiResponse::from_result((|| {
+        let task_id = request
+            .task_id
+            .clone()
+            .unwrap_or_else(next_download_task_id);
+        app.state::<crate::workers::download::DownloadWorkerState>()
+            .download_track(&app, task_id, request)
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn enqueue_download_online_track(
     app: tauri::AppHandle,
     request: DownloadTrackRequest,
-) -> Result<EnqueueDownloadResult, String> {
-    let task_id = request
-        .task_id
-        .clone()
-        .unwrap_or_else(next_download_task_id);
-    app.state::<crate::workers::download::DownloadWorkerState>()
-        .enqueue_download_track(task_id.clone(), request)?;
+) -> ApiResponse<EnqueueDownloadResult> {
+    ApiResponse::from_result((|| {
+        let task_id = request
+            .task_id
+            .clone()
+            .unwrap_or_else(next_download_task_id);
+        app.state::<crate::workers::download::DownloadWorkerState>()
+            .enqueue_download_track(task_id.clone(), request)?;
 
-    Ok(EnqueueDownloadResult { task_id })
+        Ok(EnqueueDownloadResult { task_id })
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn delete_downloaded_track_file(
     request: DeleteDownloadedTrackFileRequest,
-) -> Result<(), String> {
-    let file_path = resolve_downloaded_track_file(&request)?;
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        let file_path = resolve_downloaded_track_file(&request)?;
 
-    fs::remove_file(&file_path).map_err(|err| err.to_string())?;
+        fs::remove_file(&file_path).map_err(|err| err.to_string())?;
 
-    if let Some(lyrics_path) = request
-        .lyrics_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        let lyrics_path = PathBuf::from(lyrics_path);
-        if lyrics_path.is_file() {
-            let _ = fs::remove_file(lyrics_path);
+        if let Some(lyrics_path) = request
+            .lyrics_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            let lyrics_path = PathBuf::from(lyrics_path);
+            if lyrics_path.is_file() {
+                let _ = fs::remove_file(lyrics_path);
+            }
+        } else {
+            let fallback_lyrics_path = file_path.with_extension("lrc");
+            if fallback_lyrics_path.is_file() {
+                let _ = fs::remove_file(fallback_lyrics_path);
+            }
         }
-    } else {
-        let fallback_lyrics_path = file_path.with_extension("lrc");
-        if fallback_lyrics_path.is_file() {
-            let _ = fs::remove_file(fallback_lyrics_path);
-        }
-    }
 
-    Ok(())
+        Ok(())
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn open_downloaded_track_in_folder(
     request: DeleteDownloadedTrackFileRequest,
-) -> Result<(), String> {
-    let file_path = resolve_downloaded_track_file(&request)?;
-    open_file_in_folder(&file_path)
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        let file_path = resolve_downloaded_track_file(&request)?;
+        open_file_in_folder(&file_path)
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn download_lyrics_file(
     request: DownloadLyricsRequest,
-) -> Result<DownloadLyricsResult, String> {
-    let download_dir = PathBuf::from(request.download_dir.trim());
-    if download_dir.as_os_str().is_empty() {
-        return Err("请先在设置中选择下载位置。".to_string());
-    }
-    fs::create_dir_all(&download_dir).map_err(|err| err.to_string())?;
+) -> ApiResponse<DownloadLyricsResult> {
+    ApiResponse::from_result((|| {
+        let download_dir = PathBuf::from(request.download_dir.trim());
+        if download_dir.as_os_str().is_empty() {
+            return Err("请先在设置中选择下载位置。".to_string());
+        }
+        fs::create_dir_all(&download_dir).map_err(|err| err.to_string())?;
 
-    let lyrics = request.lyrics.trim();
-    if lyrics.is_empty() {
-        return Err("当前歌曲没有可下载的歌词。".to_string());
-    }
+        let lyrics = request.lyrics.trim();
+        if lyrics.is_empty() {
+            return Err("当前歌曲没有可下载的歌词。".to_string());
+        }
 
-    let extension = match request.format.trim().to_ascii_lowercase().as_str() {
-        "lrc" => "lrc",
-        "txt" => "txt",
-        "trans" => "trans",
-        "yrc" => "yrc",
-        "qrc" => "qrc",
-        "krc" => "krc",
-        "a2" => "a2",
-        _ => return Err("不支持的歌词格式。".to_string()),
-    };
-    let stem = make_download_stem_from_parts(request.artist.as_deref(), request.title.trim());
-    let file_path = download_dir.join(format!("{stem}.{extension}"));
-    fs::write(&file_path, lyrics).map_err(|err| err.to_string())?;
+        let extension = match request.format.trim().to_ascii_lowercase().as_str() {
+            "lrc" => "lrc",
+            "txt" => "txt",
+            "trans" => "trans",
+            "yrc" => "yrc",
+            "qrc" => "qrc",
+            "krc" => "krc",
+            "a2" => "a2",
+            _ => return Err("不支持的歌词格式。".to_string()),
+        };
+        let stem = make_download_stem_from_parts(request.artist.as_deref(), request.title.trim());
+        let file_path = download_dir.join(format!("{stem}.{extension}"));
+        fs::write(&file_path, lyrics).map_err(|err| err.to_string())?;
 
-    Ok(DownloadLyricsResult {
-        path: file_path.to_string_lossy().to_string(),
-    })
+        Ok(DownloadLyricsResult {
+            path: file_path.to_string_lossy().to_string(),
+        })
+    })())
 }
 
 #[tauri::command]
 pub(crate) fn download_cover_file(
     request: DownloadCoverRequest,
-) -> Result<DownloadCoverResult, String> {
+) -> ApiResponse<DownloadCoverResult> {
+    ApiResponse::from_result(download_cover_file_inner(request))
+}
+
+fn download_cover_file_inner(request: DownloadCoverRequest) -> Result<DownloadCoverResult, String> {
     let download_dir = PathBuf::from(request.download_dir.trim());
     if download_dir.as_os_str().is_empty() {
         return Err("请先在设置中选择下载位置。".to_string());

@@ -3,6 +3,8 @@ import { appendRustBackendQueue, insertRustBackendQueueNext, type RustQueueSnaps
 import { isTauriRuntime, openTrackInFolder } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
 import type { Track, UserPlaylist } from '../types/music';
+import { resolveLocale } from '../i18n';
+import { getErrorMessage } from '../utils/error';
 
 type PlayerStore = ReturnType<typeof usePlayerStore>;
 
@@ -56,13 +58,19 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
     if (!name) return;
 
     if (editingPlaylistId.value) {
-      player.renamePlaylist(editingPlaylistId.value, name);
+      if (!player.renamePlaylist(editingPlaylistId.value, name)) {
+        player.error = resolveLocale(player.settings.locale) === 'en-US' ? 'A playlist with this name already exists.' : '已存在同名歌单。';
+        return;
+      }
       closeCreatePlaylistDialog();
       return;
     }
 
     const playlistTracks = addToPlaylistTrack.value ? [addToPlaylistTrack.value] : [];
-    player.createPlaylist(name, playlistTracks);
+    if (!player.createPlaylist(name, playlistTracks)) {
+      player.error = resolveLocale(player.settings.locale) === 'en-US' ? 'A playlist with this name already exists.' : '已存在同名歌单。';
+      return;
+    }
     closeCreatePlaylistDialog();
     closeAddToPlaylistDialog();
   }
@@ -119,7 +127,7 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
       try {
         onQueueSnapshot?.(await insertRustBackendQueueNext(track));
       } catch (err) {
-        player.error = err instanceof Error ? err.message : String(err);
+        player.error = getErrorMessage(err);
       }
     }
     closeTrackContextMenu();
@@ -131,7 +139,7 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
       try {
         onQueueSnapshot?.(await appendRustBackendQueue(track));
       } catch (err) {
-        player.error = err instanceof Error ? err.message : String(err);
+        player.error = getErrorMessage(err);
       }
     }
     closeTrackContextMenu();
@@ -162,7 +170,7 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
     try {
       await openTrackInFolder(track.path);
     } catch (err) {
-      player.error = err instanceof Error ? err.message : String(err);
+      player.error = getErrorMessage(err);
     } finally {
       closeTrackContextMenu();
     }

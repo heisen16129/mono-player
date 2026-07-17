@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
 
 export interface SystemMediaUpdateRequest {
@@ -21,12 +21,12 @@ export interface SystemMediaAction {
 
 export function updateSystemMedia(request: SystemMediaUpdateRequest): Promise<void> {
   if (!isTauriRuntime()) return Promise.resolve();
-  return invoke('system_media_update', { request });
+  return invokeApi<void>('system_media_update', { request });
 }
 
 export function clearSystemMedia(): Promise<void> {
   if (!isTauriRuntime()) return Promise.resolve();
-  return invoke('system_media_clear');
+  return invokeApi<void>('system_media_clear');
 }
 
 export function listenSystemMediaAction(callback: (action: SystemMediaAction) => void): Promise<() => void> {
