@@ -54,6 +54,30 @@ pub struct PluginPlaybackQualities {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PluginSearchTrack {
+    id: String,
+    provider_id: String,
+    provider_name: String,
+    title: String,
+    artist: String,
+    album: String,
+    duration: Option<u64>,
+    artwork: Option<String>,
+    year: Option<u64>,
+    genre: Option<String>,
+    track_number: Option<u64>,
+    raw: serde_json::Value,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSearchPage {
+    tracks: Vec<PluginSearchTrack>,
+    is_end: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PluginPlaybackSource {
     url: String,
     path: String,
@@ -87,6 +111,53 @@ pub struct PluginHttpResponse {
     pub(crate) body: String,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginCatalogItem {
+    id: String,
+    name: String,
+    version: String,
+    kind: String,
+    runtime: String,
+    entry: String,
+    author: Option<String>,
+    description: Option<String>,
+    capabilities: Vec<String>,
+    permissions: Vec<String>,
+    source_url: String,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginManifest {
+    id: String,
+    name: String,
+    version: String,
+    kind: String,
+    runtime: String,
+    entry: String,
+    author: Option<String>,
+    description: Option<String>,
+    capabilities: Vec<String>,
+    permissions: Vec<String>,
+    source_url: Option<String>,
+    installed_at: String,
+    enabled: bool,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginMetadata {
+    id: Option<String>,
+    name: Option<String>,
+    version: Option<String>,
+    kind: Option<String>,
+    author: Option<String>,
+    description: Option<String>,
+    capabilities: Option<Vec<String>>,
+    permissions: Option<Vec<String>>,
+}
+
 #[tauri::command]
 pub fn plugin_invoke(
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
@@ -96,6 +167,168 @@ pub fn plugin_invoke(
     permissions: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     worker.invoke_plugin(entry, request, plugin_id, permissions)
+}
+
+#[tauri::command]
+pub fn normalize_plugin_manifests(plugins: Vec<serde_json::Value>) -> Vec<PluginManifest> {
+    plugins
+        .into_iter()
+        .filter_map(normalize_plugin_manifest_value)
+        .collect()
+}
+
+#[tauri::command]
+pub fn normalize_plugin_catalog_items(plugins: Vec<serde_json::Value>) -> Vec<PluginCatalogItem> {
+    normalize_catalog_values(plugins)
+}
+
+#[tauri::command]
+pub fn normalize_plugin_catalog_text(catalog_text: String) -> Result<Vec<PluginCatalogItem>, String> {
+    let catalog = serde_json::from_str::<Value>(&catalog_text).map_err(|err| err.to_string())?;
+    Ok(normalize_catalog_values(catalog_values(catalog)))
+}
+
+#[tauri::command]
+pub fn fetch_plugin_catalog_items(
+    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    url: String,
+) -> Result<Vec<PluginCatalogItem>, String> {
+    if is_direct_plugin_url(&url) {
+        return build_plugin_catalog_item_from_entry(&worker, url.clone(), url).map(|item| vec![item]);
+    }
+
+    let catalog_text = fetch_plugin_catalog_backend(url)?;
+    let catalog = serde_json::from_str::<Value>(&catalog_text).map_err(|err| err.to_string())?;
+    catalog_values(catalog)
+        .into_iter()
+        .map(|value| {
+            let source_url = catalog_item_source_url(&value)?;
+            let entry = string_field(&value, &["entry"]).unwrap_or_else(|| source_url.clone());
+            build_plugin_catalog_item_from_entry(&worker, entry, source_url)
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn read_plugin_metadata_normalized(
+    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    entry: String,
+    permissions: Option<Vec<String>>,
+) -> Result<PluginMetadata, String> {
+    read_plugin_metadata_backend(&worker, entry, permissions)
+}
+
+#[tauri::command]
+pub fn build_plugin_manifest_from_catalog(
+    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    item: PluginCatalogItem,
+    installed_at: String,
+    enabled: bool,
+) -> Result<PluginManifest, String> {
+    let metadata = read_plugin_metadata_backend(
+        &worker,
+        item.entry.clone(),
+        Some(item.permissions.clone()),
+    )?;
+
+    Ok(PluginManifest {
+        id: required_metadata_field(metadata.id, "id")?,
+        name: required_metadata_field(metadata.name, "name")?,
+        version: required_metadata_field(metadata.version, "version")?,
+        kind: required_metadata_field(metadata.kind, "kind")?,
+        runtime: "wasm".to_string(),
+        entry: item.entry,
+        author: metadata.author,
+        description: metadata.description,
+        capabilities: required_metadata_list(metadata.capabilities, "capabilities")?,
+        permissions: metadata.permissions.unwrap_or_default(),
+        source_url: Some(item.source_url),
+        installed_at,
+        enabled,
+    })
+}
+
+#[tauri::command]
+pub fn build_local_plugin_manifest(
+    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    file_path: String,
+    installed_at: String,
+    enabled: bool,
+) -> Result<PluginManifest, String> {
+    if !is_direct_plugin_url(&file_path) {
+        return Err("local plugin entry must be a .wasm file".to_string());
+    }
+
+    let metadata = read_plugin_metadata_backend(&worker, file_path.clone(), None)?;
+
+    Ok(PluginManifest {
+        id: required_metadata_field(metadata.id, "id")?,
+        name: required_metadata_field(metadata.name, "name")?,
+        version: required_metadata_field(metadata.version, "version")?,
+        kind: required_metadata_field(metadata.kind, "kind")?,
+        runtime: "wasm".to_string(),
+        entry: file_path.clone(),
+        author: metadata.author,
+        description: metadata.description,
+        capabilities: required_metadata_list(metadata.capabilities, "capabilities")?,
+        permissions: metadata.permissions.unwrap_or_default(),
+        source_url: Some(file_path),
+        installed_at,
+        enabled,
+    })
+}
+
+#[tauri::command]
+pub async fn search_plugin(
+    app: AppHandle,
+    provider_id: String,
+    keyword: String,
+    page: u64,
+    page_size: u64,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+) -> Result<PluginSearchPage, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
+        search_plugin_backend(&worker, provider_id, keyword, page, page_size, plugins)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+fn search_plugin_backend(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    provider_id: String,
+    keyword: String,
+    page: u64,
+    page_size: u64,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+) -> Result<PluginSearchPage, String> {
+    let plugin = find_search_plugin(provider_id, plugins)?;
+    let entry = plugin
+        .entry
+        .clone()
+        .ok_or_else(|| "Plugin for selected search is missing an entry.".to_string())?;
+    let query = keyword.trim();
+    if query.is_empty() {
+        return Ok(PluginSearchPage {
+            tracks: Vec::new(),
+            is_end: true,
+        });
+    }
+
+    let response = worker.invoke_plugin(
+        entry,
+        json!({
+            "action": "search",
+            "keyword": query,
+            "page": page.max(1),
+            "pageSize": page_size.clamp(1, 100),
+        }),
+        Some(plugin.id.clone()),
+        plugin.permissions.clone(),
+    )?;
+
+    normalize_plugin_search_page(response, &plugin)
 }
 
 #[tauri::command]
@@ -516,6 +749,445 @@ fn json_duration_seconds(value: &serde_json::Value) -> Option<u64> {
         return text.trim().parse::<u64>().ok();
     }
     None
+}
+
+fn normalize_plugin_search_page(
+    response: serde_json::Value,
+    plugin: &PluginPlaybackPlanPlugin,
+) -> Result<PluginSearchPage, String> {
+    if let Some(error) = response.get("error").and_then(|value| value.as_str()) {
+        if !error.trim().is_empty() {
+            return Err(error.to_string());
+        }
+    }
+
+    let raw_tracks = response
+        .get("tracks")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let tracks = raw_tracks
+        .into_iter()
+        .map(|track| normalize_plugin_search_track(track, plugin))
+        .collect::<Vec<_>>();
+    let is_end = response
+        .get("isEnd")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(tracks.is_empty());
+
+    Ok(PluginSearchPage { tracks, is_end })
+}
+
+fn normalize_plugin_search_track(
+    track: serde_json::Value,
+    plugin: &PluginPlaybackPlanPlugin,
+) -> PluginSearchTrack {
+    let raw = track.get("raw").cloned().unwrap_or_else(|| track.clone());
+    let title = json_string_field(&track, &["title", "name"])
+        .unwrap_or("Unknown Track")
+        .to_string();
+    let id = json_search_id(&track)
+        .unwrap_or_else(|| format!("{}:{}", plugin.id, title));
+
+    PluginSearchTrack {
+        id,
+        provider_id: plugin.id.clone(),
+        provider_name: plugin.name.clone(),
+        title,
+        artist: json_search_artist(&track).unwrap_or_else(|| "Unknown Artist".to_string()),
+        album: json_string_field(&track, &["album", "albumName"])
+            .unwrap_or("")
+            .to_string(),
+        duration: json_search_duration_seconds(&track),
+        artwork: json_string_field(&track, &["artwork", "cover", "picUrl"]).map(str::to_string),
+        year: json_search_year(&track),
+        genre: json_string_field(&track, &["genre", "style"]).map(str::to_string),
+        track_number: json_search_positive_integer(&track, &["trackNumber", "trackNo", "track_no", "index"]),
+        raw,
+    }
+}
+
+fn json_search_id(value: &serde_json::Value) -> Option<String> {
+    ["id", "songmid", "mid", "hash"]
+        .iter()
+        .find_map(|key| value.get(*key))
+        .and_then(json_value_to_string)
+        .filter(|value| !value.trim().is_empty())
+}
+
+fn json_search_artist(value: &serde_json::Value) -> Option<String> {
+    if let Some(artist) = json_string_field(value, &["artist", "singer", "author"])
+        .map(str::trim)
+        .filter(|artist| !artist.is_empty())
+    {
+        return Some(artist.to_string());
+    }
+
+    let artists = value.get("artists")?.as_array()?;
+    let names = artists
+        .iter()
+        .filter_map(|artist| {
+            artist
+                .as_str()
+                .or_else(|| artist.get("name").and_then(serde_json::Value::as_str))
+        })
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .collect::<Vec<_>>();
+    if names.is_empty() {
+        None
+    } else {
+        Some(names.join(", "))
+    }
+}
+
+fn json_search_duration_seconds(value: &serde_json::Value) -> Option<u64> {
+    [
+        "duration",
+        "interval",
+        "time",
+        "songTime",
+        "song_time",
+        "play_time",
+        "durationText",
+        "duration_text",
+    ]
+    .iter()
+    .find_map(|key| value.get(*key).and_then(json_duration_value_seconds))
+    .or_else(|| {
+        ["duration_ms", "interval_ms"]
+            .iter()
+            .find_map(|key| value.get(*key).and_then(json_numeric_value).map(|ms| (ms / 1000.0).round() as u64))
+    })
+}
+
+fn json_duration_value_seconds(value: &serde_json::Value) -> Option<u64> {
+    if let Some(number) = json_numeric_value(value) {
+        return Some(if number > 1000.0 { (number / 1000.0).round() as u64 } else { number.round() as u64 });
+    }
+
+    let text = value.as_str()?.trim();
+    if !text.contains(':') {
+        return None;
+    }
+    let mut total = 0_u64;
+    for part in text.split(':') {
+        total = total.checked_mul(60)? + part.parse::<u64>().ok()?;
+    }
+    Some(total)
+}
+
+fn json_search_year(value: &serde_json::Value) -> Option<u64> {
+    [
+        "year",
+        "releaseYear",
+        "publishYear",
+        "publish_time",
+        "releaseDate",
+        "release_date",
+        "date",
+    ]
+    .iter()
+    .find_map(|key| value.get(*key).and_then(json_year_value))
+}
+
+fn json_year_value(value: &serde_json::Value) -> Option<u64> {
+    if let Some(number) = value.as_u64() {
+        return (1000..=9999).contains(&number).then_some(number);
+    }
+
+    let text = value.as_str()?;
+    for index in 0..text.len().saturating_sub(3) {
+        let candidate = &text[index..index + 4];
+        if let Ok(year) = candidate.parse::<u64>() {
+            if (1900..=2099).contains(&year) {
+                return Some(year);
+            }
+        }
+    }
+    None
+}
+
+fn json_search_positive_integer(value: &serde_json::Value, keys: &[&str]) -> Option<u64> {
+    keys.iter()
+        .find_map(|key| value.get(*key))
+        .and_then(|value| {
+            value
+                .as_u64()
+                .or_else(|| value.as_str()?.trim().parse::<u64>().ok())
+        })
+        .filter(|number| *number > 0)
+}
+
+fn json_numeric_value(value: &serde_json::Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_str()?.trim().parse::<f64>().ok())
+        .filter(|number| number.is_finite())
+}
+
+fn json_value_to_string(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(text) if !text.trim().is_empty() => Some(text.clone()),
+        serde_json::Value::Number(number) => Some(number.to_string()),
+        _ => None,
+    }
+}
+
+fn normalize_catalog_values(values: Vec<Value>) -> Vec<PluginCatalogItem> {
+    values
+        .into_iter()
+        .filter_map(normalize_catalog_item_value)
+        .collect()
+}
+
+fn catalog_values(catalog: Value) -> Vec<Value> {
+    if let Some(items) = catalog.as_array() {
+        return items.clone();
+    }
+
+    catalog
+        .get("plugins")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn catalog_item_source_url(value: &Value) -> Result<String, String> {
+    let source_url = string_field(value, &["url", "entry"])
+        .ok_or_else(|| "plugin catalog item missing url".to_string())?;
+    if !is_direct_plugin_url(&source_url) {
+        return Err("plugin catalog item url must point to a .wasm file".to_string());
+    }
+    Ok(source_url)
+}
+
+fn normalize_catalog_item_value(value: Value) -> Option<PluginCatalogItem> {
+    let source_url = catalog_item_source_url(&value).ok()?;
+    let name = string_field(&value, &["name"])?;
+    let capabilities = normalize_capabilities(array_string_field(&value, "capabilities")?)?;
+
+    Some(PluginCatalogItem {
+        id: string_field(&value, &["id"] )?,
+        name,
+        version: string_field(&value, &["version"] )?,
+        kind: normalize_kind(string_field(&value, &["kind"] )?)?,
+        runtime: normalize_runtime(string_field(&value, &["runtime"])).unwrap_or_else(|| "wasm".to_string()),
+        entry: string_field(&value, &["entry"]).unwrap_or_else(|| source_url.clone()),
+        author: string_field(&value, &["author"]),
+        description: string_field(&value, &["description"]),
+        capabilities,
+        permissions: normalize_permissions(array_string_field(&value, "permissions").unwrap_or_default()).ok()?,
+        source_url,
+    })
+}
+
+fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
+    let entry = string_field(&value, &["entry"])?;
+    if !is_direct_plugin_url(&entry) {
+        return None;
+    }
+    let name = string_field(&value, &["name"])?;
+    let source_url = string_field(&value, &["sourceUrl", "source_url"]);
+    let capabilities = normalize_capabilities(array_string_field(&value, "capabilities")?)?;
+
+    Some(PluginManifest {
+        id: string_field(&value, &["id"] )?,
+        name,
+        version: string_field(&value, &["version"] )?,
+        kind: normalize_kind(string_field(&value, &["kind"] )?)?,
+        runtime: normalize_runtime(string_field(&value, &["runtime"])).unwrap_or_else(|| "wasm".to_string()),
+        entry,
+        author: string_field(&value, &["author"]),
+        description: string_field(&value, &["description"]),
+        capabilities,
+        permissions: normalize_permissions(array_string_field(&value, "permissions").unwrap_or_default()).ok()?,
+        source_url,
+        installed_at: string_field(&value, &["installedAt", "installed_at"]).unwrap_or_default(),
+        enabled: value.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+    })
+}
+
+fn build_plugin_catalog_item_from_entry(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    entry: String,
+    source_url: String,
+) -> Result<PluginCatalogItem, String> {
+    let metadata = read_plugin_metadata_backend(worker, entry.clone(), None)?;
+    Ok(PluginCatalogItem {
+        id: required_metadata_field(metadata.id, "id")?,
+        name: required_metadata_field(metadata.name, "name")?,
+        version: required_metadata_field(metadata.version, "version")?,
+        kind: required_metadata_field(metadata.kind, "kind")?,
+        runtime: "wasm".to_string(),
+        entry,
+        author: metadata.author,
+        description: metadata.description,
+        capabilities: required_metadata_list(metadata.capabilities, "capabilities")?,
+        permissions: metadata.permissions.unwrap_or_default(),
+        source_url,
+    })
+}
+
+fn read_plugin_metadata_backend(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    entry: String,
+    permissions: Option<Vec<String>>,
+) -> Result<PluginMetadata, String> {
+    worker
+        .invoke_plugin(
+            entry,
+            json!({ "action": "metadata" }),
+            None,
+            permissions.map(normalize_permissions).transpose()?,
+        )
+        .and_then(|value| serde_json::from_value::<PluginMetadata>(value).map_err(|err| err.to_string()))
+        .and_then(normalize_plugin_metadata)
+}
+
+fn normalize_plugin_metadata(metadata: PluginMetadata) -> Result<PluginMetadata, String> {
+    Ok(PluginMetadata {
+        id: Some(required_metadata_field(metadata.id, "id")?),
+        name: Some(required_metadata_field(metadata.name, "name")?),
+        version: Some(required_metadata_field(metadata.version, "version")?),
+        kind: Some(normalize_kind(required_metadata_field(metadata.kind, "kind")?)
+            .ok_or_else(|| "plugin metadata kind must be music or lyrics".to_string())?),
+        author: metadata.author.and_then(non_empty_string),
+        description: metadata.description.and_then(non_empty_string),
+        capabilities: Some(normalize_capabilities(required_metadata_list(metadata.capabilities, "capabilities")?)
+            .ok_or_else(|| "plugin metadata capabilities cannot be empty".to_string())?),
+        permissions: Some(normalize_permissions(metadata.permissions.unwrap_or_default())?),
+    })
+}
+
+fn required_metadata_field(value: Option<String>, field: &str) -> Result<String, String> {
+    value
+        .and_then(non_empty_string)
+        .ok_or_else(|| format!("plugin metadata missing {field}"))
+}
+
+fn required_metadata_list(value: Option<Vec<String>>, field: &str) -> Result<Vec<String>, String> {
+    let items = value.unwrap_or_default();
+    if items.is_empty() {
+        Err(format!("plugin metadata missing {field}"))
+    } else {
+        Ok(items)
+    }
+}
+
+fn normalize_runtime(runtime: Option<String>) -> Option<String> {
+    match runtime.as_deref().map(str::trim) {
+        Some("wasm") => Some("wasm".to_string()),
+        _ => None,
+    }
+}
+
+fn normalize_kind(kind: String) -> Option<String> {
+    match kind.trim() {
+        "music" | "lyrics" => Some(kind.trim().to_string()),
+        _ => None,
+    }
+}
+
+fn normalize_capabilities(capabilities: Vec<String>) -> Option<Vec<String>> {
+    let normalized = capabilities
+        .into_iter()
+        .filter_map(|capability| normalize_capability(&capability))
+        .fold(Vec::<String>::new(), |mut items, capability| {
+            if !items.contains(&capability) {
+                items.push(capability);
+            }
+            items
+        });
+    if normalized.is_empty() { None } else { Some(normalized) }
+}
+
+fn normalize_capability(capability: &str) -> Option<String> {
+    match capability.trim() {
+        "search" | "play" | "lyrics" => Some(capability.trim().to_string()),
+        _ => None,
+    }
+}
+
+fn normalize_permissions(permissions: Vec<String>) -> Result<Vec<String>, String> {
+    Ok(permissions
+        .into_iter()
+        .map(|permission| normalize_permission(&permission)
+            .ok_or_else(|| format!("unsupported plugin permission: {permission}")))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .fold(Vec::<String>::new(), |mut items, permission| {
+            if !items.contains(&permission) {
+                items.push(permission);
+            }
+            items
+        }))
+}
+
+fn normalize_permission(permission: &str) -> Option<String> {
+    match permission.trim() {
+        "network" | "credential-read" | "cache-read" | "cache-write" | "download-write" => {
+            Some(permission.trim().to_string())
+        }
+        _ => None,
+    }
+}
+
+fn is_direct_plugin_url(value: &str) -> bool {
+    value.split('?').next().unwrap_or(value).to_ascii_lowercase().ends_with(".wasm")
+}
+
+fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn array_string_field(value: &Value, key: &str) -> Option<Vec<String>> {
+    Some(
+        value
+            .get(key)?
+            .as_array()?
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect(),
+    )
+}
+
+fn non_empty_string(value: String) -> Option<String> {
+    let value = value.trim().to_string();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+fn find_search_plugin(
+    provider_id: String,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+) -> Result<PluginPlaybackPlanPlugin, String> {
+    let plugin = plugins
+        .into_iter()
+        .find(|plugin| plugin.id == provider_id)
+        .ok_or_else(|| "Plugin for selected search is not installed.".to_string())?;
+
+    if !plugin.enabled {
+        return Err("Plugin for selected search is not enabled.".to_string());
+    }
+
+    if !plugin
+        .capabilities
+        .iter()
+        .any(|capability| capability == "search")
+    {
+        return Err("Plugin for selected search does not support search.".to_string());
+    }
+
+    Ok(plugin)
 }
 
 fn find_playback_plugin(

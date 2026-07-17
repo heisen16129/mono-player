@@ -161,7 +161,7 @@ fn parse_lyrics_fallback_response(request: &Value, body: &str) -> Value {
     lyrics_response(raw, original)
 }
 fn qualities_response() -> Value {
-    json!({"qualities":[{"id":"128k","name":"鏍囧噯闊宠川","available":true},{"id":"320k","name":"楂樺搧闊宠川","available":true}],"defaultQuality":"320k"})
+    json!({"qualities":[{"id":"128k","name":"标准音质","available":true},{"id":"320k","name":"高品音质","available":true}],"defaultQuality":"320k"})
 }
 
 fn host_response(request: &Value) -> Value {

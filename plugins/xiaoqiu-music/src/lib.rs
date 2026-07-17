@@ -136,7 +136,7 @@ fn parse_lyrics_response(request: &Value, body: &str) -> Value {
     lyrics_response(raw, request)
 }
 fn qualities_response() -> Value {
-    json!({"qualities":[{"id":"128k","name":"鏍囧噯闊宠川","available":true},{"id":"320k","name":"楂樺搧闊宠川","available":true},{"id":"flac","name":"鏃犳崯闊宠川","available":true}],"defaultQuality":"320k"})
+    json!({"qualities":[{"id":"128k","name":"标准音质","available":true},{"id":"320k","name":"高品音质","available":true},{"id":"flac","name":"无损音质","available":true}],"defaultQuality":"320k"})
 }
 fn parse_qq_jsonp(response: &str) -> Option<Value> {
     let mut text = response.trim();

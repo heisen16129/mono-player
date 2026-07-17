@@ -176,7 +176,7 @@ fn continue_host_response(original: &Value, body: &str) -> Value {
     lyrics_response(raw, parent)
 }
 fn qualities_response() -> Value {
-    json!({"qualities":[{"id":"320k","name":"楂樺搧闊宠川","available":true}],"defaultQuality":"320k"})
+    json!({"qualities":[{"id":"320k","name":"高品音质","available":true}],"defaultQuality":"320k"})
 }
 fn kugou_lyric_headers() -> Value {
     headers(&[

@@ -1,10 +1,6 @@
 import type {
-  PluginCapability,
   PluginCatalogItem,
-  PluginKind,
   PluginManifest,
-  PluginPermission,
-  PluginRuntime,
   PluginSubscription,
 } from '../types/plugin';
 import { invoke } from '@tauri-apps/api/core';
@@ -15,112 +11,6 @@ const INSTALLED_PLUGINS_KEY = 'plugins.installed';
 const PLUGIN_SUBSCRIPTIONS_KEY = 'plugins.subscriptions';
 const DELETED_PLUGINS_KEY = 'plugins.deleted';
 const PLUGIN_CATALOG_CACHE_KEY = 'plugins.catalog.cache';
-const MUSIC_PLUGIN_CAPABILITIES = ['search', 'play', 'lyrics'] satisfies PluginCapability[];
-const ALLOWED_PLUGIN_CAPABILITIES = new Set<PluginCapability>(['search', 'play', 'lyrics']);
-
-interface RawCatalogPlugin {
-  id?: string;
-  name?: string;
-  url?: string;
-  entry?: string;
-  version?: string;
-  kind?: PluginKind;
-  author?: string;
-  description?: string;
-  runtime?: PluginRuntime;
-  capabilities?: string[];
-  permissions?: PluginPermission[];
-}
-
-interface RawPluginCatalog {
-  desc?: string;
-  name?: string;
-  plugins?: RawCatalogPlugin[];
-}
-
-interface PluginMetadata {
-  id?: string;
-  name?: string;
-  version?: string;
-  kind?: PluginKind;
-  author?: string;
-  description?: string;
-  capabilities?: string[];
-  permissions?: PluginPermission[];
-}
-
-function makePluginId(name: string, sourceUrl: string) {
-  const slug = `${name}-${sourceUrl}`
-    .toLowerCase()
-    .replace(/https?:\/\//g, '')
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  return slug || crypto.randomUUID();
-}
-
-function inferRuntime(declaredRuntime?: PluginRuntime): PluginRuntime {
-  if (declaredRuntime) return declaredRuntime;
-  return 'wasm';
-}
-
-function inferKind(kind?: PluginKind, capabilities?: PluginCapability[]): PluginKind {
-  if (kind) return kind;
-  return capabilities?.includes('play') ? 'music' : 'lyrics';
-}
-
-function isDirectPluginUrl(url: string) {
-  const path = url.split('?')[0]?.toLowerCase() ?? url.toLowerCase();
-  return path.endsWith('.wasm');
-}
-
-function inferPluginNameFromUrl(url: string) {
-  const path = url.split('?')[0] ?? url;
-  return decodeURIComponent(path.split('/').pop() ?? '')
-    .replace(/\.wasm$/i, '')
-    .trim();
-}
-
-function inferDirectPluginCapabilities(name: string) {
-  return name.toLowerCase().includes('lyrics')
-    ? (['search', 'lyrics'] satisfies PluginCapability[])
-    : inferCapabilities();
-}
-
-function inferCapabilities(capabilities?: string[]) {
-  const normalizedCapabilities = (capabilities ?? [])
-    .filter((capability): capability is PluginCapability => ALLOWED_PLUGIN_CAPABILITIES.has(capability as PluginCapability));
-  if (normalizedCapabilities.length) return normalizedCapabilities;
-  return MUSIC_PLUGIN_CAPABILITIES;
-}
-
-function inferPermissions(permissions?: PluginPermission[]) {
-  return permissions?.length ? permissions : (['network'] satisfies PluginPermission[]);
-}
-
-function toCatalogItem(raw: RawCatalogPlugin): PluginCatalogItem | null {
-  const sourceUrl = raw.url ?? raw.entry;
-  const name = raw.name?.trim();
-  if (!sourceUrl || !name) return null;
-
-  const runtime = inferRuntime(raw.runtime);
-  const capabilities = inferCapabilities(raw.capabilities);
-  if (!sourceUrl.split('?')[0]?.toLowerCase().endsWith('.wasm')) return null;
-
-  return {
-    id: raw.id ?? makePluginId(name, sourceUrl),
-    name,
-    version: raw.version ?? '0.0.0',
-    kind: inferKind(raw.kind, capabilities),
-    runtime,
-    entry: sourceUrl,
-    author: raw.author,
-    description: raw.description,
-    capabilities,
-    permissions: inferPermissions(raw.permissions),
-    sourceUrl,
-  };
-}
 
 export async function listPluginSubscriptions(): Promise<PluginSubscription[]> {
   const stored = await readPersistentValue<PluginSubscription[]>(PLUGIN_SUBSCRIPTIONS_KEY);
@@ -132,20 +22,14 @@ export async function savePluginSubscriptions(subscriptions: PluginSubscription[
 }
 
 export async function listCachedPluginCatalog(): Promise<PluginCatalogItem[]> {
-  return mergeCatalogPlugins([
-    ...((await readPersistentValue<PluginCatalogItem[]>(PLUGIN_CATALOG_CACHE_KEY)) ?? [])
-      .filter(isWasmCatalogItem)
-      .map(normalizeCatalogItem),
-  ]);
+  return mergeCatalogPlugins(await normalizeCatalogItems((await readPersistentValue<PluginCatalogItem[]>(PLUGIN_CATALOG_CACHE_KEY)) ?? []));
 }
 
 export async function saveCachedPluginCatalog(plugins: PluginCatalogItem[]): Promise<void> {
   const deletedPluginIds = new Set(await listDeletedPluginIds());
   await writePersistentValue(
     PLUGIN_CATALOG_CACHE_KEY,
-    plugins
-      .filter((plugin) => isWasmCatalogItem(plugin) && !deletedPluginIds.has(plugin.id))
-      .map(normalizeCatalogItem),
+    (await normalizeCatalogItems(plugins)).filter((plugin) => !deletedPluginIds.has(plugin.id)),
   );
 }
 
@@ -171,9 +55,7 @@ export async function addPluginSubscription(url: string): Promise<PluginSubscrip
 
 export async function listInstalledPlugins(): Promise<PluginManifest[]> {
   const storedPlugins = (await readPersistentValue<PluginManifest[]>(INSTALLED_PLUGINS_KEY)) ?? [];
-  const normalizedPlugins = storedPlugins
-    .filter((plugin) => plugin.runtime === 'wasm')
-    .map(normalizePluginManifest);
+  const normalizedPlugins = await normalizeManifests(storedPlugins);
   if (JSON.stringify(storedPlugins) !== JSON.stringify(normalizedPlugins)) {
     await saveInstalledPlugins(normalizedPlugins);
   }
@@ -181,7 +63,7 @@ export async function listInstalledPlugins(): Promise<PluginManifest[]> {
 }
 
 export async function saveInstalledPlugins(plugins: PluginManifest[]): Promise<void> {
-  await writePersistentValue(INSTALLED_PLUGINS_KEY, plugins.map(normalizePluginManifest));
+  await writePersistentValue(INSTALLED_PLUGINS_KEY, await normalizeManifests(plugins));
 }
 
 export async function listDeletedPluginIds(): Promise<string[]> {
@@ -211,58 +93,15 @@ export async function restoreDeletedPluginsFromCatalog(plugins: PluginCatalogIte
   await saveDeletedPluginIds(deletedPluginIds.filter((pluginId) => !pluginIds.has(pluginId)));
 }
 
-async function readPluginMetadata(entry: string, permissions?: PluginPermission[]): Promise<PluginMetadata | null> {
-  if (!isTauriRuntime()) return null;
-  try {
-    const response = await invoke<PluginMetadata>('plugin_invoke', {
-      entry,
-      request: { action: 'metadata' },
-      pluginId: null,
-      permissions: permissions ?? ['network'],
-    });
-    return response && typeof response === 'object' ? response : null;
-  } catch {
-    return null;
-  }
-}
-
-function mergePluginMetadata(item: PluginCatalogItem, metadata: PluginMetadata | null): PluginCatalogItem {
-  if (!metadata) return item;
-  const capabilities = inferCapabilities(metadata.capabilities ?? item.capabilities);
-  return {
-    ...item,
-    id: metadata.id?.trim() || item.id,
-    name: metadata.name?.trim() || item.name,
-    version: metadata.version?.trim() || item.version,
-    kind: inferKind(metadata.kind ?? item.kind, capabilities),
-    author: metadata.author?.trim() || item.author,
-    description: metadata.description?.trim() || item.description,
-    capabilities,
-    permissions: inferPermissions(metadata.permissions ?? item.permissions),
-  };
-}
-
 export async function installCatalogPlugin(item: PluginCatalogItem): Promise<PluginManifest[]> {
   const installed = await listInstalledPlugins();
-  const pluginItem = mergePluginMetadata(item, await readPluginMetadata(item.entry, item.permissions));
-  const capabilities = await detectInstallCapabilities(pluginItem);
-  const manifest: PluginManifest = {
-    id: pluginItem.id,
-    name: pluginItem.name,
-    version: pluginItem.version,
-    kind: pluginItem.kind,
-    runtime: pluginItem.runtime,
-    entry: pluginItem.entry,
-    author: pluginItem.author,
-    description: pluginItem.description,
-    capabilities,
-    permissions: pluginItem.permissions,
-    sourceUrl: pluginItem.sourceUrl,
+  const manifest = await invoke<PluginManifest>('build_plugin_manifest_from_catalog', {
+    item,
     installedAt: new Date().toISOString(),
     enabled: true,
-  };
-  const nextInstalled = [manifest, ...installed.filter((plugin) => plugin.id !== pluginItem.id)];
-  await restoreDeletedPlugin(pluginItem.id);
+  });
+  const nextInstalled = [manifest, ...installed.filter((plugin) => plugin.id !== manifest.id)];
+  await restoreDeletedPlugin(manifest.id);
   await saveInstalledPlugins(nextInstalled);
   return nextInstalled;
 }
@@ -272,36 +111,16 @@ export async function installLocalPlugin(filePath: string): Promise<PluginManife
     throw new Error('只支持导入 WASM 插件。');
   }
 
-  const name = filePath.split(/[\\/]/).pop()?.replace(/\.wasm$/i, '') || 'Local Plugin';
-  const runtime: PluginRuntime = 'wasm';
-  const id = makePluginId(name, filePath);
-  const fallbackCapabilities = inferDirectPluginCapabilities(name);
-  const metadata = await readPluginMetadata(filePath, ['network']);
-  const capabilities = inferCapabilities(metadata?.capabilities ?? fallbackCapabilities);
   const installed = await listInstalledPlugins();
-  const manifest: PluginManifest = {
-    id,
-    name: metadata?.name?.trim() || name,
-    version: metadata?.version?.trim() || '0.0.0',
-    kind: inferKind(metadata?.kind, capabilities),
-    runtime,
-    entry: filePath,
-    author: metadata?.author?.trim(),
-    description: metadata?.description?.trim(),
-    capabilities,
-    permissions: ['network'],
-    sourceUrl: filePath,
+  const manifest = await invoke<PluginManifest>('build_local_plugin_manifest', {
+    filePath,
     installedAt: new Date().toISOString(),
     enabled: true,
-  };
-  const nextInstalled = [manifest, ...installed.filter((plugin) => plugin.id !== id)];
-  await restoreDeletedPlugin(id);
+  });
+  const nextInstalled = [manifest, ...installed.filter((plugin) => plugin.id !== manifest.id)];
+  await restoreDeletedPlugin(manifest.id);
   await saveInstalledPlugins(nextInstalled);
   return nextInstalled;
-}
-
-async function detectInstallCapabilities(item: PluginCatalogItem) {
-  return item.capabilities;
 }
 
 export async function uninstallPlugin(pluginId: string): Promise<PluginManifest[]> {
@@ -322,44 +141,11 @@ export async function setPluginEnabled(pluginId: string, enabled: boolean): Prom
 }
 
 export async function fetchPluginCatalog(subscription: PluginSubscription): Promise<PluginCatalogItem[]> {
-  if (isDirectPluginUrl(subscription.url)) {
-    const runtime = inferRuntime();
-    const name = inferPluginNameFromUrl(subscription.url) || subscription.name;
-    const fallbackCapabilities = inferDirectPluginCapabilities(name);
-    const metadata = await readPluginMetadata(subscription.url, inferPermissions());
-    const capabilities = inferCapabilities(metadata?.capabilities ?? fallbackCapabilities);
-
-    return [{
-      id: metadata?.id?.trim() || makePluginId(name, subscription.url),
-      name: metadata?.name?.trim() || name,
-      version: metadata?.version?.trim() || '0.0.0',
-      kind: inferKind(metadata?.kind, capabilities),
-      runtime,
-      entry: subscription.url,
-      author: metadata?.author?.trim(),
-      description: metadata?.description?.trim(),
-      capabilities,
-      permissions: inferPermissions(),
-      sourceUrl: subscription.url,
-    }];
+  if (!isTauriRuntime()) {
+    throw new Error('插件目录需要桌面运行时读取 WASM metadata。');
   }
 
-  const catalogText = isTauriRuntime()
-    ? await invoke<string>('fetch_plugin_catalog', { url: subscription.url })
-    : await fetch(subscription.url, { cache: 'no-store' }).then((response) => {
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.text();
-    });
-
-  const catalog = JSON.parse(catalogText) as RawPluginCatalog | RawCatalogPlugin[];
-  const plugins = Array.isArray(catalog) ? catalog : (catalog.plugins ?? []);
-  return plugins
-    .map(toCatalogItem)
-    .filter((item): item is PluginCatalogItem => Boolean(item));
-}
-
-function isWasmCatalogItem(plugin: PluginCatalogItem) {
-  return plugin.runtime === 'wasm';
+  return invoke<PluginCatalogItem[]>('fetch_plugin_catalog_items', { url: subscription.url });
 }
 
 export async function fetchAllPluginCatalogs(subscriptions: PluginSubscription[]): Promise<PluginCatalogItem[]> {
@@ -389,28 +175,18 @@ export async function fetchAllPluginCatalogs(subscriptions: PluginSubscription[]
 function mergeCatalogPlugins(plugins: PluginCatalogItem[]) {
   const itemById = new Map<string, PluginCatalogItem>();
   for (const plugin of plugins) {
-    itemById.set(plugin.id, normalizeCatalogItem(plugin));
+    itemById.set(plugin.id, plugin);
   }
 
   return [...itemById.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh-Hans-CN'));
 }
 
-function normalizeCatalogItem(plugin: PluginCatalogItem): PluginCatalogItem {
-  const capabilities = inferCapabilities(plugin.capabilities);
-  return {
-    ...plugin,
-    kind: inferKind(plugin.kind, capabilities),
-    capabilities,
-  };
+function normalizeCatalogItems(plugins: PluginCatalogItem[]): Promise<PluginCatalogItem[]> {
+  return invoke<PluginCatalogItem[]>('normalize_plugin_catalog_items', { plugins });
 }
 
-function normalizePluginManifest(plugin: PluginManifest): PluginManifest {
-  const capabilities = inferCapabilities(plugin.capabilities);
-  return {
-    ...plugin,
-    kind: inferKind(plugin.kind, capabilities),
-    capabilities,
-  };
+function normalizeManifests(plugins: PluginManifest[]): Promise<PluginManifest[]> {
+  return invoke<PluginManifest[]>('normalize_plugin_manifests', { plugins });
 }
 
 
