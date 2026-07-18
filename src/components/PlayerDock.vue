@@ -195,7 +195,14 @@ const progress = computed(() => {
   if (!hasTotalDuration.value) return 0;
   return Math.min(100, (currentTime.value / totalDuration.value) * 100);
 });
-const canPlayActiveTrackWithRust = computed(() => canUseRustAudioBackend(props.activeTrack?.path));
+
+function canUseRustQueueSource(path: string | null | undefined) {
+  if (!path) return false;
+  if (path.startsWith('plugin://')) return true;
+  return canUseRustAudioBackend(path);
+}
+
+const canPlayActiveTrackWithRust = computed(() => canUseRustQueueSource(props.activeTrack?.path));
 const canAdvancePlaybackTime = computed(() => !props.isPreparingActiveTrack);
 const rustQueueTracks = computed(() => {
   return rustQueueSnapshot.value?.tracks ?? [];
@@ -241,11 +248,7 @@ function isActiveRustPath(path: string | null | undefined) {
 
 function rustPlayableQueueTracks() {
   return props.queue
-    .filter((track) => canUseRustAudioBackend(track.path));
-}
-
-function hasFrontendManagedQueue() {
-  return props.queue.some((track) => track.path.startsWith('plugin://'));
+    .filter((track) => canUseRustQueueSource(track.path));
 }
 
 function findQueueTrackBySource(source: string) {
@@ -254,23 +257,9 @@ function findQueueTrackBySource(source: string) {
 }
 
 function syncRustQueue() {
-  if (hasFrontendManagedQueue()) {
-    void setRustBackendQueue(
-      [],
-      null,
-      props.playbackMode,
-      player.settings.seamlessPlayback,
-      player.settings.crossfadePlayback,
-      CROSSFADE_DURATION_MS,
-    ).then((snapshot) => {
-      rustQueueSnapshot.value = snapshot;
-    }).catch(showPlaybackError);
-    return;
-  }
-
   void setRustBackendQueue(
     rustPlayableQueueTracks(),
-    canUseRustAudioBackend(props.activeTrack?.path) ? props.activeTrack.path : null,
+    canUseRustQueueSource(props.activeTrack?.path) ? props.activeTrack?.path ?? null : null,
     props.playbackMode,
     player.settings.seamlessPlayback,
     player.settings.crossfadePlayback,
@@ -391,7 +380,7 @@ function outputDeviceFallbackMessage(previousDeviceId: string) {
 async function playAudio(restart = false, startTime = currentTime.value) {
   if (!props.activeTrack?.path) return;
   if (!canPlayActiveTrackWithRust.value) {
-    showPlaybackError('当前音频源不是 Rust 后端可播放的本地文件或 HTTP/HTTPS URL');
+    showPlaybackError('当前音频源不是 Rust 后端可播放的本地文件、HTTP/HTTPS URL 或在线歌曲');
     return;
   }
 
@@ -1015,9 +1004,6 @@ onMounted(async () => {
     rustBackendActive.value = false;
     stopSmoothProgress();
     emit('playbackStateChange', false);
-    if (props.queue.length > 1) {
-      emit('playNext');
-    }
   });
 });
 
@@ -1362,6 +1348,7 @@ function handleCoverError() {
                 :track="track"
                 :active="activeTrack?.id === track.id"
                 :playing="isPlaying"
+                :loading="isPreparingActiveTrack && activeTrack?.id === track.id"
                 :spectrum-levels="activeTrack?.id === track.id ? spectrumLevels : []"
               />
               <span class="queue-info">

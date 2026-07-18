@@ -17,9 +17,16 @@ function isApiResponse<T>(value: unknown): value is ApiResponse<T> {
 }
 
 export async function invokeApi<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  const response = await invoke<ApiResponse<T> | T>(command, args);
+  let response: ApiResponse<T> | T;
+  try {
+    response = await invoke<ApiResponse<T> | T>(command, args);
+  } catch (error) {
+    console.error('[api] invoke failed', { command, args, error });
+    throw error;
+  }
   if (!isApiResponse<T>(response)) return response as T;
   if (response.code !== 1) {
+    console.error('[api] response error', { command, args, message: response.message });
     throw new Error(response.message || '操作失败');
   }
   return response.data as T;

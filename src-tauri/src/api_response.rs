@@ -13,6 +13,10 @@ pub(crate) struct ApiResponse<T> {
     pub(crate) data: Option<T>,
 }
 
+fn log_api_error(message: &str) {
+    eprintln!("[api-response] error: {message}");
+}
+
 impl<T> ApiResponse<T> {
     pub(crate) fn success(data: T) -> Self {
         Self::success_message(DEFAULT_SUCCESS_MESSAGE, data)
@@ -37,14 +41,20 @@ impl<T> ApiResponse<T> {
     pub(crate) fn from_result(result: Result<T, String>) -> Self {
         match result {
             Ok(data) => Self::success(data),
-            Err(error) => Self::error(error),
+            Err(error) => {
+                log_api_error(&error);
+                Self::error(error)
+            }
         }
     }
 
     pub(crate) fn from_app_result(result: AppResult<T>) -> Self {
         match result {
             Ok(data) => Self::success(data),
-            Err(error) => Self::error(error.message()),
+            Err(error) => {
+                log_api_error(error.message());
+                Self::error(error.message())
+            }
         }
     }
 }
@@ -61,7 +71,10 @@ impl ApiResponse<()> {
     pub(crate) fn from_empty_result(result: Result<(), String>) -> Self {
         match result {
             Ok(()) => Self::ok(),
-            Err(error) => Self::error(error),
+            Err(error) => {
+                log_api_error(&error);
+                Self::error(error)
+            }
         }
     }
 }

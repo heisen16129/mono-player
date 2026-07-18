@@ -254,10 +254,10 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
-  padding: 0 8px;
-  font-size: 18px;
+  padding: 0;
+  font-size: 17px;
   transition:
     gap 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
     padding 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -329,7 +329,7 @@ onBeforeUnmount(() => {
 }
 
 .collapse-button {
-  width: 38px;
+  width: 34px;
   height: 38px;
   color: var(--smw-icon-muted);
 }
@@ -547,6 +547,10 @@ onBeforeUnmount(() => {
     max-width 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 120ms ease,
     transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.brand > .sidebar-text {
+  max-width: none;
 }
 
 .primary-sidebar.collapsed .main-nav .sidebar-text {

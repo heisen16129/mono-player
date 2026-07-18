@@ -120,6 +120,7 @@ let libraryPanelResizeStartX = 0;
 let libraryPanelResizeStartWidth = 0;
 let lastSystemMediaSyncKey = '';
 let lastSystemMediaSyncAt = 0;
+const localLyricsRequests = new Map<string, Promise<TrackLyrics | null>>();
 
 const searchHistoryLimit = computed(() => Math.max(1, Math.round(player.settings.searchHistoryLimit)));
 const libraryPanelWidth = ref(260);
@@ -177,6 +178,23 @@ function mergeQueueRuntimeMetadata(tracks: Track[]) {
     ...(selectedTrack.value ? [selectedTrack.value] : []),
   ];
   return tracks.map((track) => mergeTrackRuntimeMetadata(track, candidates));
+}
+
+function localLyricsRequestKey(track: Track, format?: string | null) {
+  return `${normalizePath(track.path)}::${format?.trim() ?? ''}`;
+}
+
+function findKnownTrackLyrics(track: Track) {
+  const candidates = [
+    player.currentTrack,
+    selectedTrack.value,
+    ...rustPlaybackQueue.value,
+    ...player.queue,
+    ...player.tracks,
+  ].filter((item): item is Track => Boolean(item));
+  const existing = candidates.find((item) => item.id === track.id || normalizePath(item.path) === normalizePath(track.path));
+  const lyrics = normalizeTrackLyrics(existing);
+  return lyrics?.rawLyrics?.trim() ? lyrics : null;
 }
 
 const allVisibleTracks = computed(() => {
@@ -282,7 +300,7 @@ const {
 } = usePlaylistActions({
   activePlaylistId,
   onQueueSnapshot: (snapshot) => {
-    rustPlaybackQueue.value = dedupePlaybackQueue(snapshot.tracks);
+    handleRustQueueSnapshot(snapshot);
   },
   openLibraryView,
   player,
@@ -550,6 +568,13 @@ async function refreshOnlinePlaybackQualities() {
   } catch {
     onlinePlaybackQualityOptions.value = [];
   }
+}
+
+function queueSourceKey(track: Track) {
+  const providerId = track.sourceProviderId?.trim();
+  const sourceId = track.sourceId?.trim();
+  if (providerId && sourceId) return `plugin://${providerId}/${sourceId}`;
+  return track.path;
 }
 
 const {
@@ -1347,18 +1372,11 @@ async function playOnlineTrack(track: PluginSearchTrack, startTime = 0) {
   onlineActiveTrackKey.value = trackKey;
   selectedTrack.value = null;
   rustPlaybackQueue.value = buildOnlinePlaybackQueue(track, pendingTrack);
-  await stopRustBackend(false);
-  isAudioPlaying.value = false;
+  void loadOnlineTrackLyricsInBackground(track, pendingTrack);
 
   try {
-    const source = await resolvePluginPlaybackSource(track, null, false);
-    const onlineTrack = createOnlineQueueTrack(track, source);
-    onlineActiveTrack.value = onlineTrack;
-    onlinePlaybackSource.value = source.url;
-    rustPlaybackQueue.value = buildOnlinePlaybackQueue(track, onlineTrack);
     player.error = null;
-    await startRustPlaybackQueue(rustPlaybackQueue.value, onlineTrack, startTime);
-    loadOnlineTrackLyricsInBackground(track, onlineTrack);
+    await startRustPlaybackQueue(rustPlaybackQueue.value, pendingTrack, startTime);
   } catch (error) {
     const message = normalizeOnlineErrorMessage(error, resolveLocale(player.settings.locale) === 'en-US' ? 'Could not get playback URL.' : '无法获取播放地址');
     onlineSearchError.value = message;
@@ -1557,7 +1575,7 @@ async function changeLyricFormat(format: string) {
     const source = pluginTrack
       ? await getPluginLyricsMetadata(pluginTrack, format)
       : !isRemoteTrack(active)
-        ? await resolveLocalTrackLyrics(active, format)
+        ? await requestLocalTrackLyrics(active, format)
         : null;
     const rawLyrics = source?.rawLyrics?.trim();
     if (!source || !rawLyrics) {
@@ -1626,11 +1644,28 @@ async function loadOnlineTrackLyricsInBackground(track: PluginSearchTrack, playb
   }
 }
 
+function requestLocalTrackLyrics(track: Track, format?: string | null) {
+  const key = localLyricsRequestKey(track, format);
+  const existing = localLyricsRequests.get(key);
+  if (existing) return existing;
+
+  const request = resolveLocalTrackLyrics(track, format)
+    .finally(() => {
+      localLyricsRequests.delete(key);
+    });
+  localLyricsRequests.set(key, request);
+  return request;
+}
+
 async function loadLocalTrackLyricsInBackground(track: Track) {
-  if (normalizeTrackLyrics(track)?.rawLyrics?.trim()) return;
+  const knownLyrics = findKnownTrackLyrics(track);
+  if (knownLyrics) {
+    updateCurrentLocalTrackLyrics(track, knownLyrics);
+    return;
+  }
 
   try {
-    const lyrics = await resolveLocalTrackLyrics(track);
+    const lyrics = await requestLocalTrackLyrics(track);
     const rawLyrics = lyrics?.rawLyrics?.trim();
     if (!lyrics || !rawLyrics) return;
     updateCurrentLocalTrackLyrics(track, lyrics);
@@ -1685,7 +1720,6 @@ function getOnlineTrackId(track: PluginSearchTrack) {
 async function startRustPlaybackQueue(tracks: Track[], requestedTrack: Track | null, startPosition = 0) {
   playbackTime.value = startPosition;
   const playbackTracks = dedupePlaybackQueue(tracks);
-  await stopRustBackend(false);
   const snapshot = await startRustBackendQueue(
     playbackTracks,
     requestedTrack?.path ?? null,
@@ -1741,30 +1775,27 @@ async function playFavoriteTracks() {
 }
 
 async function playQueueTrack(track: Track) {
-  let nextTrack = track;
+  const pluginTrack = findPluginTrackForQueueTrack(track);
+  const trackKey = pluginTrack ? getOnlineTrackKey(pluginTrack) : null;
 
-  if (track.path.startsWith('plugin://')) {
-    const pluginTrack = findPluginTrackForQueueTrack(track);
-    if (!pluginTrack) return;
-
-    try {
-      const source = await resolvePluginPlaybackSource(pluginTrack, null, true, false);
-      nextTrack = createOnlineQueueTrack(pluginTrack, source);
-      rustPlaybackQueue.value = dedupePlaybackQueue(
-        (rustPlaybackQueue.value.length ? rustPlaybackQueue.value : [track])
-          .map((item) => (item.id === track.id ? nextTrack : item)),
-      );
-    } catch (error) {
-      const message = normalizeOnlineErrorMessage(error, resolveLocale(player.settings.locale) === 'en-US' ? 'Could not get playback URL.' : '无法获取播放地址');
-      onlineSearchError.value = message;
-      showOnlineToast(message);
-      return;
-    }
-  }
+  if (pluginTrack && onlineResolvingTrackKey.value === trackKey) return;
 
   player.error = null;
-  selectedTrack.value = nextTrack;
-  await startRustPlaybackQueue(rustPlaybackQueue.value.length ? rustPlaybackQueue.value : [nextTrack], nextTrack);
+  if (pluginTrack && trackKey) {
+    onlineActiveTrack.value = track;
+    onlineActivePluginTrack.value = pluginTrack;
+    onlinePlaybackSource.value = track.path.startsWith('plugin://') ? '' : track.path;
+    onlineActiveTrackKey.value = trackKey;
+    onlineResolvingTrackKey.value = trackKey;
+  }
+  selectedTrack.value = track;
+  try {
+    await startRustPlaybackQueue(rustPlaybackQueue.value.length ? rustPlaybackQueue.value : [track], track);
+  } finally {
+    if (trackKey && onlineResolvingTrackKey.value === trackKey) {
+      onlineResolvingTrackKey.value = null;
+    }
+  }
 }
 
 function openOnlineTrackContextMenu(track: PluginSearchTrack, x: number, y: number) {
@@ -1806,14 +1837,7 @@ async function queueTrackNextFromContext(track: Track) {
   }
 
   closeContextMenus();
-  try {
-    const source = await resolvePluginPlaybackSource(pluginTrack, null, true, false);
-    await queueTrackNext(createOnlineQueueTrack(pluginTrack, source));
-  } catch (error) {
-    const message = normalizeOnlineErrorMessage(error, resolveLocale(player.settings.locale) === 'en-US' ? 'Could not get playback URL.' : '无法获取播放地址');
-    onlineSearchError.value = message;
-    showOnlineToast(message);
-  }
+  await queueTrackNext(createOnlineQueueTrack(pluginTrack));
 }
 
 function addDownloadedTrackToPlaylist(item: DownloadItem) {
@@ -1987,6 +2011,7 @@ function updateDownloadItem(id: string, patch: Partial<DownloadItem>) {
 }
 
 async function playPreviousTrack() {
+  isAudioPlaying.value = false;
   try {
     handleRustQueueSnapshot(await playRustBackendPrevious());
   } catch (error) {
@@ -1997,6 +2022,7 @@ async function playPreviousTrack() {
 }
 
 async function playNextTrack() {
+  isAudioPlaying.value = false;
   try {
     handleRustQueueSnapshot(await playRustBackendNext());
   } catch (error) {
@@ -2054,7 +2080,10 @@ function handleRustQueueSnapshot(snapshot: RustQueueSnapshot) {
   const mergedTracks = mergeQueueRuntimeMetadata(snapshot.tracks);
   rustPlaybackQueue.value = dedupePlaybackQueue(mergedTracks);
   const normalizedSource = snapshot.currentSource ? normalizePath(snapshot.currentSource) : '';
-  const track = mergedTracks.find((item) => normalizePath(item.path) === normalizedSource) ?? null;
+  const track = mergedTracks.find((item) => (
+    normalizePath(item.path) === normalizedSource
+    || normalizePath(queueSourceKey(item)) === normalizedSource
+  )) ?? null;
   if (track) {
     handleSeamlessAdvance(track);
   }
