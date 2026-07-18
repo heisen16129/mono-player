@@ -86,6 +86,7 @@ const onlinePlaybackQuality = ref<PluginPlaybackQuality>('');
 const onlinePlaybackQualityOptions = ref<PluginPlaybackQualityOption[]>([]);
 const onlineResolvingTrackKey = ref<string | null>(null);
 const onlineActiveTrackKey = ref<string | null>(null);
+const queueSwitchingTrackKey = ref<string | null>(null);
 type OnlineToastVariant = 'success' | 'error';
 type SleepTimerAction = 'stop' | 'exit' | 'finishTrack';
 interface McpSleepTimerRequest {
@@ -377,8 +378,11 @@ const isActiveOnlineTrackDownloading = computed(() => (
 ));
 const isPreparingActiveTrack = computed(() => Boolean(
   onlineActiveTrack.value
-  && onlineResolvingTrackKey.value
-  && onlineActiveTrackKey.value === onlineResolvingTrackKey.value,
+  && onlineActiveTrackKey.value
+  && (
+    onlineActiveTrackKey.value === onlineResolvingTrackKey.value
+    || onlineActiveTrackKey.value === queueSwitchingTrackKey.value
+  ),
 ));
 
 const canUseLocalTrackContextActions = computed(() => (
@@ -536,6 +540,32 @@ function pruneRemovedLocalTracksFromQueue() {
   });
 }
 
+function syncVisiblePlaybackQueue() {
+  const nextQueue = dedupePlaybackQueue(visibleTracks.value.filter((track) => track.path));
+  rustPlaybackQueue.value = nextQueue;
+  const currentSource = nextQueue.some((track) => (
+    normalizePath(track.path) === normalizePath(activeTrack.value?.path ?? '')
+    || normalizePath(queueSourceKey(track)) === normalizePath(activeTrack.value?.path ?? '')
+  ))
+    ? activeTrack.value?.path ?? null
+    : null;
+  void setRustBackendQueue(
+    nextQueue,
+    currentSource,
+    player.playbackMode,
+    player.settings.seamlessPlayback,
+    player.settings.crossfadePlayback,
+    RUST_CROSSFADE_DURATION_MS,
+  ).catch((error) => {
+    showOnlineToast(getErrorMessage(error));
+  });
+}
+
+function syncFavoritePlaybackQueue() {
+  if (activeCollection.value !== 'favorites' || activePlaylistId.value) return;
+  syncVisiblePlaybackQueue();
+}
+
 watch(
   () => player.tracks.map((track) => `${track.id}:${track.path}`).join('|'),
   pruneRemovedLocalTracksFromQueue,
@@ -575,6 +605,16 @@ function queueSourceKey(track: Track) {
   const sourceId = track.sourceId?.trim();
   if (providerId && sourceId) return `plugin://${providerId}/${sourceId}`;
   return track.path;
+}
+
+function onlineTrackKeyForQueueTrack(track: Track) {
+  const pluginTrack = findPluginTrackForQueueTrack(track);
+  return pluginTrack ? getOnlineTrackKey(pluginTrack) : null;
+}
+
+function clearQueueSwitchingForTrack(track: Track | null) {
+  if (!track || queueSwitchingTrackKey.value !== onlineTrackKeyForQueueTrack(track)) return;
+  queueSwitchingTrackKey.value = null;
 }
 
 const {
@@ -1338,7 +1378,7 @@ async function loadMoreOnlineMusic(force = false) {
   }
 }
 
-async function playOnlineTrack(track: PluginSearchTrack, startTime = 0) {
+async function playOnlineTrack(track: PluginSearchTrack, startTime = 0, queueTracks?: Track[]) {
   const trackKey = getOnlineTrackKey(track);
   if (onlineResolvingTrackKey.value === trackKey) return;
 
@@ -1356,7 +1396,7 @@ async function playOnlineTrack(track: PluginSearchTrack, startTime = 0) {
     onlinePlaybackSource.value = downloadedItem.filePath;
     onlineActiveTrackKey.value = trackKey;
     selectedTrack.value = downloadedTrack;
-    rustPlaybackQueue.value = buildOnlinePlaybackQueue(track, downloadedTrack);
+    rustPlaybackQueue.value = buildOnlinePlaybackQueue(track, downloadedTrack, queueTracks);
     player.error = null;
     await startRustPlaybackQueue(rustPlaybackQueue.value, downloadedTrack, startTime);
     return;
@@ -1371,7 +1411,7 @@ async function playOnlineTrack(track: PluginSearchTrack, startTime = 0) {
   onlinePlaybackSource.value = '';
   onlineActiveTrackKey.value = trackKey;
   selectedTrack.value = null;
-  rustPlaybackQueue.value = buildOnlinePlaybackQueue(track, pendingTrack);
+  rustPlaybackQueue.value = buildOnlinePlaybackQueue(track, pendingTrack, queueTracks);
   void loadOnlineTrackLyricsInBackground(track, pendingTrack);
 
   try {
@@ -1388,8 +1428,18 @@ async function playOnlineTrack(track: PluginSearchTrack, startTime = 0) {
   }
 }
 
-function buildOnlinePlaybackQueue(sourceTrack: PluginSearchTrack, playbackTrack: Track) {
+function buildOnlinePlaybackQueue(sourceTrack: PluginSearchTrack, playbackTrack: Track, queueTracks?: Track[]) {
   const sourceKey = getOnlineTrackKey(sourceTrack);
+  const contextQueue = queueTracks
+    ?.filter((track) => track.path)
+    .map((track) => {
+      const pluginTrack = findPluginTrackForQueueTrack(track);
+      return pluginTrack && getOnlineTrackKey(pluginTrack) === sourceKey ? playbackTrack : track;
+    }) ?? [];
+  if (contextQueue.length > 0) {
+    return dedupePlaybackQueue(contextQueue);
+  }
+
   const searchQueue = onlineSearchResults.value.map((item) => (
     getOnlineTrackKey(item) === sourceKey ? playbackTrack : createOnlineQueueTrack(item)
   ));
@@ -1744,7 +1794,7 @@ function hashOnlineTrackId(value: string) {
 async function playTrack(track: Track) {
   const pluginTrack = findPluginTrackForQueueTrack(track);
   if (pluginTrack) {
-    await playOnlineTrack(pluginTrack);
+    await playOnlineTrack(pluginTrack, 0, visibleTracks.value);
     return;
   }
 
@@ -2015,6 +2065,7 @@ async function playPreviousTrack() {
   try {
     handleRustQueueSnapshot(await playRustBackendPrevious());
   } catch (error) {
+    queueSwitchingTrackKey.value = null;
     const message = normalizePlaybackErrorMessage(error, '切换上一首失败');
     player.error = null;
     showOnlineToast(message);
@@ -2026,6 +2077,7 @@ async function playNextTrack() {
   try {
     handleRustQueueSnapshot(await playRustBackendNext());
   } catch (error) {
+    queueSwitchingTrackKey.value = null;
     const message = normalizePlaybackErrorMessage(error, '切换下一首失败');
     player.error = null;
     showOnlineToast(message);
@@ -2079,12 +2131,21 @@ function handleSeamlessAdvance(track: Track) {
 function handleRustQueueSnapshot(snapshot: RustQueueSnapshot) {
   const mergedTracks = mergeQueueRuntimeMetadata(snapshot.tracks);
   rustPlaybackQueue.value = dedupePlaybackQueue(mergedTracks);
-  const normalizedSource = snapshot.currentSource ? normalizePath(snapshot.currentSource) : '';
+  const currentSource = snapshot.currentSource ?? '';
+  const normalizedSource = currentSource ? normalizePath(currentSource) : '';
   const track = mergedTracks.find((item) => (
     normalizePath(item.path) === normalizedSource
     || normalizePath(queueSourceKey(item)) === normalizedSource
   )) ?? null;
   if (track) {
+    const pluginTrack = findPluginTrackForQueueTrack(track);
+    if (pluginTrack && currentSource.startsWith('plugin://')) {
+      queueSwitchingTrackKey.value = getOnlineTrackKey(pluginTrack);
+      playbackTime.value = 0;
+      isAudioPlaying.value = false;
+    } else {
+      clearQueueSwitchingForTrack(track);
+    }
     handleSeamlessAdvance(track);
   }
 }
@@ -2227,10 +2288,12 @@ function setPlaybackMode(mode: PlaybackMode) {
 
 function toggleFavoriteTrack() {
   player.toggleFavorite(activeTrack.value);
+  syncFavoritePlaybackQueue();
 }
 
 function toggleFavoriteForTrack(track: Track) {
   player.toggleFavorite(track);
+  syncFavoritePlaybackQueue();
 }
 
 function addTrackToFavorites(track: Track) {

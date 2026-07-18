@@ -52,7 +52,7 @@ impl<T> ApiResponse<T> {
         match result {
             Ok(data) => Self::success(data),
             Err(error) => {
-                log_api_error(error.message());
+                error.log();
                 Self::error(error.message())
             }
         }

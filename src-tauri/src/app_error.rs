@@ -17,6 +17,18 @@ impl AppError {
     pub(crate) fn message(&self) -> &str {
         &self.message
     }
+
+    pub(crate) fn log(&self) {
+        eprintln!("[app-error] message={}", self.message);
+
+        let mut source = self.source();
+        let mut index = 0;
+        while let Some(error) = source {
+            eprintln!("[app-error] source[{index}]={error}");
+            source = error.source();
+            index += 1;
+        }
+    }
 }
 
 impl fmt::Display for AppError {

@@ -190,6 +190,10 @@ pub(super) fn queue_snapshot(state: &Arc<Mutex<PlayerBackend>>) -> Result<QueueS
 }
 
 pub(super) fn queue_snapshot_from_backend(backend: &PlayerBackend) -> QueueSnapshot {
+    eprintln!(
+        "[player-queue] queue_sources={:?} queue_index={:?} current_source={:?}",
+        backend.queue_sources, backend.queue_index, backend.current_source
+    );
     QueueSnapshot {
         tracks: backend.queue_tracks.clone(),
         sources: backend.queue_sources.clone(),

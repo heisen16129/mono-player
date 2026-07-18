@@ -447,7 +447,7 @@ watch(
 );
 
 watch(
-  () => props.activeTrack?.id,
+  () => [props.activeTrack?.id, props.activeTrack?.path] as const,
   () => {
     runtimeDuration.value = 0;
     setPlaybackTime(0);
@@ -458,6 +458,8 @@ watch(
   () => props.isPreparingActiveTrack,
   (preparing) => {
     if (!preparing) return;
+    rustBackendActive.value = false;
+    isPlaying.value = false;
     setPlaybackTime(0);
     stopSmoothProgress();
   },
@@ -566,7 +568,6 @@ watch(
 watch(
   () => [
     props.queue,
-    props.activeTrack?.path,
     props.playbackMode,
     player.settings.seamlessPlayback,
     player.settings.crossfadePlayback,

@@ -991,7 +991,11 @@ fn play_worker_queue_source_by_index_at_position(
     generation: Option<u64>,
 ) -> Result<QueueSnapshot, String> {
     commit_pending_queue_source(state, app, &source, queue_index)?;
-    let source = resolve_queue_source_for_playback(state, app, source, queue_index, generation)?;
+    let source = match resolve_queue_source_for_playback(state, app, source, queue_index, generation) {
+        Ok(source) => source,
+        Err(error) if error == "Playback request was replaced." => return queue_snapshot(state),
+        Err(error) => return Err(error),
+    };
     let audio_worker = app.state::<crate::workers::audio::AudioWorkerState>();
     if is_rust_playable_url(&source) {
         audio_worker.play_url(source.clone(), true, fade, fade_duration_ms)?;
