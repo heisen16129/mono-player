@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { Music } from '@lucide/vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
 import { artworkDisplaySrc } from '../utils/artwork';
@@ -220,8 +221,7 @@ if (import.meta.hot) {
     </template>
     <img v-else-if="visibleCovers[0]" :src="visibleCovers[0]" alt="" @error="handleCoverError(0)" />
     <template v-else>
-      <span class="cover-stars"></span>
-      <span class="cover-cup"></span>
+      <Music class="folder-cover-placeholder-icon" :size="80" :stroke-width="2.1" />
     </template>
   </span>
 </template>
@@ -290,12 +290,11 @@ if (import.meta.hot) {
 
 .folder-cover {
   position: relative;
-  display: block;
+  display: grid;
+  place-items: center;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 35% 35%, var(--smw-cover-dot) 0 1px, transparent 2px),
-    radial-gradient(circle at 62% 58%, var(--smw-cover-dot-soft) 0 1px, transparent 2px),
-    linear-gradient(135deg, var(--smw-cover-base-deep), var(--smw-cover-base));
+  background: color-mix(in srgb, var(--smw-bg-selected, #edf1f6) 72%, #ffffff);
+  color: color-mix(in srgb, var(--smw-text-secondary, #8b95a3) 72%, #b7bdc7);
 }
 
 .folder-cover > img,
@@ -319,18 +318,17 @@ if (import.meta.hot) {
   min-height: 0;
   box-sizing: border-box;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 38% 38%, var(--smw-cover-dot-soft) 0 1px, transparent 2px),
-    linear-gradient(135deg, var(--smw-cover-base-deep), var(--smw-cover-base));
+  background: color-mix(in srgb, var(--smw-bg-selected, #edf1f6) 72%, #ffffff);
+}
+
+.folder-cover-placeholder-icon {
+  width: 38%;
+  height: 38%;
+  opacity: 0.92;
 }
 
 .cover-mini.folder-cover {
   flex: 0 0 42px;
-}
-
-.cover-mini.folder-cover .cover-stars,
-.cover-mini.folder-cover .cover-cup {
-  display: none;
 }
 
 </style>

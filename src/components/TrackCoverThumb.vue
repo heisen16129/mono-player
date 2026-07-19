@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { Music } from '@lucide/vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
 import { artworkDisplaySrc } from '../utils/artwork';
@@ -185,6 +186,7 @@ function handleImageError() {
 <template>
   <span ref="coverRoot" class="track-cover-thumb" :class="{ 'has-cover': coverUrl, active, loading, playing }" aria-hidden="true">
     <img v-if="coverUrl" :src="coverUrl" alt="" @error="handleImageError" />
+    <Music v-else-if="!active && !loading" class="cover-placeholder-icon" :size="18" :stroke-width="2.4" />
     <span v-if="active || loading" class="cover-equalizer" :class="{ 'is-playing': playing, 'is-loading': loading }">
       <i v-for="(bar, index) in spectrumBars" :key="index" :style="bar"></i>
     </span>
@@ -201,10 +203,8 @@ function handleImageError() {
   overflow: hidden;
   border-radius: 5px;
   border: 1px solid color-mix(in srgb, var(--smw-border, #d8e3f2) 72%, transparent);
-  background:
-    radial-gradient(circle at 35% 35%, var(--smw-cover-dot, #8d9aae) 0 1px, transparent 2px),
-    radial-gradient(circle at 62% 58%, var(--smw-cover-dot-soft, #b6c0cf) 0 1px, transparent 2px),
-    linear-gradient(135deg, var(--smw-cover-base-deep, #d7e6fb), var(--smw-cover-base, #eef5ff));
+  background: color-mix(in srgb, var(--smw-bg-selected, #edf1f6) 72%, #ffffff);
+  color: color-mix(in srgb, var(--smw-text-secondary, #8b95a3) 72%, #b7bdc7);
 }
 
 .track-cover-thumb.active::after,
@@ -221,6 +221,13 @@ function handleImageError() {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.cover-placeholder-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .cover-equalizer {

@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { ChevronDown, Maximize2, Minimize2, Search, X } from '@lucide/vue';
+import { ChevronDown, Maximize2, Minimize2, Music, Search, X } from '@lucide/vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { downloadCoverFile, downloadLyricsFile } from '../services/downloads';
 import { clearCoverThumbnailCache, readCover, readCoverThumbnail, resolveLocalTrackLyrics, resolveLyricsSource } from '../services/music';
@@ -1068,8 +1068,7 @@ function handleCoverError() {
       <div class="lyrics-cover album-cover" :class="{ 'has-cover-image': displayCoverUrl }">
         <img v-if="displayCoverUrl" :src="displayCoverUrl" alt="" @error="handleCoverError" />
         <template v-else>
-          <span class="cover-stars"></span>
-          <span class="cover-cup"></span>
+          <Music class="lyrics-cover-placeholder-icon" :size="88" :stroke-width="2.1" />
         </template>
       </div>
 
@@ -1228,7 +1227,7 @@ function handleCoverError() {
             >
               <span class="lyrics-search-cover">
                 <img v-if="track.artwork" :src="artworkDisplaySrc(track.artwork)" alt="" />
-                <Search v-else :size="18" />
+                <Music v-else :size="20" :stroke-width="2.4" />
               </span>
               <span class="lyrics-search-meta">
                 <strong>{{ track.title }}</strong>
@@ -1369,23 +1368,15 @@ function handleCoverError() {
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 8px;
-  background:
-    radial-gradient(circle at 31% 72%, var(--smw-cover-dot) 0 2px, transparent 4px),
-    radial-gradient(circle at 58% 65%, var(--smw-cover-dot-soft) 0 2px, transparent 4px),
-    radial-gradient(circle at 75% 54%, var(--smw-cover-dot) 0 2px, transparent 4px),
-    linear-gradient(90deg, var(--smw-cover-line) 0 1px, transparent 1px 18px),
-    linear-gradient(140deg, var(--smw-cover-base-deep) 0%, var(--smw-cover-base) 52%, var(--smw-cover-base-deep) 100%);
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--smw-bg-selected, #edf1f6) 72%, #ffffff);
+  color: color-mix(in srgb, var(--smw-text-secondary, #8b95a3) 72%, #b7bdc7);
   box-shadow: 0 22px 54px rgba(0, 0, 0, 0.16);
 }
 
 .lyrics-cover::before {
-  position: absolute;
-  inset: 0;
-  content: "";
-  background:
-    linear-gradient(90deg, transparent 74%, var(--smw-cover-line) 74.5%, transparent 75.2%),
-    repeating-linear-gradient(90deg, var(--smw-cover-line) 0 1px, transparent 1px 12px);
-  opacity: 0.55;
+  display: none;
 }
 
 .lyrics-cover.has-cover-image::before {
@@ -1399,40 +1390,8 @@ function handleCoverError() {
   object-fit: cover;
 }
 
-.cover-stars {
-  position: absolute;
-  right: 42px;
-  bottom: 62px;
-  width: 54px;
-  height: 54px;
-  background:
-    radial-gradient(circle, var(--smw-cover-dot) 0 2px, transparent 3px) 4px 5px / 18px 18px,
-    radial-gradient(circle, var(--smw-cover-dot-soft) 0 1px, transparent 2px) 8px 7px / 13px 13px;
+.lyrics-cover-placeholder-icon {
   opacity: 0.92;
-}
-
-.cover-cup {
-  position: absolute;
-  right: 32px;
-  bottom: 28px;
-  width: 48px;
-  height: 30px;
-  border: 2px solid var(--smw-cover-object-border);
-  border-top-color: var(--smw-cover-line);
-  border-radius: 4px 4px 14px 14px;
-  background: var(--smw-cover-object);
-}
-
-.cover-cup::after {
-  position: absolute;
-  top: 8px;
-  right: -17px;
-  width: 18px;
-  height: 16px;
-  border: 2px solid var(--smw-cover-object-border);
-  border-left: 0;
-  border-radius: 0 12px 12px 0;
-  content: "";
 }
 
 .lyrics-panel-wrap {
@@ -1907,8 +1866,8 @@ function handleCoverError() {
   place-items: center;
   overflow: hidden;
   border-radius: 7px;
-  color: var(--smw-text-secondary);
-  background: var(--smw-bg-selected);
+  color: color-mix(in srgb, var(--smw-text-secondary, #8b95a3) 72%, #b7bdc7);
+  background: color-mix(in srgb, var(--smw-bg-selected, #edf1f6) 72%, #ffffff);
 }
 
 .lyrics-search-cover img {

@@ -11,6 +11,7 @@ import {
   ListMusic,
   LocateFixed,
   Loader2,
+  Music,
   Pause,
   Play,
   Repeat1,
@@ -1013,7 +1014,7 @@ function handleCoverError() {
           </span>
           <span v-else key="artwork" class="cover-mini cover-artwork-shell">
             <img v-if="coverUrl" class="cover-image" :src="coverUrl" alt="" @error="handleCoverError" />
-            <span v-else class="cover-placeholder-fill night"></span>
+            <span v-else class="cover-placeholder-fill"><Music :size="24" :stroke-width="2.4" /></span>
           </span>
         </Transition>
         <span v-if="!lyricsOpen && coverUrl" class="cover-hover-cue" aria-hidden="true">
@@ -1572,10 +1573,8 @@ function handleCoverError() {
   width: 52px;
   height: 52px;
   border-radius: 6px;
-  background:
-    radial-gradient(circle at 35% 35%, var(--smw-cover-dot) 0 1px, transparent 2px),
-    radial-gradient(circle at 62% 58%, var(--smw-cover-dot-soft) 0 1px, transparent 2px),
-    linear-gradient(135deg, var(--smw-cover-base-deep), var(--smw-cover-base));
+  background: color-mix(in srgb, var(--smw-bg-selected, #edf1f6) 72%, #ffffff);
+  color: color-mix(in srgb, var(--smw-text-secondary, #8b95a3) 72%, #b7bdc7);
 }
 
 .mini-now .cover-image {
@@ -1590,7 +1589,8 @@ function handleCoverError() {
 }
 
 .cover-placeholder-fill {
-  display: block;
+  display: grid;
+  place-items: center;
   width: 100%;
   height: 100%;
 }
