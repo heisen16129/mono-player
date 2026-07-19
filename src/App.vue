@@ -41,7 +41,7 @@ import {
 import { deleteDownloadedTrackFile, enqueueDownloadOnlineTrack, openDownloadedTrackInFolder, type DownloadOnlineTrackRequest, type DownloadQueueEvent } from './services/downloads';
 import { clearCoverThumbnailCache, exitApp, isTauriRuntime, refreshTrackDuration, resolveLocalTrackLyrics, updateTrackCover, updateTrackMetadata } from './services/music';
 import { getPluginLyricsMetadata, listPluginSearchProviders, resolvePluginPlaybackQualitiesWithRust, searchPluginMusic } from './services/pluginSearch';
-import { changeRustBackendQueueTrackQuality, getRustBackendDefaultCacheDir, listenRustBackendQueue, playRustBackendNext, playRustBackendPrevious, removeRustBackendQueueSource, setRustBackendCacheDir, startRustBackendQueue, stopRustBackend, type RustQueueSnapshot } from './services/playerBackend';
+import { changeRustBackendQueueTrackQuality, getRustBackendDefaultCacheDir, listenRustBackendQueue, playRustBackendNext, playRustBackendPrevious, removeRustBackendQueueSource, restoreRustBackendQueue, setRustBackendCacheDir, startRustBackendQueue, stopRustBackend, type RustQueueSnapshot } from './services/playerBackend';
 import { readPersistentValue, writePersistentValue } from './services/persistentStore';
 import { clearSystemMedia, listenSystemMediaAction, updateSystemMedia, type SystemMediaAction } from './services/systemMedia';
 import { usePlayerStore } from './stores/player';
@@ -66,6 +66,7 @@ const isLyricsDockReadyToHide = ref(false);
 const seekRequestId = ref(0);
 const seekTime = ref(0);
 const selectedTrack = ref<Track | null>(null);
+const currentPlaybackTrack = ref<Track | null>(null);
 const rustPlaybackQueue = ref<Track[]>([]);
 const isOnlineSearchOpen = ref(false);
 const isOnlineSearching = ref(false);
@@ -347,8 +348,7 @@ const visibleTracks = computed(() => {
 });
 
 const activeTrack = computed(() => {
-  if (onlineActiveTrack.value) return onlineActiveTrack.value;
-  return player.currentTrack ?? selectedTrack.value ?? visibleTracks.value[0] ?? null;
+  return currentPlaybackTrack.value ?? selectedTrack.value ?? visibleTracks.value[0] ?? null;
 });
 const activeLyricsViewStatus = computed(() => lyricsViewState.value.status);
 
@@ -834,8 +834,12 @@ onMounted(async () => {
   await startRustQueueEventListener();
   await startSystemMediaActionListener();
   await player.loadLibrary();
-  restoreSavedPlaybackSession();
-  rustPlaybackQueue.value = dedupePlaybackQueue(player.queue.filter((track) => track.path));
+  const restored = restoreSavedPlaybackSession();
+  if (restored) {
+    await restoreRustPlaybackQueue(restored.track, restored.currentTime);
+  } else {
+    rustPlaybackQueue.value = dedupePlaybackQueue(player.queue.filter((track) => track.path));
+  }
 });
 
 onBeforeUnmount(() => {
@@ -941,6 +945,9 @@ function applyTrackDurationUpdate(trackId: number, duration: number) {
   if (player.currentTrack?.id === trackId) {
     player.setCurrentTrack(patch(player.currentTrack));
   }
+  if (currentPlaybackTrack.value?.id === trackId) {
+    currentPlaybackTrack.value = patch(currentPlaybackTrack.value);
+  }
   if (selectedTrack.value?.id === trackId) {
     selectedTrack.value = patch(selectedTrack.value);
   }
@@ -963,6 +970,9 @@ function applyTrackMetadataUpdate(
   if (player.currentTrack?.id === trackId) {
     player.setCurrentTrack(patch(player.currentTrack));
   }
+  if (currentPlaybackTrack.value?.id === trackId) {
+    currentPlaybackTrack.value = patch(currentPlaybackTrack.value);
+  }
   if (selectedTrack.value?.id === trackId) {
     selectedTrack.value = patch(selectedTrack.value);
   }
@@ -984,6 +994,9 @@ function applyTrackCoverRefresh(trackId: number) {
 
   if (player.currentTrack?.id === trackId) {
     player.setCurrentTrack(patch(player.currentTrack));
+  }
+  if (currentPlaybackTrack.value?.id === trackId) {
+    currentPlaybackTrack.value = patch(currentPlaybackTrack.value);
   }
   if (selectedTrack.value?.id === trackId) {
     selectedTrack.value = patch(selectedTrack.value);
@@ -1826,6 +1839,27 @@ async function startRustPlaybackQueue(tracks: Track[], requestedTrack: Track | n
   }
 }
 
+async function restoreRustPlaybackQueue(track: Track, currentTime: number) {
+  const playbackTracks = dedupePlaybackQueue(player.queue.filter((item) => item.path));
+  if (playbackTracks.length === 0) return;
+
+  try {
+    const snapshot = await restoreRustBackendQueue(
+      playbackTracks,
+      track.path || null,
+      player.playbackMode,
+      player.settings.seamlessPlayback,
+      player.settings.crossfadePlayback,
+      RUST_CROSSFADE_DURATION_MS,
+    );
+    handleRustQueueSnapshot(snapshot);
+    playbackTime.value = currentTime;
+    restorePlaybackTime.value = currentTime;
+  } catch {
+    rustPlaybackQueue.value = playbackTracks;
+  }
+}
+
 function hashOnlineTrackId(value: string) {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -2120,6 +2154,7 @@ function handleSeamlessAdvance(track: Track) {
   const previousTrackId = activeTrack.value?.id ?? null;
   player.setCurrentTrack(track);
   const nextTrack = track;
+  currentPlaybackTrack.value = nextTrack;
   const pluginTrack = findPluginTrackForQueueTrack(track);
   if (previousTrackId !== nextTrack.id) {
     playbackTime.value = 0;
@@ -2229,6 +2264,9 @@ function updateTrackLyricsState(
   if (selectedTrack.value?.id === active.id) {
     selectedTrack.value = nextTrack;
   }
+  if (currentPlaybackTrack.value?.id === active.id) {
+    currentPlaybackTrack.value = nextTrack;
+  }
   if (player.currentTrack?.id === active.id) {
     player.setCurrentTrack(nextTrack);
   }
@@ -2287,6 +2325,9 @@ function clearActiveTrackLyrics() {
   }
   if (selectedTrack.value?.id === active.id) {
     selectedTrack.value = nextTrack;
+  }
+  if (currentPlaybackTrack.value?.id === active.id) {
+    currentPlaybackTrack.value = nextTrack;
   }
   if (player.currentTrack?.id === active.id) {
     player.setCurrentTrack(nextTrack);

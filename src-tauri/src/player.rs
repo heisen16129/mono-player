@@ -272,6 +272,38 @@ pub(crate) async fn player_start_queue(
 }
 
 #[tauri::command]
+pub(crate) fn player_restore_queue(
+    state: State<'_, PlayerState>,
+    tracks: Vec<QueueTrack>,
+    current_source: Option<String>,
+    playback_mode: String,
+    seamless_playback: bool,
+    crossfade_playback: bool,
+    crossfade_duration_ms: u64,
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+        set_queue_backend(
+            &mut backend,
+            tracks,
+            current_source.as_deref(),
+            playback_mode,
+            seamless_playback,
+            crossfade_playback,
+            crossfade_duration_ms,
+        );
+        if let Some((source, queue_index)) = initial_queue_source(&mut backend, current_source.as_deref()) {
+            backend.current_source = Some(source);
+            backend.queue_index = Some(queue_index);
+        } else {
+            backend.current_source = None;
+            backend.queue_index = None;
+        }
+        Ok(queue_snapshot_from_backend(&mut backend))
+    })())
+}
+
+#[tauri::command]
 pub(crate) async fn player_next(
     state: State<'_, PlayerState>,
     app: AppHandle,

@@ -166,6 +166,38 @@ export function startRustBackendQueue(
   });
 }
 
+export function restoreRustBackendQueue(
+  tracks: Track[],
+  currentSource: string | null,
+  playbackMode: string,
+  seamlessPlayback: boolean,
+  crossfadePlayback: boolean,
+  crossfadeDurationMs: number,
+): Promise<RustQueueSnapshot> {
+  if (!isTauriRuntime()) {
+    const playableTracks = tracks.filter((track) => canUseRustAudioBackend(track.path));
+    const selectedTrack = currentSource
+      ? playableTracks.find((track) => track.path === currentSource)
+      : playableTracks[0];
+    return Promise.resolve({
+      tracks: playableTracks,
+      sources: playableTracks.map((track) => track.path),
+      currentSource: selectedTrack?.path ?? null,
+      currentIndex: selectedTrack ? playableTracks.findIndex((track) => track.path === selectedTrack.path) : null,
+      playbackMode,
+    });
+  }
+
+  return invokeApi<RustQueueSnapshot>('player_restore_queue', {
+    tracks,
+    currentSource,
+    playbackMode,
+    seamlessPlayback,
+    crossfadePlayback,
+    crossfadeDurationMs,
+  });
+}
+
 export function playRustBackendNext(): Promise<RustQueueSnapshot> {
   if (!isTauriRuntime()) {
     return Promise.resolve(emptyQueueSnapshot());

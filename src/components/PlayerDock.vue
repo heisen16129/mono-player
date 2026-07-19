@@ -1055,7 +1055,6 @@ function handleCoverError() {
         :disabled="!activeTrack"
         aria-label="Previous"
         @click="requestPreviousTrack"
-        @pointerup="requestPreviousTrack"
       >
         <SkipBack :size="18" fill="currentColor" />
       </button>

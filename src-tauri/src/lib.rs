@@ -180,6 +180,7 @@ pub fn run() {
             player::player_prune_cache,
             player::player_cache_status,
             player::player_start_queue,
+            player::player_restore_queue,
             player::player_next,
             player::player_previous,
             player::player_change_queue_track_quality,

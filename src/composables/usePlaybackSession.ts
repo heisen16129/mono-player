@@ -19,12 +19,13 @@ export function usePlaybackSession({ activeTrack, playbackQueue, playbackTime, p
 
   function restoreSavedPlaybackSession() {
     const restored = player.restorePlaybackSession();
-    if (!restored) return;
+    if (!restored) return null;
 
     selectedTrack.value = restored.track;
     playbackTime.value = restored.currentTime;
     restorePlaybackTime.value = restored.currentTime;
     restorePlaybackRequestId.value += 1;
+    return restored;
   }
 
   function savePlaybackSessionNow() {
