@@ -151,10 +151,8 @@ export type PlaybackQualityFallback = 'lower' | 'higher' | 'none';
 export type OnlinePlaybackFailureAction = 'pause' | 'next';
 
 export interface PlaybackSession {
-  currentTrackId: number | null;
-  currentTrackPath: string | null;
-  queueTrackIds: number[];
-  queueTrackPaths: string[];
+  currentTrack: Track | null;
+  queueTracks: Track[];
   currentTime: number;
   playbackMode: PlaybackMode;
   savedAt: number;

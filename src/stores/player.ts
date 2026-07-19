@@ -189,7 +189,7 @@ function normalizeFavoriteTrackIds(value: unknown): number[] {
   return [...new Set(ids)];
 }
 
-function normalizeFavoriteTrack(value: unknown): Track | null {
+function normalizeTrackSnapshot(value: unknown): Track | null {
   if (!value || typeof value !== 'object') return null;
   const parsed = value as Partial<Track>;
   if (typeof parsed.id !== 'number' || typeof parsed.path !== 'string' || typeof parsed.title !== 'string') {
@@ -217,7 +217,7 @@ function normalizeFavoriteTrack(value: unknown): Track | null {
 function normalizeFavoriteTracks(value: unknown): Track[] {
   if (!Array.isArray(value)) return [];
   const tracks = value
-    .map((track) => normalizeFavoriteTrack(track))
+    .map((track) => normalizeTrackSnapshot(track))
     .filter((track): track is Track => Boolean(track));
   const trackById = new Map<number, Track>();
   for (const track of tracks) {
@@ -264,16 +264,22 @@ function normalizePlaybackSession(value: unknown): PlaybackSession | null {
     const playbackMode: PlaybackMode =
       parsed.playbackMode === 'repeat' || parsed.playbackMode === 'fixed' ? parsed.playbackMode : 'shuffle';
     const currentTime = Number(parsed.currentTime);
+    const currentTrack = normalizeTrackSnapshot(parsed.currentTrack);
+    const queueTracks = dedupeTracksByPath(Array.isArray(parsed.queueTracks)
+      ? parsed.queueTracks
+        .map((track) => normalizeTrackSnapshot(track))
+        .filter((track): track is Track => Boolean(track?.path))
+      : []);
+
+    if (currentTrack?.path && !queueTracks.some((track) => track.path === currentTrack.path)) {
+      queueTracks.unshift(currentTrack);
+    }
+
+    if (!currentTrack && queueTracks.length === 0) return null;
 
     return {
-      currentTrackId: typeof parsed.currentTrackId === 'number' ? parsed.currentTrackId : null,
-      currentTrackPath: typeof parsed.currentTrackPath === 'string' ? parsed.currentTrackPath : null,
-      queueTrackIds: Array.isArray(parsed.queueTrackIds)
-        ? parsed.queueTrackIds.filter((id): id is number => typeof id === 'number')
-        : [],
-      queueTrackPaths: Array.isArray(parsed.queueTrackPaths)
-        ? parsed.queueTrackPaths.filter((path): path is string => typeof path === 'string' && path.length > 0)
-        : [],
+      currentTrack,
+      queueTracks,
       currentTime: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
       playbackMode,
       savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : 0,
@@ -463,10 +469,8 @@ const latestAddedTracks = ref<Track[]>([]);
     }
 
     const session: PlaybackSession = {
-      currentTrackId: current?.id ?? null,
-      currentTrackPath: current?.path ?? null,
-      queueTrackIds: nextQueue.map((track) => track.id),
-      queueTrackPaths: nextQueue.map((track) => track.path),
+      currentTrack: current ?? null,
+      queueTracks: nextQueue,
       currentTime: Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0,
       playbackMode: playbackMode.value,
       savedAt: Date.now(),
@@ -478,19 +482,15 @@ const latestAddedTracks = ref<Track[]>([]);
 
   function restorePlaybackSession() {
     const session = playbackSession.value;
-    if (!session || tracks.value.length === 0) return null;
+    if (!session) return null;
 
-    const byId = new Map(tracks.value.map((track) => [track.id, track]));
-    const byPath = new Map(tracks.value.map((track) => [track.path, track]));
-    const restoredQueue = dedupeTracksByPath(session.queueTrackPaths
-      .map((path, index) => byPath.get(path) ?? byId.get(session.queueTrackIds[index] ?? -1))
-      .filter((track): track is Track => Boolean(track?.path)));
-    const nextQueue = restoredQueue.length > 0 ? restoredQueue : tracks.value.filter((track) => track.path);
-    const current =
-      (session.currentTrackId !== null ? byId.get(session.currentTrackId) : null) ??
-      (session.currentTrackPath ? byPath.get(session.currentTrackPath) : null) ??
-      nextQueue[0] ??
-      null;
+    const nextQueue = dedupeTracksByPath(session.queueTracks.filter((track) => track.path));
+    const current = session.currentTrack?.path ? session.currentTrack : nextQueue[0] ?? null;
+    if (current?.path && !nextQueue.some((track) => track.path === current.path)) {
+      nextQueue.unshift(current);
+    }
+
+    if (!current && nextQueue.length === 0) return null;
 
     queue.value = nextQueue;
     currentTrack.value = current;

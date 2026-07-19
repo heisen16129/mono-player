@@ -283,6 +283,11 @@ fn queue_source_exists(source: &str) -> bool {
 }
 
 pub(super) fn queue_track_source_key(track: &QueueTrack) -> String {
+    let path = track.path.trim();
+    if !path.is_empty() && !is_rust_playable_url(path) && !is_plugin_queue_source(path) {
+        return track.path.clone();
+    }
+
     match (
         track.source_provider_id.as_deref(),
         track.source_id.as_deref(),

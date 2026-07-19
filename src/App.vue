@@ -1453,13 +1453,7 @@ async function loadMoreOnlineMusic(force = false) {
 }
 
 async function playOnlineTrack(track: PluginSearchTrack, startTime = 0, queueTracks?: Track[]) {
-  const downloadedItem = findDownloadedItemForPluginTrack(track);
-  const playbackTrack = downloadedItem?.filePath
-    ? createOnlineQueueTrack(track, {
-      url: downloadedItem.filePath,
-      artwork: track.artwork ?? null,
-    })
-    : createOnlineQueueTrack(track);
+  const playbackTrack = withDownloadedPlaybackSource(createOnlineQueueTrack(track));
 
   playbackTime.value = startTime;
   onlineSearchError.value = null;
@@ -1484,13 +1478,14 @@ function buildOnlinePlaybackQueue(sourceTrack: PluginSearchTrack, playbackTrack:
     .map((track) => {
       const pluginTrack = findPluginTrackForQueueTrack(track);
       return pluginTrack && getOnlineTrackKey(pluginTrack) === sourceKey ? playbackTrack : track;
-    }) ?? [];
+    })
+    .map(withDownloadedPlaybackSource) ?? [];
   if (contextQueue.length > 0) {
     return dedupePlaybackQueue(contextQueue);
   }
 
   const searchQueue = onlineSearchResults.value.map((item) => (
-    getOnlineTrackKey(item) === sourceKey ? playbackTrack : createOnlineQueueTrack(item)
+    getOnlineTrackKey(item) === sourceKey ? playbackTrack : withDownloadedPlaybackSource(createOnlineQueueTrack(item))
   ));
 
   return dedupePlaybackQueue(searchQueue.length > 0 ? searchQueue : [playbackTrack]);
@@ -1801,17 +1796,52 @@ function getOnlineTrackKey(track: PluginSearchTrack) {
   return `${track.providerId}:${track.id}`;
 }
 
-function getDownloadItemIdForPluginTrack(track: PluginSearchTrack) {
-  return `${track.providerName}:${track.id}`;
-}
-
-function findDownloadedItemForPluginTrack(track: PluginSearchTrack) {
-  const itemId = getDownloadItemIdForPluginTrack(track);
+function findDownloadedItemForQueueTrack(track: Track) {
+  const sourceId = track.sourceId?.trim();
+  if (!sourceId) return null;
   return downloadItems.value.find((item) => (
-    item.id === itemId
+    item.sourceId === sourceId
+    && (!track.sourceName || item.sourceName === track.sourceName)
     && item.status === 'downloaded'
     && Boolean(item.filePath)
   )) ?? null;
+}
+
+function withDownloadedPlaybackSource(track: Track) {
+  const downloadedItem = findDownloadedItemForQueueTrack(track);
+  if (!downloadedItem?.filePath) return track;
+  return {
+    ...track,
+    path: downloadedItem.filePath,
+    artwork: track.artwork ?? downloadedItem.artwork ?? null,
+  };
+}
+
+function isDownloadedOnlineLocalPlaybackTrack(track: Track | null) {
+  if (!track?.sourceProviderId || !track.sourceId || isRemoteTrack(track)) return false;
+  const downloadedItem = findDownloadedItemForQueueTrack(track);
+  return Boolean(downloadedItem?.filePath && normalizePath(downloadedItem.filePath) === normalizePath(track.path));
+}
+
+function isSameOnlineTrackIdentity(left: Track, right: Track) {
+  return Boolean(left.sourceProviderId && left.sourceId)
+    && left.sourceProviderId === right.sourceProviderId
+    && left.sourceId === right.sourceId;
+}
+
+async function retryActiveDownloadedOnlineTrackFromPlugin(startPosition = 0) {
+  const active = activeTrack.value;
+  if (!isDownloadedOnlineLocalPlaybackTrack(active)) return false;
+
+  const fallbackTrack: Track = {
+    ...active,
+    path: queueSourceKey(active),
+  };
+  const fallbackQueue = dedupePlaybackQueue((rustPlaybackQueue.value.length ? rustPlaybackQueue.value : [active]).map((track) => (
+    isSameOnlineTrackIdentity(track, active) ? fallbackTrack : track
+  )));
+
+  return startRustPlaybackQueue(fallbackQueue, fallbackTrack, startPosition);
 }
 
 function getOnlineTrackId(track: PluginSearchTrack) {
@@ -2135,6 +2165,15 @@ async function handlePlaybackFailure(message: string) {
   player.error = null;
   await stopRustBackend(false);
   isAudioPlaying.value = false;
+
+  try {
+    if (await retryActiveDownloadedOnlineTrackFromPlugin(playbackTime.value)) {
+      return;
+    }
+  } catch (error) {
+    message = normalizePlaybackErrorMessage(error, '在线源播放失败');
+  }
+
   showOnlineToast(message);
 
   if (player.settings.onlinePlaybackFailureAction !== 'next') {
