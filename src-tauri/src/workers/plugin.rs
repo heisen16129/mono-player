@@ -13,7 +13,9 @@ use std::{
     collections::HashMap,
     io::{self, BufRead, Write},
     path::Path,
-    sync::Mutex,
+    sync::{Mutex, TryLockError},
+    thread,
+    time::Duration,
 };
 use wasmtime::{Engine, Instance, Memory, Module, Store};
 
@@ -167,6 +169,71 @@ impl PluginWorkerState {
         }
     }
 
+    pub(crate) fn invoke_plugin_when_ready<F>(
+        &self,
+        entry: String,
+        request: Value,
+        plugin_id: Option<String>,
+        permissions: Option<Vec<String>>,
+        mut should_continue: F,
+    ) -> Result<Value, String>
+    where
+        F: FnMut() -> Result<(), String>,
+    {
+        log_plugin_args(
+            "PluginWorkerState::invoke_plugin_when_ready",
+            json!({
+                "entry": entry,
+                "request": request,
+                "pluginId": plugin_id,
+                "permissions": permissions,
+            }),
+        );
+
+        let worker_request = WorkerRequest {
+            id: "plugin-invoke".to_string(),
+            method: methods::PLUGIN_INVOKE.to_string(),
+            payload: json!({
+                "entry": entry,
+                "request": request,
+                "pluginId": plugin_id,
+                "permissions": permissions,
+            }),
+        };
+
+        loop {
+            should_continue()?;
+            match self.worker.try_lock() {
+                Ok(mut worker) => {
+                    should_continue()?;
+                    let response: Result<Value, String> = Self::deserialize_worker_message(
+                        Self::request_with_locked_worker(&mut worker, &worker_request)?,
+                    );
+                    match response {
+                        Ok(response) => {
+                            log_plugin_args(
+                                "PluginWorkerState::invoke_plugin_when_ready response",
+                                json!({ "response": response.clone() }),
+                            );
+                            return Ok(response);
+                        }
+                        Err(error) => {
+                            log_plugin_args(
+                                "PluginWorkerState::invoke_plugin_when_ready error",
+                                json!({ "error": error }),
+                            );
+                            return Err(error);
+                        }
+                    }
+                }
+                Err(TryLockError::WouldBlock) => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(TryLockError::Poisoned(error)) => return Err(error.to_string()),
+            }
+        }
+    }
+
     pub(crate) fn status(&self) -> WorkerRuntimeStatus {
         match self.worker.lock() {
             Ok(mut worker) => worker.status(),
@@ -190,6 +257,13 @@ impl PluginWorkerState {
 
     fn request(&self, request: &WorkerRequest) -> Result<WorkerMessage, String> {
         let mut worker = self.worker.lock().map_err(|err| err.to_string())?;
+        Self::request_with_locked_worker(&mut worker, request)
+    }
+
+    fn request_with_locked_worker(
+        worker: &mut WorkerProcess,
+        request: &WorkerRequest,
+    ) -> Result<WorkerMessage, String> {
         match worker.request(request) {
             Ok(message) => Ok(message),
             Err(first_error) => {
@@ -209,7 +283,13 @@ impl PluginWorkerState {
         &self,
         request: WorkerRequest,
     ) -> Result<T, String> {
-        match self.request(&request)? {
+        Self::deserialize_worker_message(self.request(&request)?)
+    }
+
+    fn deserialize_worker_message<T: for<'de> Deserialize<'de>>(
+        message: WorkerMessage,
+    ) -> Result<T, String> {
+        match message {
             WorkerMessage::Response {
                 ok: true,
                 payload: Some(payload),

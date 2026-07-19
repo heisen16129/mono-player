@@ -376,56 +376,18 @@ fn tools_list_result() -> Value {
                 }
             },
             {
-                "name": "mono_resolve_playback_url",
-                "description": "把在线音乐结果解析成播放地址。支持直接传入 url，或传入在线搜索结果 track/source 交给对应插件解析。",
+                "name": "mono_play_online_music",
+                "description": "播放在线音乐。传入在线搜索返回的 track/source 对象，统一交给 Rust 播放队列解析；不支持直接传 URL。",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "已解析好的 HTTP/HTTPS 播放地址。"
-                        },
-                        "artwork": {
-                            "type": "string",
-                            "description": "可选封面 URL。"
-                        },
-                        "rawLyrics": {
-                            "type": "string",
-                            "description": "可选原始歌词。"
-                        },
-                        "quality": {
-                            "type": "string",
-                            "description": "可选音质标记。"
-                        },
-                        "providerId": {
-                            "type": "string",
-                            "description": "可选插件 ID；传入 track/source 时通常可从对象内读取。"
-                        },
                         "track": {
                             "type": "object",
                             "description": "在线搜索返回的 track 对象。"
                         },
                         "source": {
                             "type": "object",
-                            "description": "在线搜索返回的 track/source 对象，或包含 url 的对象。"
-                        }
-                    },
-                    "additionalProperties": true
-                }
-            },
-            {
-                "name": "mono_play_online_music",
-                "description": "播放在线音乐。支持直接传入 HTTP/HTTPS URL，或传入在线 track 后先解析再播放。",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "HTTP/HTTPS 播放地址。"
-                        },
-                        "track": {
-                            "type": "object",
-                            "description": "在线搜索返回的 track 对象。"
+                            "description": "在线搜索返回的 source/track 对象。"
                         }
                     },
                     "additionalProperties": true
@@ -562,7 +524,6 @@ fn call_tool(params: Value, bridge_file: &PathBuf) -> Result<Value, (i32, String
         "mono_set_sleep_timer" => "player.setSleepTimer",
         "mono_scan_folder" => "scanner.scanFolder",
         "mono_search_online_music" => "online.searchMusic",
-        "mono_resolve_playback_url" => "online.resolvePlaybackUrl",
         "mono_play_online_music" => "online.playMusic",
         "mono_get_lyrics" => "online.getLyrics",
         "mono_get_cover" => "online.getCover",

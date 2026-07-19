@@ -149,8 +149,7 @@ button:disabled {
     var(--smw-lyrics-bg);
 }
 
-.icon-button,
-.square-button {
+.icon-button {
   display: inline-grid;
   place-items: center;
   width: 34px;
@@ -161,8 +160,7 @@ button:disabled {
   cursor: pointer;
 }
 
-.icon-button:hover,
-.square-button:hover {
+.icon-button:hover {
   background: var(--smw-bg-hover);
 }
 

@@ -123,7 +123,6 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
 
   async function queueTrackNext(track: Track) {
     if (track.path) {
-      player.queueNext(track);
       try {
         onQueueSnapshot?.(await insertRustBackendQueueNext(track));
       } catch (err) {
@@ -135,7 +134,6 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
 
   async function queueTrackLast(track: Track) {
     if (track.path) {
-      player.queueLast(track);
       try {
         onQueueSnapshot?.(await appendRustBackendQueue(track));
       } catch (err) {

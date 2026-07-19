@@ -1,17 +1,9 @@
 use crate::api_response::ApiResponse;
-use crate::models::TrackLyrics;
+use crate::models::Track;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{
-    collections::hash_map::DefaultHasher,
-    fs,
-    hash::{Hash, Hasher},
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    thread,
-    time::Duration,
-};
+use std::{fs, path::PathBuf, sync::{Arc, Mutex}, thread, time::Duration};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod cache;
@@ -75,18 +67,6 @@ pub(crate) struct AudioOutputDevice {
     is_default: bool,
 }
 
-pub(crate) struct McpOnlineTrackMetadata {
-    pub(crate) title: String,
-    pub(crate) artist: Option<String>,
-    pub(crate) album: Option<String>,
-    pub(crate) duration: Option<f64>,
-    pub(crate) artwork: Option<String>,
-    pub(crate) lyrics: Option<TrackLyrics>,
-    pub(crate) source_id: Option<String>,
-    pub(crate) source_name: Option<String>,
-    pub(crate) source_provider_id: Option<String>,
-}
-
 #[tauri::command]
 pub(crate) fn player_system_temp_cache_dir() -> ApiResponse<String> {
     ApiResponse::success(system_temp_cache_dir().to_string_lossy().to_string())
@@ -120,6 +100,22 @@ fn next_playback_generation(backend: &mut PlayerBackend) -> u64 {
 fn current_playback_generation(state: &Arc<Mutex<PlayerBackend>>) -> Result<u64, String> {
     let backend = state.lock().map_err(|err| err.to_string())?;
     Ok(backend.playback_generation)
+}
+
+fn ensure_current_playback_generation(
+    state: &Arc<Mutex<PlayerBackend>>,
+    generation: Option<u64>,
+) -> Result<(), String> {
+    if let Some(expected_generation) = generation {
+        let current_generation = current_playback_generation(state)?;
+        if current_generation != expected_generation {
+            eprintln!(
+                "[player] Playback request was replaced. expected_generation={expected_generation} current_generation={current_generation}"
+            );
+            return Err("Playback request was replaced.".to_string());
+        }
+    }
+    Ok(())
 }
 
 fn queue_track_plugin_value(track: &QueueTrack) -> Value {
@@ -220,31 +216,6 @@ pub(crate) fn player_cache_status(
 }
 
 #[tauri::command]
-pub(crate) fn player_set_queue(
-    state: State<'_, PlayerState>,
-    tracks: Vec<QueueTrack>,
-    current_source: Option<String>,
-    playback_mode: String,
-    seamless_playback: bool,
-    crossfade_playback: bool,
-    crossfade_duration_ms: u64,
-) -> ApiResponse<QueueSnapshot> {
-    ApiResponse::from_result((|| {
-        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-        set_queue_backend(
-            &mut backend,
-            tracks,
-            current_source.as_deref(),
-            playback_mode,
-            seamless_playback,
-            crossfade_playback,
-            crossfade_duration_ms,
-        );
-        Ok(queue_snapshot_from_backend(&mut backend))
-    })())
-}
-
-#[tauri::command]
 pub(crate) async fn player_start_queue(
     state: State<'_, PlayerState>,
     app: AppHandle,
@@ -291,20 +262,13 @@ pub(crate) async fn player_start_queue(
             false,
             None,
             Some(generation),
+            None,
         )
     })
     .await
     .map_err(|err| err.to_string())
     .and_then(|result| result);
     Ok(ApiResponse::from_result(result))
-}
-
-#[tauri::command]
-pub(crate) fn player_queue_snapshot(state: State<'_, PlayerState>) -> ApiResponse<QueueSnapshot> {
-    ApiResponse::from_result((|| {
-        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-        Ok(queue_snapshot_from_backend(&mut backend))
-    })())
 }
 
 #[tauri::command]
@@ -363,36 +327,50 @@ pub(crate) async fn player_previous(
 }
 
 #[tauri::command]
-pub(crate) async fn player_play_queue_source(
+pub(crate) async fn player_change_queue_track_quality(
     state: State<'_, PlayerState>,
     app: AppHandle,
-    source: String,
+    quality: String,
+    start_position: f64,
 ) -> Result<ApiResponse<QueueSnapshot>, String> {
     let state = Arc::clone(&state.inner);
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let source = normalize_queue_source(&source)
-            .ok_or_else(|| "Queue source is not playable.".to_string())?;
-        let (queue_index, generation) = {
+        let quality = quality.trim().to_string();
+        if quality.is_empty() {
+            return Err("Playback quality is required.".to_string());
+        }
+
+        let (source, queue_index, generation) = {
             let mut backend = state.lock().map_err(|err| err.to_string())?;
-            let queue_source = queue_source_key_for_source(&backend.queue_tracks, &source)
-                .unwrap_or_else(|| source.clone());
+            let current_source = backend
+                .current_source
+                .clone()
+                .ok_or_else(|| "No active queue source.".to_string())?;
+            let queue_source = queue_source_key_for_source(&backend.queue_tracks, &current_source)
+                .unwrap_or(current_source);
+            if !is_plugin_queue_source(&queue_source) {
+                return Err("Current queue track is not an online track.".to_string());
+            }
             let queue_index = backend
                 .queue_sources
                 .iter()
-                .position(|item| item == &queue_source);
+                .position(|item| item == &queue_source)
+                .or(backend.queue_index);
             let generation = next_playback_generation(&mut backend);
-            (queue_index, generation)
+            (queue_source, queue_index, generation)
         };
-        let source = {
-            let backend = state.lock().map_err(|err| err.to_string())?;
-            queue_index
-                .and_then(|index| backend.queue_sources.get(index).cloned())
-                .unwrap_or_else(|| source.clone())
-        };
-        let _ = app
-            .state::<crate::workers::audio::AudioWorkerState>()
-            .stop(false);
-        play_worker_queue_source_by_index(&state, &app, source, queue_index, Some(generation))
+
+        play_worker_queue_source_by_index_at_position(
+            &state,
+            &app,
+            source,
+            queue_index,
+            start_position,
+            false,
+            None,
+            Some(generation),
+            Some(quality),
+        )
     })
     .await
     .map_err(|err| err.to_string())
@@ -489,32 +467,6 @@ pub(crate) fn player_queue_remove(
 }
 
 #[tauri::command]
-pub(crate) fn player_queue_move(
-    state: State<'_, PlayerState>,
-    app: AppHandle,
-    from_index: usize,
-    to_index: usize,
-) -> ApiResponse<QueueSnapshot> {
-    ApiResponse::from_result((|| {
-        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-        if from_index >= backend.queue_tracks.len() {
-            return Ok(queue_snapshot_from_backend(&mut backend));
-        }
-        let track = backend.queue_tracks.remove(from_index);
-        let source = queue_track_source_key(&track);
-        let insert_index = to_index.min(backend.queue_tracks.len());
-        backend.queue_tracks.insert(insert_index, track);
-        backend.queue_sources.retain(|item| item != &source);
-        let order_insert_index = to_index.min(backend.queue_sources.len());
-        backend.queue_sources.insert(order_insert_index, source);
-        refresh_queue_index(&mut backend);
-        let snapshot = queue_snapshot_from_backend(&mut backend);
-        let _ = app.emit("player://queue", &snapshot);
-        Ok(snapshot)
-    })())
-}
-
-#[tauri::command]
 pub(crate) fn player_output_devices(
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
 ) -> ApiResponse<Vec<AudioOutputDevice>> {
@@ -554,41 +506,18 @@ pub(crate) fn player_set_output_device(
 }
 
 #[tauri::command]
-pub(crate) fn player_play_path(
-    audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
-    app: AppHandle,
-    path: String,
-    restart: bool,
-    fade: bool,
-) -> ApiResponse<()> {
-    ApiResponse::from_empty_result((|| {
-        audio_worker.play_path(path, restart, fade, None)?;
-        spawn_audio_worker_state_watcher(app, None);
-        Ok(())
-    })())
-}
-
-#[tauri::command]
-pub(crate) fn player_play_url(
-    audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
-    app: AppHandle,
-    url: String,
-    restart: bool,
-    fade: bool,
-) -> ApiResponse<()> {
-    ApiResponse::from_empty_result((|| {
-        audio_worker.play_url(url, restart, fade, None)?;
-        spawn_audio_worker_state_watcher(app, None);
-        Ok(())
-    })())
-}
-
-#[tauri::command]
 pub(crate) fn player_pause(
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
     fade: bool,
 ) -> ApiResponse<()> {
     ApiResponse::from_empty_result(audio_worker.pause(fade))
+}
+
+#[tauri::command]
+pub(crate) fn player_resume(
+    audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result(audio_worker.resume())
 }
 
 #[tauri::command]
@@ -634,13 +563,6 @@ pub(crate) fn player_set_speed(
     ApiResponse::from_empty_result(audio_worker.set_speed(speed))
 }
 
-#[tauri::command]
-pub(crate) fn player_state(
-    audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
-) -> ApiResponse<PlayerSnapshot> {
-    ApiResponse::from_result(audio_worker.state())
-}
-
 pub(crate) fn mcp_player_state(app: &AppHandle) -> Result<PlayerSnapshot, String> {
     app.state::<crate::workers::audio::AudioWorkerState>()
         .state()
@@ -651,59 +573,65 @@ pub(crate) fn mcp_queue_snapshot(app: &AppHandle) -> Result<QueueSnapshot, Strin
     queue_snapshot(&state.inner)
 }
 
-pub(crate) fn mcp_play_path(app: &AppHandle, path: String) -> Result<(), String> {
-    app.state::<crate::workers::audio::AudioWorkerState>()
-        .play_path(path.clone(), true, false, None)?;
-
-    {
-        let state = app.state::<PlayerState>();
-        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-        backend.current_source = Some(path);
-        refresh_queue_index(&mut backend);
-        let snapshot = queue_snapshot_from_backend(&mut backend);
-        let _ = app.emit("player://queue", &snapshot);
+fn model_track_to_queue_track(track: Track) -> QueueTrack {
+    QueueTrack {
+        id: track.id,
+        path: track.path,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        duration: track.duration.map(|duration| duration as f64),
+        artwork: track.artwork,
+        lyrics: track.lyrics,
+        source_id: track.source_id,
+        source_name: track.source_name,
+        source_provider_id: track.source_provider_id,
     }
-
-    spawn_audio_worker_state_watcher(app.clone(), None);
-    Ok(())
 }
 
-pub(crate) fn mcp_play_online_track(
+fn play_mcp_queue(
     app: &AppHandle,
-    url: String,
-    metadata: McpOnlineTrackMetadata,
+    tracks: Vec<QueueTrack>,
+    requested_source: Option<String>,
 ) -> Result<QueueSnapshot, String> {
-    app.state::<crate::workers::audio::AudioWorkerState>()
-        .play_url(url.clone(), true, false, None)?;
-
-    let track = online_queue_track(
-        online_track_id(&url, &metadata),
-        url.clone(),
-        metadata.title,
-        metadata.artist,
-        metadata.album,
-        metadata.duration,
-        metadata.artwork,
-        metadata.lyrics,
-        metadata.source_id,
-        metadata.source_name,
-        metadata.source_provider_id,
-    );
-    let snapshot = {
-        let state = app.state::<PlayerState>();
+    let state = app.state::<PlayerState>();
+    let (source, queue_index, generation) = {
         let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
-        backend.current_source = Some(url.clone());
-        backend.queue_tracks = vec![track];
-        backend.queue_sources = vec![url];
-        backend.queue_index = Some(0);
-        backend.queued_next_source = None;
-        let snapshot = queue_snapshot_from_backend(&mut backend);
-        let _ = app.emit("player://queue", &snapshot);
-        snapshot
+        let (playback_mode, crossfade_playback, crossfade_duration_ms) =
+            queue_playback_options(&backend);
+        set_queue_backend(
+            &mut backend,
+            tracks,
+            None,
+            playback_mode,
+            false,
+            crossfade_playback,
+            crossfade_duration_ms,
+        );
+        let Some((source, queue_index)) =
+            initial_queue_source(&mut backend, requested_source.as_deref())
+        else {
+            return Err("No playable queue source.".to_string());
+        };
+        backend.queue_index = Some(queue_index);
+        let generation = next_playback_generation(&mut backend);
+        (source, queue_index, generation)
     };
 
-    spawn_audio_worker_state_watcher(app.clone(), None);
-    Ok(snapshot)
+    let _ = app
+        .state::<crate::workers::audio::AudioWorkerState>()
+        .stop(false);
+    play_worker_queue_source_by_index(
+        &state.inner,
+        app,
+        source,
+        Some(queue_index),
+        Some(generation),
+    )
+}
+
+pub(crate) fn mcp_play_track(app: &AppHandle, track: Track) -> Result<QueueSnapshot, String> {
+    play_mcp_queue(app, vec![model_track_to_queue_track(track)], None)
 }
 
 pub(crate) fn mcp_pause(app: &AppHandle) -> Result<(), String> {
@@ -712,18 +640,8 @@ pub(crate) fn mcp_pause(app: &AppHandle) -> Result<(), String> {
 }
 
 pub(crate) fn mcp_resume(app: &AppHandle) -> Result<(), String> {
-    let snapshot = mcp_player_state(app)?;
-    let Some(path) = snapshot.current_path else {
-        return Err("No current track to resume.".to_string());
-    };
-    let audio_worker = app.state::<crate::workers::audio::AudioWorkerState>();
-    if is_rust_playable_url(&path) {
-        audio_worker.play_url(path, false, false, None)?;
-    } else {
-        audio_worker.play_path(path, false, false, None)?;
-    }
-    spawn_audio_worker_state_watcher(app.clone(), None);
-    Ok(())
+    app.state::<crate::workers::audio::AudioWorkerState>()
+        .resume()
 }
 
 pub(crate) fn mcp_stop(app: &AppHandle) -> Result<(), String> {
@@ -784,15 +702,6 @@ pub(crate) fn mcp_seek(app: &AppHandle, seconds: f64) -> Result<(), String> {
 pub(crate) fn mcp_set_volume(app: &AppHandle, volume: f32) -> Result<(), String> {
     app.state::<crate::workers::audio::AudioWorkerState>()
         .set_volume(volume)
-}
-
-fn online_track_id(url: &str, metadata: &McpOnlineTrackMetadata) -> i64 {
-    let mut hasher = DefaultHasher::new();
-    url.hash(&mut hasher);
-    metadata.title.hash(&mut hasher);
-    metadata.source_id.hash(&mut hasher);
-    metadata.source_provider_id.hash(&mut hasher);
-    -((hasher.finish() & 0x7fff_ffff) as i64) - 1
 }
 
 fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
@@ -871,10 +780,13 @@ fn resolve_queue_source_for_playback(
     source: String,
     queue_index: Option<usize>,
     generation: Option<u64>,
+    preferred_quality: Option<String>,
 ) -> Result<String, String> {
     if !is_plugin_queue_source(&source) {
         return Ok(source);
     }
+
+    ensure_current_playback_generation(state, generation)?;
 
     let track = {
         let backend = state.lock().map_err(|err| err.to_string())?;
@@ -892,23 +804,21 @@ fn resolve_queue_source_for_playback(
     let plugins = read_installed_playback_plugins(app)?;
     let quality_fallback = read_quality_fallback(app);
     let track_value = queue_track_plugin_value(&track);
+    ensure_current_playback_generation(state, generation)?;
     let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-    let source_result = crate::plugins::resolve_plugin_playback_source_backend(
+    let source_result = crate::plugins::resolve_plugin_playback_source_backend_when_ready(
         &worker,
         provider_id,
         track_value,
-        None,
+        preferred_quality,
         quality_fallback,
         false,
         plugins,
+        || ensure_current_playback_generation(state, generation),
     )?;
     let resolved_source = source_result.url.clone();
 
-    if let Some(expected_generation) = generation {
-        if current_playback_generation(state)? != expected_generation {
-            return Err("Playback request was replaced.".to_string());
-        }
-    }
+    ensure_current_playback_generation(state, generation)?;
 
     {
         let mut backend = state.lock().map_err(|err| err.to_string())?;
@@ -918,30 +828,35 @@ fn resolve_queue_source_for_playback(
             .iter_mut()
             .find(|item| queue_track_source_key(item) == track_key)
         {
-            queue_track.path = resolved_source.clone();
-            queue_track.title = if source_result.title.trim().is_empty() {
-                queue_track.title.clone()
-            } else {
-                source_result.title.clone()
-            };
-            queue_track.artist = (!source_result.artist.trim().is_empty())
-                .then_some(source_result.artist.clone())
-                .or(queue_track.artist.clone());
-            queue_track.album = (!source_result.album.trim().is_empty())
-                .then_some(source_result.album.clone())
-                .or(queue_track.album.clone());
-            queue_track.duration = source_result
-                .duration
-                .map(|duration| duration as f64)
-                .or(queue_track.duration);
-            queue_track.artwork = source_result
-                .artwork
-                .clone()
-                .or(queue_track.artwork.clone());
+            apply_plugin_playback_source(queue_track, &source_result, &resolved_source);
         }
     }
 
     Ok(resolved_source)
+}
+
+fn apply_plugin_playback_source(
+    queue_track: &mut QueueTrack,
+    source_result: &crate::plugins::PluginPlaybackSource,
+    resolved_source: &str,
+) {
+    queue_track.path = resolved_source.to_string();
+    queue_track.title = if source_result.title.trim().is_empty() {
+        queue_track.title.clone()
+    } else {
+        source_result.title.clone()
+    };
+    queue_track.artist = (!source_result.artist.trim().is_empty())
+        .then_some(source_result.artist.clone())
+        .or(queue_track.artist.clone());
+    queue_track.album = (!source_result.album.trim().is_empty())
+        .then_some(source_result.album.clone())
+        .or(queue_track.album.clone());
+    queue_track.duration = source_result
+        .duration
+        .map(|duration| duration as f64)
+        .or(queue_track.duration);
+    queue_track.artwork = source_result.artwork.clone().or(queue_track.artwork.clone());
 }
 
 fn play_worker_queue_source_by_index(
@@ -961,6 +876,7 @@ fn play_worker_queue_source_by_index(
         fade,
         fade_duration_ms,
         generation,
+        None,
     )
 }
 
@@ -989,9 +905,17 @@ fn play_worker_queue_source_by_index_at_position(
     fade: bool,
     fade_duration_ms: Option<u64>,
     generation: Option<u64>,
+    preferred_quality: Option<String>,
 ) -> Result<QueueSnapshot, String> {
     commit_pending_queue_source(state, app, &source, queue_index)?;
-    let source = match resolve_queue_source_for_playback(state, app, source, queue_index, generation) {
+    let source = match resolve_queue_source_for_playback(
+        state,
+        app,
+        source,
+        queue_index,
+        generation,
+        preferred_quality,
+    ) {
         Ok(source) => source,
         Err(error) if error == "Playback request was replaced." => return queue_snapshot(state),
         Err(error) => return Err(error),

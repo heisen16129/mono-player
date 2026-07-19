@@ -69,11 +69,6 @@
   font-weight: 650;
 }
 
-.panel-actions {
-  display: flex;
-  gap: 4px;
-}
-
 .search-field {
   display: flex;
   align-items: center;
@@ -129,8 +124,7 @@
 }
 
 .quick-row,
-.playlist-row,
-.saved-row {
+.playlist-row {
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -237,7 +231,6 @@
 }
 
 .playlist-row small,
-.saved-row,
 .mini-now small {
   color: var(--smw-text-secondary);
   font-size: 13px;

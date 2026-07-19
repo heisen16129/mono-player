@@ -157,8 +157,25 @@ pub(crate) fn update_track_metadata(
 }
 
 #[tauri::command]
-pub(crate) fn update_track_cover(request: UpdateTrackCoverRequest) -> ApiResponse<()> {
-    ApiResponse::from_empty_result(write_track_cover_metadata(&request.path, &request.cover_path))
+pub(crate) fn update_track_cover(
+    state: State<'_, AppState>,
+    player_state: State<'_, crate::player::PlayerState>,
+    request: UpdateTrackCoverRequest,
+) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        write_track_cover_metadata(&request.path, &request.cover_path)?;
+        let artwork = crate::covers::cached_cover_original_file_url_in(
+            &player_state.cache_dir()?,
+            Path::new(&request.path),
+        )?;
+        let db = state.db.lock().map_err(|err| err.to_string())?;
+        db.execute(
+            "UPDATE tracks SET artwork = ?1, updated_at = CURRENT_TIMESTAMP WHERE path = ?2",
+            params![artwork, request.path],
+        )
+        .map_err(|err| err.to_string())?;
+        Ok(())
+    })())
 }
 
 #[tauri::command]
@@ -235,6 +252,7 @@ pub(crate) fn init_database(db: &Connection) -> rusqlite::Result<()> {
     )?; //閸掓稑缂?tracks 鐞??  ? 閺冭绱濈€瑰啰娈戦柅鏄忕帆缁涘鐜禍搴濅簰娑?match 鐞涖劏鎻蹇ョ窗
     ensure_track_column(db, "added_at", "TEXT")?;
     ensure_track_column(db, "scan_id", "TEXT")?;
+    ensure_track_column(db, "artwork", "TEXT")?;
     db.execute(
         "UPDATE tracks SET added_at = COALESCE(added_at, updated_at, CURRENT_TIMESTAMP)",
         [],
@@ -264,7 +282,7 @@ fn ensure_track_column(db: &Connection, name: &str, definition: &str) -> rusqlit
 pub(crate) fn read_tracks(db: &Connection) -> Result<Vec<Track>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT id, path, title, artist, album, duration, added_at, scan_id
+            "SELECT id, path, title, artist, album, duration, added_at, scan_id, artwork
              FROM tracks
              ORDER BY updated_at DESC, id DESC",
         )
@@ -284,7 +302,7 @@ pub(crate) fn read_tracks(db: &Connection) -> Result<Vec<Track>, String> {
                 year: None,
                 genre: None,
                 track_number: None,
-                artwork: None,
+                artwork: row.get(8)?,
                 associated_artwork: None,
                 lyrics: None,
                 associated_lyrics: None,
@@ -314,7 +332,7 @@ pub(crate) fn read_tracks(db: &Connection) -> Result<Vec<Track>, String> {
 pub(crate) fn read_latest_added_tracks(db: &Connection) -> Result<Vec<Track>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT id, path, title, artist, album, duration, added_at, scan_id
+            "SELECT id, path, title, artist, album, duration, added_at, scan_id, artwork
              FROM tracks
              WHERE scan_id IN (
                 SELECT DISTINCT scan_id
@@ -345,7 +363,7 @@ pub(crate) fn read_latest_added_tracks(db: &Connection) -> Result<Vec<Track>, St
                 year: None,
                 genre: None,
                 track_number: None,
-                artwork: None,
+                artwork: row.get(8)?,
                 associated_artwork: None,
                 lyrics: None,
                 associated_lyrics: None,
@@ -395,14 +413,15 @@ pub(crate) fn upsert_track(
         }
         db.execute(
             "UPDATE tracks
-             SET path = ?1, title = ?2, artist = ?3, album = ?4, duration = ?5, updated_at = CURRENT_TIMESTAMP
-             WHERE path = ?6",
+             SET path = ?1, title = ?2, artist = ?3, album = ?4, duration = ?5, artwork = ?6, updated_at = CURRENT_TIMESTAMP
+             WHERE path = ?7",
             params![
                 track.path,
                 track.title,
                 track.artist,
                 track.album,
                 track.duration,
+                track.artwork,
                 existing_path,
             ],
         )
@@ -423,13 +442,14 @@ pub(crate) fn upsert_track(
         );
     }
     db.execute(
-        "INSERT INTO tracks (path, title, artist, album, duration, updated_at, added_at, scan_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP, ?6, ?7)
+        "INSERT INTO tracks (path, title, artist, album, duration, artwork, updated_at, added_at, scan_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP, ?7, ?8)
          ON CONFLICT(path) DO UPDATE SET
             title = excluded.title,
             artist = excluded.artist,
             album = excluded.album,
             duration = excluded.duration,
+            artwork = excluded.artwork,
             updated_at = CURRENT_TIMESTAMP",
         params![
             track.path,
@@ -437,6 +457,7 @@ pub(crate) fn upsert_track(
             track.artist,
             track.album,
             track.duration,
+            track.artwork,
             added_at,
             scan_id.or(track.scan_id.as_deref())
         ],

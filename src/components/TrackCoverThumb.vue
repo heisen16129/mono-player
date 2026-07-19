@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
+import { artworkDisplaySrc } from '../utils/artwork';
 
 const MAX_CACHED_COVERS = 360;
 const coverUrlCache = new Map<string, string | null>();
@@ -113,8 +114,9 @@ async function loadCover(id: number, path: string, artwork: string | null | unde
   const currentLoadId = ++loadId;
   coverUrl.value = '';
 
-  if (artwork && !failedArtworkUrls.has(artwork)) {
-    coverUrl.value = artwork;
+  const artworkUrl = artworkDisplaySrc(artwork);
+  if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) {
+    coverUrl.value = artworkUrl;
     return;
   }
 
@@ -176,6 +178,7 @@ function handleImageError() {
   }
 
   coverUrl.value = '';
+  void loadCover(props.track.id, props.track.path, props.track.artwork, props.track.coverVersion);
 }
 </script>
 

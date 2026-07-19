@@ -477,9 +477,7 @@
 }
 
 :root[data-theme='desktopGlass'] .search-field,
-:root[data-theme='desktopGlass'] .quick-row > span:first-child,
-:root[data-theme='desktopGlass'] .settings-select,
-:root[data-theme='desktopGlass'] .setting-input {
+:root[data-theme='desktopGlass'] .quick-row > span:first-child {
   background: var(--smw-bg-input);
 }
 

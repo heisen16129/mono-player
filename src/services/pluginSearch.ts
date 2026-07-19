@@ -1,26 +1,7 @@
-import type { PluginManifest, PluginPlaybackQualities, PluginPlaybackQuality, PluginSearchProvider, PluginSearchTrack } from '../types/plugin';
+import type { PluginManifest, PluginPlaybackQualities, PluginSearchProvider, PluginSearchTrack } from '../types/plugin';
 import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
 import { listInstalledPlugins } from './plugins';
-
-export interface PluginPlaybackSource {
-  url: string;
-  path?: string;
-  title?: string;
-  artist?: string;
-  album?: string;
-  duration?: number | null;
-  artwork?: string | null;
-  lyrics?: PluginLyricsMetadata | null;
-  year?: number | null;
-  genre?: string | null;
-  trackNumber?: number | null;
-  quality?: PluginPlaybackQuality;
-  sourceId?: string;
-  sourceName?: string;
-  sourceProviderId?: string;
-  sourceRaw?: unknown;
-}
 
 export interface PluginLyricsMetadata {
   rawLyrics?: string | null;
@@ -28,10 +9,6 @@ export interface PluginLyricsMetadata {
   formats?: string[];
   defaultFormat?: 'lrc' | 'trans' | 'yrc' | 'qrc' | 'krc' | 'a2' | string | null;
   format?: 'lrc' | 'trans' | 'yrc' | 'qrc' | 'krc' | 'a2' | string | null;
-}
-
-interface PluginPlaybackRequestOptions {
-  includeMetadata?: boolean;
 }
 
 export interface PluginSearchPage {
@@ -157,25 +134,6 @@ export async function getPluginLyricsMetadata(track: PluginSearchTrack, format?:
     providerId: track.providerId,
     track,
     format: format?.trim() || null,
-    plugins,
-  });
-}
-
-export async function resolvePluginPlaybackSourceWithRust(
-  track: PluginSearchTrack,
-  preferredQuality: PluginPlaybackQuality | null,
-  qualityFallback: string,
-  options: PluginPlaybackRequestOptions = {},
-): Promise<PluginPlaybackSource> {
-  const plugins = await listInstalledPlugins();
-  if (!isTauriRuntime()) throw new Error('Plugin playback is only available in the desktop runtime.');
-
-  return invokeApi<PluginPlaybackSource>('resolve_plugin_playback_source', {
-    providerId: track.providerId,
-    track,
-    preferredQuality: preferredQuality?.trim() || null,
-    qualityFallback,
-    includeMetadata: options.includeMetadata !== false,
     plugins,
   });
 }

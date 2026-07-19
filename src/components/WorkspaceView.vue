@@ -13,6 +13,7 @@ const props = defineProps<{
   error: string | null;
   favoriteTrackIds: number[];
   isPlaying: boolean;
+  preparingTrackId?: number | null;
   spectrumLevels: number[];
   libraryFilter: 'all' | 'recentAdded' | 'recentPlayed';
   libraryMeta: { count: number; minutes: number };
@@ -182,6 +183,7 @@ onBeforeUnmount(() => {
         :tracks="tracks"
         :active-track="activeTrack"
         :favorite-track-ids="favoriteTrackIds"
+        :preparing-track-id="preparingTrackId ?? null"
         :spectrum-levels="spectrumLevels"
         :is-playing="isPlaying"
         :wide="isWideCollection"
@@ -212,11 +214,6 @@ onBeforeUnmount(() => {
   min-height: 40px;
 }
 
-.history-buttons {
-  display: flex;
-  gap: 8px;
-}
-
 .icon-button.muted {
   color: var(--smw-text-muted);
 }
@@ -236,11 +233,6 @@ onBeforeUnmount(() => {
 
 :root[data-theme='dark'] .play-button {
   color: #111111;
-}
-
-.square-button {
-  border: 1px solid var(--smw-border);
-  background: var(--smw-bg-input);
 }
 
 .error {

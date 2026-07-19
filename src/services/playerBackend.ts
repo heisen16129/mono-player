@@ -60,16 +60,12 @@ export function isRustPlayableUrl(source: string): boolean {
   return source.startsWith('http://') || source.startsWith('https://');
 }
 
-export function playPathWithRustBackend(path: string, restart = false, fade = false): Promise<void> {
-  return invokeApi<void>('player_play_path', { path, restart, fade });
-}
-
-export function playUrlWithRustBackend(url: string, restart = false, fade = false): Promise<void> {
-  return invokeApi<void>('player_play_url', { url, restart, fade });
-}
-
 export function pauseRustBackend(fade = false): Promise<void> {
   return invokeApi<void>('player_pause', { fade });
+}
+
+export function resumeRustBackend(): Promise<void> {
+  return invokeApi<void>('player_resume');
 }
 
 export function stopRustBackend(fade = false): Promise<void> {
@@ -136,29 +132,6 @@ export function getRustBackendCacheStatus(): Promise<RustCacheStatusState> {
   return invokeApi<RustCacheStatusState>('player_cache_status');
 }
 
-export function setRustBackendQueue(
-  tracks: Track[],
-  currentSource: string | null,
-  playbackMode: string,
-  seamlessPlayback: boolean,
-  crossfadePlayback: boolean,
-  crossfadeDurationMs: number,
-): Promise<RustQueueSnapshot> {
-  const sources = tracks.map((track) => track.path);
-  if (!isTauriRuntime()) {
-    return Promise.resolve({ tracks, sources, currentSource, currentIndex: null, playbackMode });
-  }
-
-  return invokeApi<RustQueueSnapshot>('player_set_queue', {
-    tracks,
-    currentSource,
-    playbackMode,
-    seamlessPlayback,
-    crossfadePlayback,
-    crossfadeDurationMs,
-  });
-}
-
 export function startRustBackendQueue(
   tracks: Track[],
   requestedSource: string | null,
@@ -193,14 +166,6 @@ export function startRustBackendQueue(
   });
 }
 
-export function getRustBackendQueueSnapshot(): Promise<RustQueueSnapshot> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve(emptyQueueSnapshot());
-  }
-
-  return invokeApi<RustQueueSnapshot>('player_queue_snapshot');
-}
-
 export function playRustBackendNext(): Promise<RustQueueSnapshot> {
   if (!isTauriRuntime()) {
     return Promise.resolve(emptyQueueSnapshot());
@@ -217,12 +182,12 @@ export function playRustBackendPrevious(): Promise<RustQueueSnapshot> {
   return invokeApi<RustQueueSnapshot>('player_previous');
 }
 
-export function playRustBackendQueueSource(source: string): Promise<RustQueueSnapshot> {
+export function changeRustBackendQueueTrackQuality(quality: string, startPosition: number): Promise<RustQueueSnapshot> {
   if (!isTauriRuntime()) {
-    return Promise.resolve({ ...emptyQueueSnapshot(), sources: [source], currentSource: source, currentIndex: 0 });
+    return Promise.resolve(emptyQueueSnapshot());
   }
 
-  return invokeApi<RustQueueSnapshot>('player_play_queue_source', { source });
+  return invokeApi<RustQueueSnapshot>('player_change_queue_track_quality', { quality, startPosition });
 }
 
 export function insertRustBackendQueueNext(track: Track): Promise<RustQueueSnapshot> {
@@ -249,14 +214,6 @@ export function removeRustBackendQueueSource(source: string): Promise<RustQueueS
   return invokeApi<RustQueueSnapshot>('player_queue_remove', { source });
 }
 
-export function moveRustBackendQueueSource(fromIndex: number, toIndex: number): Promise<RustQueueSnapshot> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve(emptyQueueSnapshot());
-  }
-
-  return invokeApi<RustQueueSnapshot>('player_queue_move', { fromIndex, toIndex });
-}
-
 export function listRustBackendOutputDevices(): Promise<RustAudioOutputDevice[]> {
   if (!isTauriRuntime()) {
     return Promise.resolve([]);
@@ -271,10 +228,6 @@ export function setRustBackendOutputDevice(deviceId: string | null): Promise<voi
   }
 
   return invokeApi<void>('player_set_output_device', { deviceId });
-}
-
-export function getRustBackendState(): Promise<RustPlayerState> {
-  return invokeApi<RustPlayerState>('player_state');
 }
 
 export function listenRustBackendEnded(callback: () => void): Promise<() => void> {

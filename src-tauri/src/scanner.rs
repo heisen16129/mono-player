@@ -10,7 +10,7 @@ use lofty::prelude::Accessor;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use walkdir::WalkDir;
 
 #[derive(Debug, Serialize)]
@@ -43,8 +43,14 @@ async fn scan_music_dir_inner(
         return Err("Music directory does not exist or is not a folder.".to_string());
     }
     let scan_id = uuid::Uuid::new_v4().to_string();
-    let scanned_tracks =
-        scan_music_dir_in_worker(path, app.clone(), scan_worker.inner().clone()).await?;
+    let cache_root = app.state::<crate::player::PlayerState>().cache_dir()?;
+    let scanned_tracks = scan_music_dir_in_worker(
+        path,
+        app.clone(),
+        cache_root,
+        scan_worker.inner().clone(),
+    )
+    .await?;
     let _ = app.emit("scan://done", scanned_tracks.len());
     let scanned_paths = scanned_tracks
         .iter()
@@ -81,11 +87,26 @@ pub(crate) fn cancel_scan_music_dir(
 async fn scan_music_dir_in_worker(
     path: String,
     app: AppHandle,
+    cache_root: PathBuf,
     scan_worker: crate::workers::scanner::ScanWorkerState,
 ) -> Result<Vec<Track>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut tracks = Vec::new();
-        crate::workers::run_scan_worker(&scan_worker, path, |track| {
+        crate::workers::run_scan_worker(&scan_worker, path, |mut track| {
+            track.artwork = match crate::covers::cached_cover_original_file_url_in(
+                &cache_root,
+                Path::new(&track.path),
+            ) {
+                Ok(artwork) => artwork,
+                Err(error) => {
+                    eprintln!(
+                        "[scanner] read cover failed path={} error={}",
+                        track.path,
+                        error
+                    );
+                    None
+                }
+            };
             let _ = app.emit("scan://track", &track);
             tracks.push(track);
             Ok(())

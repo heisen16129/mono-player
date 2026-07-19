@@ -16,15 +16,6 @@ use windows_sys::Win32::System::Registry::{
 use windows_sys::Win32::UI::WindowsAndMessaging::{SystemParametersInfoW, SPI_GETDESKWALLPAPER};
 
 #[tauri::command]
-pub(crate) async fn get_wallpaper_theme_color() -> ApiResponse<WallpaperThemeColor> {
-    let result = tauri::async_runtime::spawn_blocking(current_wallpaper_theme_color)
-        .await
-        .map_err(|err| err.to_string())
-        .and_then(|result| result);
-    ApiResponse::from_result(result)
-}
-
-#[tauri::command]
 pub(crate) async fn get_system_theme_state() -> ApiResponse<SystemThemeState> {
     let result = tauri::async_runtime::spawn_blocking(current_system_theme_payload)
         .await

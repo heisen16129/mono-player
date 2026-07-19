@@ -191,8 +191,11 @@ pub(super) fn queue_snapshot(state: &Arc<Mutex<PlayerBackend>>) -> Result<QueueS
 
 pub(super) fn queue_snapshot_from_backend(backend: &PlayerBackend) -> QueueSnapshot {
     eprintln!(
-        "[player-queue] queue_sources={:?} queue_index={:?} current_source={:?}",
-        backend.queue_sources, backend.queue_index, backend.current_source
+        "[player-queue] tracks_count={} sources_count={} queue_index={:?} has_current_source={}",
+        backend.queue_tracks.len(),
+        backend.queue_sources.len(),
+        backend.queue_index,
+        backend.current_source.is_some()
     );
     QueueSnapshot {
         tracks: backend.queue_tracks.clone(),
@@ -210,6 +213,14 @@ pub(super) fn queue_crossfade_options(
     let fade = backend.crossfade_playback && backend.current_source.is_some();
     let duration_ms = fade.then_some(backend.crossfade_duration.as_millis() as u64);
     Ok((fade, duration_ms))
+}
+
+pub(super) fn queue_playback_options(backend: &PlayerBackend) -> (String, bool, u64) {
+    (
+        backend.playback_mode.clone(),
+        backend.crossfade_playback,
+        backend.crossfade_duration.as_millis() as u64,
+    )
 }
 
 pub(super) fn refresh_queue_index(backend: &mut PlayerBackend) {
@@ -244,34 +255,6 @@ pub(super) fn normalize_queue_track(mut track: QueueTrack) -> Option<QueueTrack>
         Some(track)
     } else {
         None
-    }
-}
-
-pub(super) fn online_queue_track(
-    id: i64,
-    path: String,
-    title: String,
-    artist: Option<String>,
-    album: Option<String>,
-    duration: Option<f64>,
-    artwork: Option<String>,
-    lyrics: Option<TrackLyrics>,
-    source_id: Option<String>,
-    source_name: Option<String>,
-    source_provider_id: Option<String>,
-) -> QueueTrack {
-    QueueTrack {
-        id,
-        path,
-        title,
-        artist,
-        album,
-        duration,
-        artwork,
-        lyrics,
-        source_id,
-        source_name,
-        source_provider_id,
     }
 }
 

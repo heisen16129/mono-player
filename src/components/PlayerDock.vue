@@ -24,25 +24,22 @@ import {
 } from '@lucide/vue';
 import type { PlaybackMode, Track } from '../types/music';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption } from '../types/plugin';
+import { artworkDisplaySrc } from '../utils/artwork';
 import { getErrorMessage } from '../utils/error';
 import { readCover, readCoverThumbnail } from '../services/music';
 import {
-  canUseRustAudioBackend,
   listenRustBackendAdvanced,
   listenRustBackendQueue,
   listenRustBackendOutputDeviceFallback,
   listenRustBackendState,
   listenRustBackendEnded,
   pauseRustBackend,
-  playPathWithRustBackend,
-  playUrlWithRustBackend,
-  isRustPlayableUrl,
+  resumeRustBackend,
   seekRustBackend,
   setRustBackendSpeed,
   setRustBackendCacheDir,
   setRustBackendOutputDevice,
   pruneRustBackendCache,
-  setRustBackendQueue,
   setRustBackendVolume,
   stopRustBackend,
   type RustQueueSnapshot,
@@ -67,7 +64,6 @@ const props = defineProps<{
   lyricFormats: string[];
   playbackMode: PlaybackMode;
   playbackModeLabel: string;
-  playRequestId: number;
   queue: Track[];
   restoreRequestId: number;
   restoreTime: number;
@@ -99,16 +95,14 @@ const emit = defineEmits<{
   togglePlaybackMode: [];
   playQueueTrack: [track: Track];
   seamlessAdvance: [track: Track];
-  requestInitialPlayback: [];
+  requestInitialPlayback: [startTime?: number];
   sleepTimerExit: [];
-  trackPlayed: [];
   playbackStateChange: [isPlaying: boolean];
   playbackError: [message: string];
   spectrumChange: [levels: number[]];
 }>();
 
 const player = usePlayerStore();
-const CROSSFADE_DURATION_MS = 3000;
 const FADE_STATE_HOLD_MS = 900;
 const PLAYBACK_ERROR_TIMEOUT_MS = 5200;
 const isPlaying = ref(false);
@@ -140,6 +134,7 @@ const queueTrackRefs = ref(new Map<number, HTMLElement>());
 const spectrumLevels = ref<number[]>([]);
 const runtimeDuration = ref(0);
 const coverUrl = ref('');
+const failedArtworkUrls = new Set<string>();
 const hasThemeBackground = computed(() => {
   return player.customThemes.some((theme) => theme.id === player.settings.theme && Boolean(theme.background));
 });
@@ -196,13 +191,6 @@ const progress = computed(() => {
   return Math.min(100, (currentTime.value / totalDuration.value) * 100);
 });
 
-function canUseRustQueueSource(path: string | null | undefined) {
-  if (!path) return false;
-  if (path.startsWith('plugin://')) return true;
-  return canUseRustAudioBackend(path);
-}
-
-const canPlayActiveTrackWithRust = computed(() => canUseRustQueueSource(props.activeTrack?.path));
 const canAdvancePlaybackTime = computed(() => !props.isPreparingActiveTrack);
 const rustQueueTracks = computed(() => {
   return rustQueueSnapshot.value?.tracks ?? [];
@@ -246,27 +234,9 @@ function isActiveRustPath(path: string | null | undefined) {
     || normalizedPath === normalizedBackendPath(seamlessQueuedSource);
 }
 
-function rustPlayableQueueTracks() {
-  return props.queue
-    .filter((track) => canUseRustQueueSource(track.path));
-}
-
 function findQueueTrackBySource(source: string) {
   const normalizedSource = normalizedBackendPath(source);
   return props.queue.find((track) => normalizedBackendPath(track.path) === normalizedSource) ?? null;
-}
-
-function syncRustQueue() {
-  void setRustBackendQueue(
-    rustPlayableQueueTracks(),
-    canUseRustQueueSource(props.activeTrack?.path) ? props.activeTrack?.path ?? null : null,
-    props.playbackMode,
-    player.settings.seamlessPlayback,
-    player.settings.crossfadePlayback,
-    CROSSFADE_DURATION_MS,
-  ).then((snapshot) => {
-    rustQueueSnapshot.value = snapshot;
-  }).catch(showPlaybackError);
 }
 
 function holdRustPlaybackStoppedState() {
@@ -377,32 +347,13 @@ function outputDeviceFallbackMessage(previousDeviceId: string) {
   return `输出设备已断开，已回退到系统默认设备：${previousDeviceId}`;
 }
 
-async function playAudio(restart = false, startTime = currentTime.value) {
+async function resumeAudio() {
   if (!props.activeTrack?.path) return;
-  if (!canPlayActiveTrackWithRust.value) {
-    showPlaybackError('当前音频源不是 Rust 后端可播放的本地文件、HTTP/HTTPS URL 或在线歌曲');
-    return;
-  }
 
   try {
     clearPlaybackError();
     rustPlaybackStateHoldUntil = 0;
-    seamlessQueuedSource = '';
-    if (restart) {
-      await stopRustBackend(false);
-      stopSmoothProgress();
-      rustBackendActive.value = false;
-      isPlaying.value = false;
-    }
-    if (isRustPlayableUrl(props.activeTrack.path)) {
-      await playUrlWithRustBackend(props.activeTrack.path, restart, player.settings.fadePlayback);
-    } else {
-      await playPathWithRustBackend(props.activeTrack.path, restart, player.settings.fadePlayback);
-    }
-    if (startTime > 0) {
-      await seekRustBackend(startTime);
-      setPlaybackTime(startTime);
-    }
+    await resumeRustBackend();
     rustBackendActive.value = true;
     isPlaying.value = true;
     smoothProgressBasePosition = currentTime.value;
@@ -411,18 +362,16 @@ async function playAudio(restart = false, startTime = currentTime.value) {
     void setRustBackendVolume(isMuted.value ? 0 : volume.value / 100);
     void setRustBackendSpeed(playbackRate.value);
     emit('playbackStateChange', true);
-    emit('trackPlayed');
   } catch (error) {
     rustBackendActive.value = false;
     isPlaying.value = false;
     emit('playbackStateChange', false);
+    if (getErrorMessage(error).includes('No active audio to resume.')) {
+      emit('requestInitialPlayback');
+      return;
+    }
     showPlaybackError(error);
   }
-}
-
-async function loadAndPlaySource(startTime = 0) {
-  await loadSource(startTime);
-  await playAudio(true, startTime);
 }
 
 async function loadSource(startTime = 0) {
@@ -474,9 +423,10 @@ watch(
     }
     coverUrl.value = '';
 
-    if (artwork) {
-      coverUrl.value = artwork;
-      setPlayerArtworkCoverCache(playerCoverCacheKey(props.activeTrack), artwork);
+    const artworkUrl = artworkDisplaySrc(artwork);
+    if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) {
+      coverUrl.value = artworkUrl;
+      setPlayerArtworkCoverCache(playerCoverCacheKey(props.activeTrack), artworkUrl);
       return;
     }
 
@@ -506,20 +456,12 @@ watch(
 );
 
 watch(
-  () => props.playRequestId,
-  async () => {
-    setPlaybackTime(0);
-    await playAudio(true, 0);
-  },
-  { flush: 'post' },
-);
-
-watch(
   () => props.seekRequestId,
   async () => {
     if (!props.activeTrack?.path) return;
     if (!rustBackendActive.value) {
-      await loadAndPlaySource(props.seekTime);
+      setPlaybackTime(props.seekTime);
+      emit('requestInitialPlayback', props.seekTime);
       return;
     }
 
@@ -565,45 +507,29 @@ watch(
   },
 );
 
-watch(
-  () => [
-    props.queue,
-    props.playbackMode,
-    player.settings.seamlessPlayback,
-    player.settings.crossfadePlayback,
-  ] as const,
-  syncRustQueue,
-  { deep: true, immediate: true },
-);
-
 async function togglePlayback() {
-  if (!props.canControlPlayback) {
-    if (props.activeTrack?.path) {
-      emit('requestInitialPlayback');
-    }
+  if (!props.activeTrack?.path) return;
+
+  if (!props.canControlPlayback || !rustBackendActive.value) {
+    emit('requestInitialPlayback');
     return;
   }
 
-  if (rustBackendActive.value) {
-    if (isPlaying.value) {
-      holdRustPlaybackStoppedState();
-      try {
-        await pauseRustBackend(player.settings.fadePlayback);
-      } catch (error) {
-        showPlaybackError(error);
-        return;
-      }
-      isPlaying.value = false;
-      stopSmoothProgress();
-      emit('playbackStateChange', false);
+  if (isPlaying.value) {
+    holdRustPlaybackStoppedState();
+    try {
+      await pauseRustBackend(player.settings.fadePlayback);
+    } catch (error) {
+      showPlaybackError(error);
       return;
     }
-
-    await playAudio();
+    isPlaying.value = false;
+    stopSmoothProgress();
+    emit('playbackStateChange', false);
     return;
   }
 
-  await playAudio();
+  await resumeAudio();
 }
 
 function previewSeekAudio(event: Event) {
@@ -1026,10 +952,28 @@ onBeforeUnmount(() => {
 });
 
 function handleCoverError() {
-  if (coverUrl.value) {
-    revokeTemporaryCoverUrl(coverUrl.value);
+  const failedUrl = coverUrl.value;
+  if (failedUrl) {
+    if (failedUrl.startsWith('blob:')) {
+      revokeTemporaryCoverUrl(failedUrl);
+    } else {
+      failedArtworkUrls.add(failedUrl);
+    }
   }
   coverUrl.value = '';
+  coverLoadId += 1;
+  const track = props.activeTrack;
+  if (!track?.path) return;
+  void (async () => {
+    const currentLoadId = coverLoadId;
+    try {
+      const cover = await readCoverThumbnail(track.path);
+      if (currentLoadId !== coverLoadId || !cover?.data.length) return;
+      coverUrl.value = URL.createObjectURL(new Blob([new Uint8Array(cover.data)], { type: cover.mime_type }));
+    } catch {
+      coverUrl.value = '';
+    }
+  })();
 }
 </script>
 

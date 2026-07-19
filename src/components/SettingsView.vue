@@ -73,7 +73,6 @@ const mcpFeatureGroups = [
     title: '在线音乐',
     items: [
       'mono_search_online_music：通过插件搜索在线音乐。',
-      'mono_resolve_playback_url：解析在线音乐播放地址。',
       'mono_play_online_music：播放在线音乐并同步到底部播放栏。',
       'mono_get_lyrics：获取本地或在线歌词。',
       'mono_get_cover：获取封面图。',

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
+import { artworkDisplaySrc } from '../utils/artwork';
 
 const props = defineProps<{
   tracks: Track[];
@@ -15,6 +16,7 @@ const folderCoverCache = new Map<string, { urls: (string | null)[]; refs: number
 const folderCoverRequestCache = new Map<string, Promise<(string | null)[]>>();
 const trackCoverUrlCache = new Map<string, string | null>();
 const trackCoverRequestCache = new Map<string, Promise<string | null>>();
+const failedArtworkUrls = new Set<string>();
 const MAX_FOLDER_COVER_CACHE = 80;
 const MAX_TRACK_COVER_CACHE = 240;
 let activeCacheKey = '';
@@ -85,7 +87,8 @@ async function loadCoverUrlsForTracks(tracks: Track[]) {
 }
 
 async function coverUrlForTrack(track: Track) {
-  if (track.artwork?.trim()) return track.artwork.trim();
+  const artworkUrl = artworkDisplaySrc(track.artwork);
+  if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) return artworkUrl;
   if (!track.path) return null;
 
   const cacheKey = trackCacheKey(track);
@@ -113,6 +116,25 @@ async function coverUrlForTrack(track: Track) {
 
   trackCoverRequestCache.set(cacheKey, request);
   return request;
+}
+
+function trackForVisibleCover(index: number) {
+  const grid = props.tracks.length >= 4;
+  const candidates = grid ? props.tracks.slice(0, 4) : props.tracks.filter((track) => track.path).slice(0, 4);
+  return candidates[index] ?? null;
+}
+
+async function handleCoverError(index: number) {
+  const failedUrl = visibleCovers.value[index];
+  const track = trackForVisibleCover(index);
+  if (failedUrl && !failedUrl.startsWith('blob:')) failedArtworkUrls.add(failedUrl);
+  if (!track?.path) {
+    coverUrls.value[index] = null;
+    return;
+  }
+
+  const fallbackUrl = await coverUrlForTrack(track);
+  coverUrls.value[index] = fallbackUrl;
 }
 
 watch(
@@ -193,10 +215,10 @@ if (import.meta.hot) {
   >
     <template v-if="shouldUseGrid">
       <span v-for="index in 4" :key="index" class="folder-cover-cell">
-        <img v-if="visibleCovers[index - 1]" :src="visibleCovers[index - 1] ?? undefined" alt="" />
+        <img v-if="visibleCovers[index - 1]" :src="visibleCovers[index - 1] ?? undefined" alt="" @error="handleCoverError(index - 1)" />
       </span>
     </template>
-    <img v-else-if="visibleCovers[0]" :src="visibleCovers[0]" alt="" />
+    <img v-else-if="visibleCovers[0]" :src="visibleCovers[0]" alt="" @error="handleCoverError(0)" />
     <template v-else>
       <span class="cover-stars"></span>
       <span class="cover-cup"></span>
@@ -311,12 +333,4 @@ if (import.meta.hot) {
   display: none;
 }
 
-.saved-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: auto;
-  padding: 10px 0;
-  text-align: left;
-}
 </style>

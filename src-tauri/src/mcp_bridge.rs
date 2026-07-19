@@ -7,8 +7,9 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{hash_map::DefaultHasher, BTreeMap, HashSet},
     fs,
+    hash::{Hash, Hasher},
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
@@ -198,7 +199,6 @@ fn handle_bridge_request(app: AppHandle, request: BridgeRequest) -> BridgeRespon
         "player.setSleepTimer" => set_sleep_timer(&app, request.params),
         "scanner.scanFolder" => scan_folder(&app, request.params),
         "online.searchMusic" => search_online_music(&app, request.params),
-        "online.resolvePlaybackUrl" => resolve_playback_url(&app, request.params),
         "online.playMusic" => play_online_music(&app, request.params),
         "online.getLyrics" => get_lyrics(&app, request.params),
         "online.getCover" => get_cover(&app, request.params),
@@ -534,8 +534,8 @@ fn play_track(app: &AppHandle, params: Value) -> Result<Value, String> {
         .find(|track| track.id == id)
         .ok_or_else(|| format!("Track not found: {id}"))?;
 
-    crate::player::mcp_play_path(app, track.path.clone())?;
-    Ok(json!({ "played": true, "track": track }))
+    let queue = crate::player::mcp_play_track(app, track.clone())?;
+    Ok(json!({ "played": true, "track": track, "queue": queue }))
 }
 
 fn seek(app: &AppHandle, params: Value) -> Result<Value, String> {
@@ -681,154 +681,89 @@ fn search_online_music(app: &AppHandle, params: Value) -> Result<Value, String> 
     }))
 }
 
-fn resolve_playback_url(app: &AppHandle, params: Value) -> Result<Value, String> {
-    if let Some(direct) = direct_playback_source(&params) {
-        return resolve_direct_playback_url(direct);
+fn play_online_music(app: &AppHandle, params: Value) -> Result<Value, String> {
+    let track = online_track_from_params(params)?;
+    let queue = crate::player::mcp_play_track(app, track.clone())?;
+    Ok(json!({ "played": true, "track": track, "queue": queue }))
+}
+
+fn online_track_from_params(params: Value) -> Result<Track, String> {
+    if string_arg(&params, "url").is_some() {
+        return Err("online.playMusic no longer accepts direct url; pass the online track object instead.".to_string());
     }
 
     let track = params
         .get("track")
-        .cloned()
-        .or_else(|| params.get("source").cloned())
-        .ok_or_else(|| {
-            "mono_resolve_playback_url requires either url or an online track object".to_string()
-        })?;
-    let provider_id = string_arg(&params, "providerId")
-        .or_else(|| string_arg(&track, "providerId"))
-        .ok_or_else(|| {
-            "mono_resolve_playback_url requires providerId when resolving a plugin track"
-                .to_string()
-        })?;
-    let quality = string_arg(&params, "quality").unwrap_or_else(|| "low".to_string());
-    let include_metadata = params
-        .get("includeMetadata")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    let plugin = select_plugins(app, "play", Some(&provider_id))?
-        .into_iter()
-        .next()
-        .ok_or_else(|| format!("Plugin is not enabled or does not support play: {provider_id}"))?;
-    let plugin_track = track.get("raw").cloned().unwrap_or(track);
-    let response = invoke_plugin(
-        app,
-        &plugin,
-        json!({
-            "action": "play",
-            "track": plugin_track,
-            "quality": quality,
-            "includeMetadata": include_metadata
-        }),
-    )?;
-    let resolved_url = string_arg(&response, "url")
-        .ok_or_else(|| "Plugin did not return a playback url.".to_string())?;
-    validate_http_url(&resolved_url, "url")?;
-
-    Ok(response)
-}
-
-fn direct_playback_source(params: &Value) -> Option<Value> {
-    if string_arg(params, "url").is_some() {
-        return Some(params.clone());
-    }
-
-    let source = params.get("source")?;
-    string_arg(source, "url").map(|_| source.clone())
-}
-
-fn resolve_direct_playback_url(params: Value) -> Result<Value, String> {
-    let url = string_arg(&params, "url").or_else(|| {
-        params
-            .get("source")
-            .and_then(|source| string_arg(source, "url"))
-    });
-    let Some(url) = url else {
-        return Err(
-            "mono_resolve_playback_url 当前只支持直接传入 url；通过插件解析在线歌曲需要先把插件运行时迁移到 Rust 主进程。"
-                .to_string(),
-        );
-    };
-    validate_http_url(&url, "url")?;
-
-    Ok(json!({
-        "url": url,
-        "artwork": string_arg(&params, "artwork"),
-        "rawLyrics": string_arg(&params, "rawLyrics").or_else(|| string_arg(&params, "lyrics")),
-        "quality": string_arg(&params, "quality")
-    }))
-}
-
-fn play_online_music(app: &AppHandle, params: Value) -> Result<Value, String> {
-    let original_params = params.clone();
-    let resolved = if string_arg(&params, "url").is_some() {
-        params
-    } else {
-        resolve_playback_url(app, params)?
-    };
-    let url = string_arg(&resolved, "url").ok_or_else(|| {
-        "mono_play_online_music requires url or a resolvable online track".to_string()
-    })?;
-    validate_http_url(&url, "url")?;
-    let metadata = online_track_metadata(&url, &resolved, &original_params);
-    let queue = crate::player::mcp_play_online_track(app, url.clone(), metadata)?;
-    Ok(json!({ "played": true, "url": url, "queue": queue }))
-}
-
-fn online_track_metadata(
-    url: &str,
-    resolved: &Value,
-    original_params: &Value,
-) -> crate::player::McpOnlineTrackMetadata {
-    let track = original_params
-        .get("track")
-        .or_else(|| original_params.get("source"));
-    let title = string_arg(resolved, "title")
-        .or_else(|| track.and_then(|track| string_arg(track, "title")))
-        .or_else(|| track.and_then(|track| string_arg(track, "name")))
+        .or_else(|| params.get("source"))
+        .unwrap_or(&params);
+    let source_provider_id = string_arg(track, "providerId")
+        .or_else(|| string_arg(&params, "providerId"))
+        .or_else(|| string_arg(track, "sourceProviderId"))
+        .ok_or_else(|| "online.playMusic requires track.providerId".to_string())?;
+    let source_id = value_to_string(track.get("id"))
+        .or_else(|| string_arg(track, "sourceId"))
+        .ok_or_else(|| "online.playMusic requires track.id or track.sourceId".to_string())?;
+    let source_name = string_arg(track, "providerName")
+        .or_else(|| string_arg(&params, "providerName"))
+        .or_else(|| string_arg(track, "sourceName"));
+    let title = string_arg(track, "title")
+        .or_else(|| string_arg(track, "name"))
         .unwrap_or_else(|| "Online Track".to_string());
-    let artist = string_arg(resolved, "artist").or_else(|| {
-        track.and_then(|track| string_arg(track, "artist").or_else(|| artist_arg(track)))
+    let artist = string_arg(track, "artist").or_else(|| artist_arg(track));
+    let album = string_arg(track, "album");
+    let duration = number_arg(track, "duration").map(|duration| duration.max(0.0) as u64);
+    let artwork = string_arg(track, "artwork");
+    let raw_lyrics = string_arg(track, "rawLyrics").or_else(|| string_arg(track, "lyrics"));
+    let lyrics = raw_lyrics.map(|raw_lyrics| TrackLyrics {
+        raw_lyrics: Some(raw_lyrics),
+        lyrics_url: None,
+        formats: Vec::new(),
+        default_format: None,
+        format: None,
+        provider_id: Some(source_provider_id.clone()),
+        provider_name: source_name.clone(),
+        track_id: Some(source_id.clone()),
+        track_raw: track.get("raw").cloned().or_else(|| Some(track.clone())),
     });
-    let album = string_arg(resolved, "album")
-        .or_else(|| track.and_then(|track| string_arg(track, "album")));
-    let duration = number_arg(resolved, "duration")
-        .or_else(|| track.and_then(|track| number_arg(track, "duration")));
-    let artwork = string_arg(resolved, "artwork")
-        .or_else(|| track.and_then(|track| string_arg(track, "artwork")));
-    let raw_lyrics = string_arg(resolved, "rawLyrics")
-        .or_else(|| string_arg(resolved, "lyrics"))
-        .or_else(|| track.and_then(|track| string_arg(track, "rawLyrics")))
-        .or_else(|| track.and_then(|track| string_arg(track, "lyrics")));
-    let source_id = track
-        .and_then(|track| value_to_string(track.get("id")))
-        .or_else(|| string_arg(original_params, "sourceId"));
-    let source_name = track
-        .and_then(|track| string_arg(track, "providerName"))
-        .or_else(|| string_arg(original_params, "providerName"));
-    let source_provider_id = track
-        .and_then(|track| string_arg(track, "providerId"))
-        .or_else(|| string_arg(original_params, "providerId"));
+    let path = format!("plugin://{source_provider_id}/{source_id}");
 
-    crate::player::McpOnlineTrackMetadata {
+    Ok(Track {
+        id: online_track_hash_id(&source_provider_id, &source_id),
+        path,
         title,
         artist,
         album,
         duration,
         artwork,
-        lyrics: raw_lyrics.map(|raw_lyrics| TrackLyrics {
-            raw_lyrics: Some(raw_lyrics),
-            lyrics_url: None,
-            formats: Vec::new(),
-            default_format: None,
-            format: None,
-            provider_id: source_provider_id.clone(),
-            provider_name: source_name.clone(),
-            track_id: source_id.clone(),
-            track_raw: track.cloned(),
-        }),
-        source_id: source_id.or_else(|| Some(url.to_string())),
+        lyrics,
+        source_id: Some(source_id),
         source_name,
-        source_provider_id,
-    }
+        source_provider_id: Some(source_provider_id),
+        added_at: None,
+        scan_id: None,
+        year: None,
+        genre: None,
+        track_number: None,
+        associated_artwork: None,
+        associated_lyrics: None,
+        raw_lyrics: None,
+        lyrics_source_name: None,
+        lyrics_source_url: None,
+        lyrics_formats: Vec::new(),
+        lyrics_default_format: None,
+        lyrics_format: None,
+        lyrics_provider_id: None,
+        lyrics_track_id: None,
+        lyrics_track_raw: track.get("raw").cloned(),
+        source_raw: track.get("raw").cloned().or_else(|| Some(track.clone())),
+    })
+}
+
+fn online_track_hash_id(provider_id: &str, source_id: &str) -> i64 {
+    let mut hasher = DefaultHasher::new();
+    provider_id.hash(&mut hasher);
+    source_id.hash(&mut hasher);
+    -((hasher.finish() & 0x3fff_ffff_ffff_ffff) as i64)
 }
 
 fn get_lyrics(app: &AppHandle, params: Value) -> Result<Value, String> {

@@ -1,13 +1,15 @@
 use crate::api_response::ApiResponse;
 use serde_json::json;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::HashMap;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
 
 const PLUGIN_HTTP_TIMEOUT: Duration = Duration::from_secs(8);
+static PLAYBACK_QUALITIES_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 fn log_plugin_playback(method: &str, args: serde_json::Value) {
     eprintln!("[plugin-playback] {method} args={args}");
@@ -410,21 +412,52 @@ pub async fn resolve_plugin_playback_qualities(
     track: serde_json::Value,
     plugins: Vec<PluginPlaybackPlanPlugin>,
 ) -> Result<ApiResponse<PluginPlaybackQualities>, String> {
+    let generation = PLAYBACK_QUALITIES_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     let result = tauri::async_runtime::spawn_blocking(move || {
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        resolve_plugin_playback_qualities_backend(&worker, provider_id, track, plugins)
+        resolve_plugin_playback_qualities_backend_when_ready(
+            &worker,
+            provider_id,
+            track,
+            plugins,
+            || {
+                if PLAYBACK_QUALITIES_GENERATION.load(Ordering::SeqCst) == generation {
+                    Ok(())
+                } else {
+                    Err("Playback qualities request was replaced.".to_string())
+                }
+            },
+        )
     })
     .await
     .map_err(|err| err.to_string())?;
     Ok(ApiResponse::from_result(result))
 }
 
-fn resolve_plugin_playback_qualities_backend(
+fn resolve_plugin_playback_qualities_backend_when_ready<F>(
     worker: &crate::workers::plugin::PluginWorkerState,
     provider_id: String,
     track: serde_json::Value,
     plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> Result<PluginPlaybackQualities, String> {
+    should_continue: F,
+) -> Result<PluginPlaybackQualities, String>
+where
+    F: FnMut() -> Result<(), String>,
+{
+    resolve_plugin_playback_qualities_backend_checked(worker, provider_id, track, plugins, true, should_continue)
+}
+
+fn resolve_plugin_playback_qualities_backend_checked<F>(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    provider_id: String,
+    track: serde_json::Value,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+    wait_for_ready: bool,
+    mut should_continue: F,
+) -> Result<PluginPlaybackQualities, String>
+where
+    F: FnMut() -> Result<(), String>,
+{
     let plugin = find_playback_plugin(provider_id, plugins)?;
     let entry = plugin
         .entry
@@ -436,41 +469,17 @@ fn resolve_plugin_playback_qualities_backend(
         "track": plugin_track,
     });
 
-    let response = worker.invoke_plugin(
+    let response = invoke_playback_plugin(
+        worker,
         entry,
         request,
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
+        wait_for_ready,
+        &mut should_continue,
     )?;
 
     normalize_plugin_playback_qualities(unwrap_plugin_response_envelope(response)?)
-}
-
-#[tauri::command]
-pub async fn resolve_plugin_playback_source(
-    app: AppHandle,
-    provider_id: String,
-    track: serde_json::Value,
-    preferred_quality: Option<String>,
-    _quality_fallback: String,
-    include_metadata: bool,
-    plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> Result<ApiResponse<PluginPlaybackSource>, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        resolve_plugin_playback_source_backend(
-            &worker,
-            provider_id,
-            track,
-            preferred_quality,
-            _quality_fallback,
-            include_metadata,
-            plugins,
-        )
-    })
-    .await
-    .map_err(|err| err.to_string())?;
-    Ok(ApiResponse::from_result(result))
 }
 
 pub(crate) fn resolve_plugin_playback_source_backend(
@@ -482,6 +491,59 @@ pub(crate) fn resolve_plugin_playback_source_backend(
     include_metadata: bool,
     plugins: Vec<PluginPlaybackPlanPlugin>,
 ) -> Result<PluginPlaybackSource, String> {
+    resolve_plugin_playback_source_backend_checked(
+        worker,
+        provider_id,
+        track,
+        preferred_quality,
+        _quality_fallback,
+        include_metadata,
+        plugins,
+        false,
+        || Ok(()),
+    )
+}
+
+pub(crate) fn resolve_plugin_playback_source_backend_when_ready<F>(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    provider_id: String,
+    track: serde_json::Value,
+    preferred_quality: Option<String>,
+    _quality_fallback: String,
+    include_metadata: bool,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+    should_continue: F,
+) -> Result<PluginPlaybackSource, String>
+where
+    F: FnMut() -> Result<(), String>,
+{
+    resolve_plugin_playback_source_backend_checked(
+        worker,
+        provider_id,
+        track,
+        preferred_quality,
+        _quality_fallback,
+        include_metadata,
+        plugins,
+        true,
+        should_continue,
+    )
+}
+
+fn resolve_plugin_playback_source_backend_checked<F>(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    provider_id: String,
+    track: serde_json::Value,
+    preferred_quality: Option<String>,
+    _quality_fallback: String,
+    include_metadata: bool,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+    wait_for_ready: bool,
+    mut should_continue: F,
+) -> Result<PluginPlaybackSource, String>
+where
+    F: FnMut() -> Result<(), String>,
+{
     log_plugin_playback(
         "resolve_plugin_playback_source input",
         json!({
@@ -507,6 +569,8 @@ pub(crate) fn resolve_plugin_playback_source_backend(
         &plugin,
         &plugin_track,
         preferred_quality.as_deref(),
+        wait_for_ready,
+        &mut should_continue,
     )?;
 
     for quality in qualities {
@@ -525,12 +589,17 @@ pub(crate) fn resolve_plugin_playback_source_backend(
             }),
         );
 
-        match worker.invoke_plugin(
+        let response = invoke_playback_plugin(
+            worker,
             entry.clone(),
             request,
             Some(plugin.id.clone()),
             plugin.permissions.clone(),
-        ) {
+            wait_for_ready,
+            &mut should_continue,
+        );
+
+        match response {
             Ok(response) => {
                 log_plugin_playback(
                     "resolve_plugin_playback_source raw response",
@@ -1441,22 +1510,49 @@ fn fetch_raw_lyrics_from_url(url: &str) -> Result<String, String> {
     crate::lyrics::fetch_lyrics_url_text(url)
 }
 
-fn resolve_playback_quality_attempts(
+fn invoke_playback_plugin<F>(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    entry: String,
+    request: serde_json::Value,
+    plugin_id: Option<String>,
+    permissions: Option<Vec<String>>,
+    wait_for_ready: bool,
+    should_continue: &mut F,
+) -> Result<serde_json::Value, String>
+where
+    F: FnMut() -> Result<(), String>,
+{
+    if wait_for_ready {
+        worker.invoke_plugin_when_ready(entry, request, plugin_id, permissions, should_continue)
+    } else {
+        worker.invoke_plugin(entry, request, plugin_id, permissions)
+    }
+}
+
+fn resolve_playback_quality_attempts<F>(
     worker: &crate::workers::plugin::PluginWorkerState,
     entry: &str,
     plugin: &PluginPlaybackPlanPlugin,
     track: &serde_json::Value,
     preferred_quality: Option<&str>,
-) -> Result<Vec<String>, String> {
+    wait_for_ready: bool,
+    should_continue: &mut F,
+) -> Result<Vec<String>, String>
+where
+    F: FnMut() -> Result<(), String>,
+{
     let request = json!({
         "action": "qualities",
         "track": track,
     });
-    let response = worker.invoke_plugin(
+    let response = invoke_playback_plugin(
+        worker,
         entry.to_string(),
         request,
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
+        wait_for_ready,
+        should_continue,
     )?;
     let qualities = normalize_plugin_playback_qualities(unwrap_plugin_response_envelope(response)?)?;
 

@@ -1,5 +1,5 @@
 ﻿import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import type { CoverImage, CustomTheme, LyricLine, SystemThemeState, Track, TrackLyrics, WallpaperThemeColor } from '../types/music';
+import type { CoverImage, CustomTheme, LyricLine, SystemThemeState, Track, TrackLyrics } from '../types/music';
 import { invokeApi } from './api';
 import { normalizeTrackLyrics } from '../utils/trackLyrics';
 
@@ -206,14 +206,6 @@ export function clearCoverThumbnailCache(path: string): Promise<void> {
   }
 
   return invokeApi<void>('clear_cover_thumbnail_cache', { path });
-}
-
-export function getWallpaperThemeColor(): Promise<WallpaperThemeColor | null> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve(null);
-  }
-
-  return invokeApi<WallpaperThemeColor>('get_wallpaper_theme_color');
 }
 
 export function getSystemThemeState(): Promise<SystemThemeState> {

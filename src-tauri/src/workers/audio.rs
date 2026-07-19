@@ -144,6 +144,14 @@ impl AudioWorkerState {
         })
     }
 
+    pub(crate) fn resume(&self) -> Result<(), String> {
+        self.expect_ok(WorkerRequest {
+            id: "audio-resume".to_string(),
+            method: methods::PLAYER_RESUME.to_string(),
+            payload: json!({}),
+        })
+    }
+
     pub(crate) fn stop(&self, fade: bool) -> Result<(), String> {
         self.expect_ok(WorkerRequest {
             id: "audio-stop".to_string(),
@@ -393,6 +401,7 @@ fn handle_request(runtime: &mut AudioWorkerRuntime, request: WorkerRequest) -> W
             runtime.backend.pause(payload.fade);
             Ok(())
         }),
+        methods::PLAYER_RESUME => response_from_result(request.id, || runtime.backend.resume()),
         methods::PLAYER_STOP => response_from_result(request.id, || {
             let payload = serde_json::from_value::<FadePayload>(request.payload)
                 .map_err(|err| err.to_string())?;
@@ -630,6 +639,14 @@ impl AudioBackend {
                 sink.pause();
             }
         }
+    }
+
+    fn resume(&self) -> Result<(), String> {
+        let Some(sink) = &self.sink else {
+            return Err("No active audio to resume.".to_string());
+        };
+        sink.play();
+        Ok(())
     }
 
     fn stop(&mut self, fade: bool) {

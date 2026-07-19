@@ -12,6 +12,7 @@ pub(crate) mod methods {
     pub(crate) const PLAYER_OUTPUT_DEVICES: &str = "player.outputDevices";
     pub(crate) const PLAYER_PLAY_PATH: &str = "player.playPath";
     pub(crate) const PLAYER_PLAY_URL: &str = "player.playUrl";
+    pub(crate) const PLAYER_RESUME: &str = "player.resume";
     pub(crate) const PLAYER_PAUSE: &str = "player.pause";
     pub(crate) const PLAYER_STOP: &str = "player.stop";
     pub(crate) const PLAYER_SEEK: &str = "player.seek";

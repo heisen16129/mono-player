@@ -4,7 +4,6 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { resolveLocale } from '../i18n';
 import { getSystemThemeState, listLatestAddedTracks, listTracks, removeMusicDir, scanMusicDir, toAudioSource } from '../services/music';
-import { setRustBackendQueue } from '../services/playerBackend';
 import { readPersistentValue, removePersistentValue, writePersistentValue } from '../services/persistentStore';
 import type { AppTheme, CustomTheme, Locale, PlaybackMode, PlaybackSession, PlayerSettings, SystemThemeState, Track, UserPlaylist } from '../types/music';
 import { getErrorMessage } from '../utils/error';
@@ -329,7 +328,6 @@ const latestAddedTracks = ref<Track[]>([]);
   const playbackMode = ref<PlaybackMode>('shuffle');
   const playbackSession = ref<PlaybackSession | null>(null);
   const cachedSystemThemeState = ref<CachedSystemThemeState | null>(null);
-  const queuedNextTrackId = ref<number | null>(null);
   let systemThemeRefreshTask: Promise<void> | null = null;
   let systemThemeRefreshTimer: number | null = null;
   let lastSystemThemeRefreshRequestedAt = 0;
@@ -565,50 +563,8 @@ const latestAddedTracks = ref<Track[]>([]);
     }
   }
 
-  function play(track: Track) {
-    currentTrack.value = track;
-    if (!queue.value.some((item) => item.id === track.id)) {
-      queue.value = [track, ...queue.value];
-    }
-  }
-
   function setCurrentTrack(track: Track | null) {
     currentTrack.value = track;
-  }
-
-  function playQueue(nextQueue: Track[], startTrack?: Track) {
-    const playable = nextQueue.filter((track) => track.path);
-    if (playable.length === 0) return null;
-
-    queue.value = [...playable];
-    queuedNextTrackId.value = null;
-    currentTrack.value =
-      startTrack && playable.some((track) => track.id === startTrack.id) ? startTrack : playable[0];
-    return currentTrack.value;
-  }
-
-  function queueNext(track: Track) {
-    if (!track.path) return false;
-
-    const source = queue.value.length > 0 ? queue.value : tracks.value;
-    const nextQueue = source.filter((item) => item.path && item.id !== track.id);
-    const currentIndex = currentTrack.value
-      ? nextQueue.findIndex((item) => item.id === currentTrack.value?.id)
-      : -1;
-    const insertIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
-
-    nextQueue.splice(insertIndex, 0, track);
-    queue.value = nextQueue;
-    queuedNextTrackId.value = track.id;
-    return true;
-  }
-
-  function queueLast(track: Track) {
-    if (!track.path) return false;
-
-    const source = queue.value.length > 0 ? queue.value : [];
-    queue.value = [...source.filter((item) => item.path), track];
-    return true;
   }
 
   function isFavorite(track: Track | null) {
@@ -653,81 +609,6 @@ const latestAddedTracks = ref<Track[]>([]);
     }
     persistFavorites();
     return true;
-  }
-
-  function playableQueue() {
-    const source = queue.value.length > 0 ? queue.value : tracks.value;
-    return source.filter((track) => track.path);
-  }
-
-  function findCurrentIndex(playable: Track[]) {
-    return currentTrack.value ? playable.findIndex((track) => track.id === currentTrack.value?.id) : -1;
-  }
-
-  function pickRandomTrack(playable: Track[]) {
-    if (playable.length === 0) return null;
-    if (playable.length === 1) return playable[0];
-
-    const currentIndex = findCurrentIndex(playable);
-    let nextIndex = Math.floor(Math.random() * playable.length);
-    if (nextIndex === currentIndex) {
-      nextIndex = (nextIndex + 1) % playable.length;
-    }
-    return playable[nextIndex];
-  }
-
-  function keepCurrentTrack(playable: Track[]) {
-    if (currentTrack.value?.path) return currentTrack.value;
-    return playable[0] ?? null;
-  }
-
-  function playPrevious() {
-    const playable = playableQueue();
-    if (playable.length === 0) return null;
-
-    if (playbackMode.value === 'fixed') {
-      currentTrack.value = keepCurrentTrack(playable);
-      return currentTrack.value;
-    }
-
-    if (playbackMode.value === 'shuffle') {
-      currentTrack.value = pickRandomTrack(playable);
-      return currentTrack.value;
-    }
-
-    const currentIndex = findCurrentIndex(playable);
-    const previousIndex = currentIndex >= 0 ? (currentIndex - 1 + playable.length) % playable.length : 0;
-    currentTrack.value = playable[previousIndex];
-    return currentTrack.value;
-  }
-
-  function playNext() {
-    const playable = playableQueue();
-    if (playable.length === 0) return null;
-
-    if (queuedNextTrackId.value !== null) {
-      const queuedTrack = playable.find((track) => track.id === queuedNextTrackId.value);
-      queuedNextTrackId.value = null;
-      if (queuedTrack) {
-        currentTrack.value = queuedTrack;
-        return currentTrack.value;
-      }
-    }
-
-    if (playbackMode.value === 'fixed') {
-      currentTrack.value = keepCurrentTrack(playable);
-      return currentTrack.value;
-    }
-
-    if (playbackMode.value === 'shuffle') {
-      currentTrack.value = pickRandomTrack(playable);
-      return currentTrack.value;
-    }
-
-    const currentIndex = findCurrentIndex(playable);
-    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % playable.length : 0;
-    currentTrack.value = playable[nextIndex];
-    return currentTrack.value;
   }
 
   function togglePlaybackMode() {
@@ -1163,16 +1044,6 @@ const latestAddedTracks = ref<Track[]>([]);
       if (currentTrack.value && !tracks.value.some((track) => track.id === currentTrack.value?.id)) {
         currentTrack.value = null;
       }
-      void setRustBackendQueue(
-        queue.value,
-        currentTrack.value?.path ?? null,
-        playbackMode.value,
-        settings.value.seamlessPlayback,
-        settings.value.crossfadePlayback,
-        3000,
-      ).catch((err) => {
-        error.value = getErrorMessage(err);
-      });
     }
   }
 
@@ -1327,15 +1198,9 @@ const latestAddedTracks = ref<Track[]>([]);
     hydratePersistedState,
     loadLibrary,
     isFavorite,
-    play,
     setCurrentTrack,
-    playQueue,
     persistPlaybackSession,
     restorePlaybackSession,
-    queueNext,
-    queueLast,
-    playNext,
-    playPrevious,
     recordRecentlyPlayed,
     scanLibrary,
     setMusicDirs,

@@ -88,13 +88,44 @@ pub(crate) fn cached_cover_thumbnail_file_url(
 ) -> Result<Option<String>, String> {
     let audio_path = PathBuf::from(path);
     let state = app.state::<PlayerState>();
-    let cache_path = cached_cover_thumbnail_path(&state.cache_dir()?, &audio_path)?;
+    cached_cover_thumbnail_file_url_in(&state.cache_dir()?, &audio_path)
+}
+
+pub(crate) fn cached_cover_thumbnail_file_url_in(
+    cache_root: &Path,
+    audio_path: &Path,
+) -> Result<Option<String>, String> {
+    let cache_path = cached_cover_thumbnail_path(cache_root, audio_path)?;
+    if cache_path.is_file() {
+        return Ok(cover_file_url(&cache_path));
+    }
+
+    let Some(cover) = read_thumbnail_cover_uncached(audio_path)? else {
+        return Ok(None);
+    };
+    let thumbnail = create_cover_thumbnail(&cover.data)?;
+    fs::write(&cache_path, &thumbnail).map_err(|err| err.to_string())?;
+
+    Ok(cover_file_url(&cache_path))
+}
+
+pub(crate) fn cached_cover_original_file_url_in(
+    cache_root: &Path,
+    audio_path: &Path,
+) -> Result<Option<String>, String> {
+    let Some(cover) = read_cover_uncached(audio_path)? else {
+        return Ok(None);
+    };
+
+    let cache_dir = mono_cache_dir(cache_root).join("cover-originals");
+    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+    let cache_path = cache_dir.join(format!(
+        "{}.{}",
+        cover_cache_key(audio_path),
+        cover_extension(&cover.mime_type)
+    ));
     if !cache_path.is_file() {
-        let Some(cover) = read_thumbnail_cover_uncached(&audio_path)? else {
-            return Ok(None);
-        };
-        let thumbnail = create_cover_thumbnail(&cover.data)?;
-        fs::write(&cache_path, &thumbnail).map_err(|err| err.to_string())?;
+        fs::write(&cache_path, &cover.data).map_err(|err| err.to_string())?;
     }
 
     Ok(cover_file_url(&cache_path))
@@ -108,7 +139,10 @@ fn cached_cover_thumbnail_path(cache_root: &Path, audio_path: &Path) -> Result<P
 
 #[cfg(target_os = "windows")]
 fn cover_file_url(path: &Path) -> Option<String> {
-    Some(format!("file://{}", path.to_string_lossy()))
+    Some(format!(
+        "file:///{}",
+        path.to_string_lossy().replace('\\', "/")
+    ))
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -221,5 +255,13 @@ fn cover_mime_type(path: &Path) -> Option<&'static str> {
         Some("png") => Some("image/png"),
         Some("webp") => Some("image/webp"),
         _ => None,
+    }
+}
+
+fn cover_extension(mime_type: &str) -> &'static str {
+    match mime_type.to_ascii_lowercase().as_str() {
+        "image/png" => "png",
+        "image/webp" => "webp",
+        _ => "jpg",
     }
 }

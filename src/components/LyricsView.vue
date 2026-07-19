@@ -10,6 +10,7 @@ import { getPluginLyricsMetadata, listPluginLyricSearchProviders, searchPluginLy
 import { t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import type { PluginSearchProvider, PluginSearchTrack } from '../types/plugin';
+import { artworkDisplaySrc } from '../utils/artwork';
 import { getErrorMessage } from '../utils/error';
 import { parseRawLyrics } from '../utils/lyrics';
 import { getPlayerOriginalCoverCache, playerCoverCacheKey } from '../services/playerCoverCache';
@@ -18,6 +19,7 @@ import { normalizeTrackLyrics } from '../utils/trackLyrics';
 const MAX_LYRICS_COVER_CACHE = 80;
 const lyricsCoverCache = new Map<string, { url: string; data: number[] | null; mimeType: string | null }>();
 const lyricsCoverRequestCache = new Map<string, Promise<{ url: string; data: number[] | null; mimeType: string | null } | null>>();
+const failedArtworkUrls = new Set<string>();
 const componentCoverRefs = new Map<string, number>();
 let lyricsCoverCacheVersion = 0;
 
@@ -25,6 +27,8 @@ const props = defineProps<{
   activeTrack: Track | null;
   currentTime: number;
   isPlaying: boolean;
+  lyricsStatus?: 'idle' | 'loading' | 'ready' | 'empty' | 'error';
+  lyricsError?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -79,6 +83,7 @@ let browseRestoreTimer = 0;
 let lyricsScrollHideTimer = 0;
 let lyricAnimationFrame = 0;
 let lastLyricFrameAt = 0;
+let lyricsLoadRequestId = 0;
 let restoreMaximizedAfterFullscreen = false;
 
 const MIN_LYRIC_FONT_SIZE = 14;
@@ -87,6 +92,12 @@ const player = usePlayerStore();
 const lyricFontSize = computed(() => player.settings.lyricFontSize);
 const syncedLyricTime = computed(() => smoothCurrentTime.value + lyricTimeOffset.value);
 const activeLyrics = computed(() => normalizeTrackLyrics(props.activeTrack));
+const isLyricsPending = computed(() => (
+  !loadedLyricLines.value.length && (props.lyricsStatus === 'loading' || isLoadingLyrics.value)
+));
+const emptyLyricsMessage = computed(() => (
+  props.lyricsStatus === 'error' ? props.lyricsError || '歌词加载失败' : t(player.settings.locale, 'noLyrics')
+));
 const hasAssociatedLyrics = computed(() => Boolean(props.activeTrack?.associatedLyrics?.rawLyrics?.trim()));
 const activeArtwork = computed(() => props.activeTrack?.associatedArtwork ?? props.activeTrack?.artwork ?? null);
 const availableLyricFormats = computed(() => {
@@ -108,6 +119,16 @@ function isLocalTrackPath(path?: string | null) {
   if (!path) return false;
   return !path.startsWith('http://') && !path.startsWith('https://') && !path.startsWith('plugin://');
 }
+
+function trackIdentityKey(track?: Track | null) {
+  const providerId = track?.sourceProviderId?.trim();
+  const sourceId = track?.sourceId?.trim();
+  if (providerId && sourceId) return `plugin:${providerId}:${sourceId}`;
+  if (!track) return '';
+  return `${track.id}:${track.path}`;
+}
+
+const activeTrackIdentityKey = computed(() => trackIdentityKey(props.activeTrack));
 
 function resolveRawLyrics(rawLyrics: string, format?: string | null) {
   return resolveLyricsSource({
@@ -198,19 +219,19 @@ const displayCoverUrl = computed(() => {
   if (coverUrl.value) return coverUrl.value;
 
   const path = props.activeTrack?.path;
-  if (!path) return '';
+  const identityKey = activeTrackIdentityKey.value;
+  if (!path || !identityKey) return '';
 
   const artwork = activeArtwork.value;
   const coverVersion = props.activeTrack.coverVersion;
-  const fullCover = lyricsCoverCache.get(lyricsCoverCacheKey(path, artwork, coverVersion));
+  const fullCover = lyricsCoverCache.get(lyricsCoverCacheKey(identityKey, artwork, coverVersion));
   if (fullCover?.url) return fullCover.url;
 
-  return lyricsCoverCache.get(lyricsCoverThumbCacheKey(path, artwork, coverVersion))?.url ?? '';
+  return lyricsCoverCache.get(lyricsCoverThumbCacheKey(identityKey, artwork, coverVersion))?.url ?? '';
 });
 
 const backgroundCoverUrl = computed(() => {
-  if (props.activeTrack?.associatedArtwork) return coverUrl.value || props.activeTrack.associatedArtwork;
-  return getPlayerOriginalCoverCache(playerCoverCacheKey(props.activeTrack))?.url ?? coverUrl.value ?? '';
+  return displayCoverUrl.value || getPlayerOriginalCoverCache(playerCoverCacheKey(props.activeTrack))?.url || '';
 });
 
 const lyricsViewStyle = computed(() => ({
@@ -278,8 +299,8 @@ function clearLyricsCoverCache() {
   componentCoverRefs.clear();
 }
 
-async function loadLyricsCover(path: string, artwork: string | null | undefined, coverVersion: number | undefined) {
-  const key = lyricsCoverCacheKey(path, artwork, coverVersion);
+async function loadLyricsCover(path: string, artwork: string | null | undefined, coverVersion: number | undefined, cacheSource = path) {
+  const key = lyricsCoverCacheKey(cacheSource, artwork, coverVersion);
   const cached = lyricsCoverCache.get(key);
   if (cached) return { key, cover: cached };
 
@@ -288,8 +309,9 @@ async function loadLyricsCover(path: string, artwork: string | null | undefined,
 
   const requestCacheVersion = lyricsCoverCacheVersion;
   const request = (async () => {
-    if (artwork?.trim()) {
-      return { url: artwork.trim(), data: null, mimeType: null };
+    const artworkUrl = artworkDisplaySrc(artwork);
+    if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) {
+      return { url: artworkUrl, data: null, mimeType: null };
     }
 
     const cover = await readCover(path);
@@ -318,8 +340,8 @@ async function loadLyricsCover(path: string, artwork: string | null | undefined,
   return { key, cover: await request };
 }
 
-async function loadLyricsCoverThumbnail(path: string, artwork: string | null | undefined, coverVersion: number | undefined) {
-  const key = lyricsCoverThumbCacheKey(path, artwork, coverVersion);
+async function loadLyricsCoverThumbnail(path: string, artwork: string | null | undefined, coverVersion: number | undefined, cacheSource = path) {
+  const key = lyricsCoverThumbCacheKey(cacheSource, artwork, coverVersion);
   const cached = lyricsCoverCache.get(key);
   if (cached) return { key, cover: cached };
 
@@ -328,8 +350,9 @@ async function loadLyricsCoverThumbnail(path: string, artwork: string | null | u
 
   const requestCacheVersion = lyricsCoverCacheVersion;
   const request = (async () => {
-    if (artwork?.trim()) {
-      return { url: artwork.trim(), data: null, mimeType: null };
+    const artworkUrl = artworkDisplaySrc(artwork);
+    if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) {
+      return { url: artworkUrl, data: null, mimeType: null };
     }
 
     const cover = await readCoverThumbnail(path);
@@ -359,27 +382,35 @@ async function loadLyricsCoverThumbnail(path: string, artwork: string | null | u
 }
 
 watch(
-  () => [props.activeTrack?.path, props.activeTrack?.title, props.activeTrack?.artist, activeArtwork.value, activeLyrics.value?.rawLyrics, activeLyrics.value?.lyricsUrl, activeLyrics.value?.format, props.activeTrack?.coverVersion] as const,
-  async ([path, _title, _artist, artwork, rawLyrics, _lyricsUrl, _format, coverVersion]) => {
-    loadedLyricLines.value = [];
+  () => [activeTrackIdentityKey.value, props.activeTrack?.path, props.activeTrack?.title, props.activeTrack?.artist, activeArtwork.value, activeLyrics.value?.rawLyrics, activeLyrics.value?.lyricsUrl, activeLyrics.value?.format, props.activeTrack?.coverVersion] as const,
+  async ([identityKey, path, _title, _artist, artwork, rawLyrics, _lyricsUrl, _format, coverVersion]) => {
+    const requestId = ++lyricsLoadRequestId;
     lyricTimeOffset.value = 0;
     isLyricSyncOpen.value = false;
     const previousCoverCacheKey = activeCoverCacheKey.value;
     activeCoverCacheKey.value = null;
-    if (!path) {
+    if (!identityKey || !path) {
       releaseLyricsCoverCache(previousCoverCacheKey);
+      loadedLyricLines.value = [];
       coverUrl.value = '';
       coverData.value = null;
       coverMimeType.value = null;
       return;
     }
 
-    const playerCoverCache = getPlayerOriginalCoverCache(playerCoverCacheKey(props.activeTrack));
-    const nextCoverCacheKey = lyricsCoverCacheKey(path, artwork, coverVersion);
-    const nextThumbCacheKey = lyricsCoverThumbCacheKey(path, artwork, coverVersion);
+    const artworkUrl = artworkDisplaySrc(artwork);
+    const usableArtworkUrl = artworkUrl && !failedArtworkUrls.has(artworkUrl) ? artworkUrl : '';
+    const playerCoverCache = usableArtworkUrl ? null : getPlayerOriginalCoverCache(playerCoverCacheKey(props.activeTrack));
+    const nextCoverCacheKey = lyricsCoverCacheKey(identityKey, artwork, coverVersion);
+    const nextThumbCacheKey = lyricsCoverThumbCacheKey(identityKey, artwork, coverVersion);
     const cachedCover = playerCoverCache ?? lyricsCoverCache.get(nextCoverCacheKey) ?? lyricsCoverCache.get(nextThumbCacheKey);
     const cachedCoverKey = lyricsCoverCache.has(nextCoverCacheKey) ? nextCoverCacheKey : nextThumbCacheKey;
-    if (cachedCover) {
+    if (usableArtworkUrl) {
+      releaseLyricsCoverCache(previousCoverCacheKey);
+      coverUrl.value = usableArtworkUrl;
+      coverData.value = null;
+      coverMimeType.value = null;
+    } else if (cachedCover) {
       if (!playerCoverCache) retainLyricsCoverCache(cachedCoverKey);
       releaseLyricsCoverCache(previousCoverCacheKey);
       activeCoverCacheKey.value = playerCoverCache ? null : cachedCoverKey;
@@ -403,10 +434,12 @@ watch(
           lyricsFormat: activeLyrics.value?.format ?? null,
         })
         : parseRawLyrics(activeLyrics.value?.rawLyrics ?? rawLyrics ?? '');
+      if (requestId !== lyricsLoadRequestId) return;
       loadedLyricLines.value = normalizeLyricLines(lyrics);
 
-      if (!lyricsCoverCache.has(nextCoverCacheKey) && !lyricsCoverCache.has(nextThumbCacheKey)) {
-        const { key, cover } = await loadLyricsCoverThumbnail(path, artwork, coverVersion);
+      if (!usableArtworkUrl && !lyricsCoverCache.has(nextCoverCacheKey) && !lyricsCoverCache.has(nextThumbCacheKey)) {
+        const { key, cover } = await loadLyricsCoverThumbnail(path, artwork, coverVersion, identityKey);
+        if (requestId !== lyricsLoadRequestId) return;
         if (cover) {
           retainLyricsCoverCache(key);
           releaseLyricsCoverCache(activeCoverCacheKey.value);
@@ -417,17 +450,21 @@ watch(
         }
       }
 
-      const { key, cover } = await loadLyricsCover(path, artwork, coverVersion);
-      if (key === activeCoverCacheKey.value && coverUrl.value) return;
-      if (cover) {
-        retainLyricsCoverCache(key);
-        releaseLyricsCoverCache(activeCoverCacheKey.value);
-        activeCoverCacheKey.value = key;
-        coverUrl.value = cover.url;
-        coverData.value = cover.data;
-        coverMimeType.value = cover.mimeType;
+      if (!usableArtworkUrl) {
+        const { key, cover } = await loadLyricsCover(path, artwork, coverVersion, identityKey);
+        if (requestId !== lyricsLoadRequestId) return;
+        if (key === activeCoverCacheKey.value && coverUrl.value) return;
+        if (cover) {
+          retainLyricsCoverCache(key);
+          releaseLyricsCoverCache(activeCoverCacheKey.value);
+          activeCoverCacheKey.value = key;
+          coverUrl.value = cover.url;
+          coverData.value = cover.data;
+          coverMimeType.value = cover.mimeType;
+        }
       }
     } finally {
+      if (requestId !== lyricsLoadRequestId) return;
       isLoadingLyrics.value = false;
       await syncLyricsToCurrentTime();
     }
@@ -657,7 +694,7 @@ async function applyPluginLyrics(track: PluginSearchTrack) {
       return;
     }
 
-    const artwork = track.artwork?.trim() || null;
+    const artwork = artworkDisplaySrc(track.artwork) || null;
     if (artwork) {
       releaseLyricsCoverCache(activeCoverCacheKey.value);
       activeCoverCacheKey.value = null;
@@ -969,10 +1006,31 @@ onBeforeUnmount(() => {
 });
 
 function handleCoverError() {
+  if (coverUrl.value && !coverUrl.value.startsWith('blob:')) {
+    failedArtworkUrls.add(coverUrl.value);
+  }
   const key = activeCoverCacheKey.value;
   deleteLyricsCoverCache(key);
   activeCoverCacheKey.value = null;
   coverUrl.value = '';
+  const track = props.activeTrack;
+  if (!track?.path) return;
+  void (async () => {
+    const identityKey = activeTrackIdentityKey.value || track.path;
+    const { key, cover } = await loadLyricsCoverThumbnail(
+      track.path,
+      activeArtwork.value,
+      track.coverVersion,
+      identityKey,
+    );
+    if (!cover || props.activeTrack?.path !== track.path) return;
+    retainLyricsCoverCache(key);
+    releaseLyricsCoverCache(activeCoverCacheKey.value);
+    activeCoverCacheKey.value = key;
+    coverUrl.value = cover.url;
+    coverData.value = cover.data;
+    coverMimeType.value = cover.mimeType;
+  })();
 }
 </script>
 
@@ -1028,9 +1086,9 @@ function handleCoverError() {
           @scroll="syncScrollThumb"
           @wheel.passive="handleLyricsWheel"
         >
-          <small v-if="isLoadingLyrics" class="lyrics-hint">{{ t(player.settings.locale, 'lyricsLoading') }}</small>
+          <small v-if="isLyricsPending" class="lyrics-hint">{{ t(player.settings.locale, 'lyricsLoading') }}</small>
           <div v-else-if="!loadedLyricLines.length" class="lyrics-empty">
-            <small class="lyrics-hint">{{ t(player.settings.locale, 'noLyrics') }}</small>
+            <small class="lyrics-hint">{{ emptyLyricsMessage }}</small>
             <button class="lyrics-search-link" type="button" @click.stop="openLyricSearchDialog">搜索歌词</button>
           </div>
           <p
@@ -1169,7 +1227,7 @@ function handleCoverError() {
               @click="applyPluginLyrics(track)"
             >
               <span class="lyrics-search-cover">
-                <img v-if="track.artwork" :src="track.artwork" alt="" />
+                <img v-if="track.artwork" :src="artworkDisplaySrc(track.artwork)" alt="" />
                 <Search v-else :size="18" />
               </span>
               <span class="lyrics-search-meta">
