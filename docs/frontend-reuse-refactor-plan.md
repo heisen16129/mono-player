@@ -139,18 +139,77 @@
 | 步骤 | 状态 | 验证方式 | 说明 |
 | --- | --- | --- | --- |
 | 1. 写入职责拆分计划 | 已完成 | 文档已更新 | 明确下一轮只处理职责拆分，不改业务语义。 |
-| 2. 拆分 App 当前播放状态 | 未开始 | 构建通过；本地、在线、恢复播放的 `activeTrack` 表现不变 | 抽 `useActiveTrackState`，收敛 `selectedTrack`、`onlineActiveTrack`、`activeTrack`、当前播放来源判断。 |
-| 3. 拆分 App 在线播放流程 | 未开始 | 构建通过；在线搜索播放、队列播放、切音质、下载优先本地逻辑不变 | 抽 `useOnlinePlayback`，收敛在线播放解析、在线队列 Track 组装、在线错误处理。 |
-| 4. 拆分 App 下载状态 | 未开始 | 构建通过；下载按钮、下载列表、下载事件更新不变 | 抽 `useDownloadState`，收敛下载列表、下载 key、下载事件、入队逻辑。 |
-| 5. 拆分 App 歌词状态 | 未开始 | 构建通过；本地/在线歌词加载、关联歌词、歌词格式切换不变 | 抽 `useLyricsState`，收敛歌词状态、后台歌词请求、歌词回写。 |
-| 6. 拆分 PlayerDock 内部职责 | 未开始 | 构建通过；播放栏、队列弹层、定时关闭、音量/倍速/音质交互不变 | 优先抽 `useSmoothProgress`、`useSleepTimer`、`useQueuePopover`，封面逻辑单独评估。 |
-| 7. 拆分 LyricsView 内部职责 | 未开始 | 构建通过；歌词滚动、高亮、搜索、下载、全屏不变 | 优先抽 `useLyricsScroll`、`useLyricsSearch`、`useLyricsDownload`，歌词封面缓存单独评估。 |
-| 8. 评估封面缓存服务化 | 未开始 | 构建通过；列表封面、播放栏封面、歌词页背景无回退闪烁 | 在上面拆分稳定后，再评估是否抽 `useCoverCache` / `coverCacheService`。 |
-| 9. 构建验证与收尾扫描 | 未开始 | `npm run build` 通过，职责重复点重新扫描 | 回写最终结果。 |
+| 2. 拆分 App 当前播放状态 | 已完成 | `npm run build` 已通过 | 已抽 `useActiveTrackState`，收敛 `selectedTrack`、`onlineActiveTrack`、`activeTrack`、当前播放来源判断。 |
+| 3. 拆分 App 在线播放流程 | 已完成 | `npm run build` 已通过 | 已先抽出在线 Track key、队列 Track 组装、队列匹配和在线播放队列组装纯逻辑；保留原播放请求时序不变。 |
+| 4. 拆分 App 下载状态 | 已完成 | `npm run build` 已通过 | 已抽 `useDownloadState`，收敛下载列表、下载 key、持久化和下载事件落库；`App.vue` 保留下载提示、入队请求和上下文菜单行为。 |
+| 5. 拆分 App 歌词状态 | 已完成 | `npm run build` 已通过 | 已抽 `useLyricsState`，收敛歌词页状态、歌词 Track key、当前歌词格式派生和请求状态更新；歌词请求与回写流程保留在 `App.vue`。 |
+| 6. 拆分 PlayerDock 内部职责 | 已完成 | `npm run build` 已通过 | 已先抽 `useSleepTimer`，收敛定时关闭输入、倒计时、暂停/恢复、到点执行和播完停止标记；播放进度、队列弹层和音量/音质交互未改。 |
+| 7. 拆分 LyricsView 内部职责 | 已完成 | `npm run build` 已通过 | 已先抽 `useLyricsSearch`，收敛歌词搜索弹窗、插件来源、分页、去重和加载状态；应用歌词、滚动、高亮、下载和封面缓存未改。 |
+| 8. 评估封面缓存服务化 | 已完成 | 已扫描封面缓存调用点；本步不改代码 | 当前 `PlayerDock`、`LyricsView`、`TrackCoverThumb`、`FolderCover` 的缓存生命周期差异较大，先保留局部缓存，避免引入封面闪烁回退风险。 |
+| 9. 构建验证与收尾扫描 | 已完成 | `npm run build` 已通过，职责拆分引用点已扫描 | 已确认新增 composable / 工具均被使用，回写最终结果。 |
 
 ### 执行记录
 
 - 2026-07-20：写入下一轮职责拆分计划，后续按步骤执行并回写状态。
+- 2026-07-21：新增 `useActiveTrackState`，迁移 `App.vue` 当前播放状态源和直接派生值；保留原播放流程不变，`npm run build` 通过。
+- 2026-07-21：新增 `utils/onlineTrack.ts`，迁移在线 Track key、在线队列 Track 组装、候选插件 Track 匹配、在线队列构建纯逻辑；`App.vue` 保留播放流程编排，`npm run build` 通过。
+- 2026-07-21：新增 `useDownloadState`，迁移下载列表、已下载/下载中 key、下载持久化、下载事件状态更新；`App.vue` 保留提示和下载入队动作，`npm run build` 通过。
+- 2026-07-21：新增 `useLyricsState`，迁移歌词页状态、歌词 Track key、当前歌词格式派生和请求状态更新；本地/在线歌词请求与回写流程未改，`npm run build` 通过。
+- 2026-07-21：新增 `useSleepTimer`，迁移 `PlayerDock` 定时关闭状态、倒计时、暂停/恢复、预设时长和播完停止标记；播放栏其他交互未改，`npm run build` 通过。
+- 2026-07-21：新增 `useLyricsSearch`，迁移 `LyricsView` 搜索弹窗、插件来源、搜索分页、结果去重和搜索状态；应用歌词与歌词显示逻辑未改，`npm run build` 通过。
+- 2026-07-21：完成封面缓存服务化评估；`PlayerDock` 负责当前播放封面和系统缓存桥接，`LyricsView` 负责歌词页全图/缩略图引用计数，`TrackCoverThumb` 与 `FolderCover` 负责列表级缩略图缓存，生命周期不同，本轮不合并为公共服务。
+- 2026-07-21：完成最终构建验证与引用扫描；`npm run build` 通过，新增 `useActiveTrackState`、`useDownloadState`、`useLyricsState`、`useSleepTimer`、`useLyricsSearch`、`utils/onlineTrack.ts` 均已接入使用。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- 已扫描新增职责拆分入口，确认 composable / 工具文件均被引用。
+- 本轮只拆分前端职责边界，没有改 Rust 后端、播放返回结构、队列数据结构和歌词解析语义。
+
+### 后续统一处理记录
+
+- 2026-07-21：新增 `useOnlineSearch`，迁移 `App.vue` 在线搜索状态、插件来源、搜索分页、加载更多、搜索错误状态；播放、下载、队列逻辑未改，`npm run build` 通过。
+- 2026-07-21：新增 `useQueuePopover`，迁移 `PlayerDock` 播放队列弹层开关、外部点击关闭、当前歌曲定位和队列项点击转发；后端播放队列命令未改，`npm run build` 通过。
+- 2026-07-21：新增 `useLyricsDownload`，迁移 `LyricsView` 歌词下载、封面下载、下载标题、下载目录和关联歌词来源展示；歌词解析和应用歌词逻辑未改，`npm run build` 通过。
+
+## App 小状态拆分计划
+
+### 目标
+
+继续收敛 `App.vue` 里低风险、局部状态明显的小职责。只拆状态和计时器/持久化逻辑，不改播放流程、歌词解析、封面缓存、Rust 队列和后端命令。
+
+### 边界
+
+- 不处理 `PlayerDock` 播放进度。
+- 不处理 `LyricsView` 歌词滚动和高亮。
+- 不处理封面缓存服务化。
+- 每一步完成后运行 `npm run build` 并回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 App 小状态拆分计划 | 已完成 | 文档已更新 | 明确本轮只处理低风险 App 局部状态。 |
+| 2. 拆分歌词 dock 自动隐藏 | 已完成 | `npm run build` 已通过 | 已抽 `useLyricsDockAutoHide`，收敛 hover、readyToHide、10 秒隐藏计时器。 |
+| 3. 拆分在线音质刷新状态 | 已完成 | `npm run build` 已通过 | 已抽 `useOnlineQualityRefresh`，收敛音质选项、当前音质、延迟刷新和请求过期判断。 |
+| 4. 拆分搜索历史状态 | 已完成 | `npm run build` 已通过 | 已抽 `useSearchHistory`，收敛读取、保存、数量限制和排除关键词。 |
+| 5. 拆分曲库面板宽度拖拽 | 已完成 | `npm run build` 已通过 | 已抽 `useLibraryPanelResize`，收敛宽度持久化、clamp、pointermove/pointerup。 |
+| 6. 构建验证与收尾扫描 | 已完成 | `npm run build` 已通过，引用点已扫描 | 已回写最终验证结果。 |
+
+### 执行记录
+
+- 2026-07-21：写入 App 小状态拆分计划，后续按步骤执行并回写状态。
+- 2026-07-21：新增 `useLyricsDockAutoHide`，迁移歌词 dock 自动隐藏 hover 状态、10 秒隐藏计时器和相关 watch；`npm run build` 通过。
+- 2026-07-21：新增 `useOnlineQualityRefresh`，迁移在线音质选项、当前音质、延迟刷新和请求过期判断；`npm run build` 通过。
+- 2026-07-21：新增 `useSearchHistory`，迁移搜索历史读取、保存、数量限制和排除关键词；`npm run build` 通过。
+- 2026-07-21：新增 `useLibraryPanelResize`，迁移曲库面板宽度持久化、宽度 clamp、拖拽事件和退出清理；`npm run build` 通过。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `App.vue` 内旧的在线音质刷新计时器、搜索历史持久化函数、曲库面板拖拽函数已无残留。
+- `useLyricsDockAutoHide`、`useOnlineQualityRefresh`、`useSearchHistory`、`useLibraryPanelResize` 均已从 `App.vue` 接入使用。
+- 本轮只拆分前端小状态职责，没有修改播放流程、歌词解析、封面缓存、Rust 队列和后端命令。
 
 ## 按钮样式统一计划
 
@@ -176,3 +235,122 @@
 - `npm run build` 已通过。
 - `primary-button`、`secondary-button`、`confirm-button` 普通样式已收敛到 `styles/base.css`。
 - `theme-tokens.css` 保留主题色覆盖；`SettingsView` 只保留 `secondary-button.compact` 的页面级 hover/focus 强调。
+
+## SettingsView 功能拆分计划
+
+### 目标
+
+按设置页 tab 的真实功能边界拆分 `SettingsView.vue`，让入口文件只保留 tab 编排、公共状态和外部服务调用。每个设置面板独立承载自己的模板结构，暂不改变任何设置项语义和持久化行为。
+
+### 边界
+
+- 不修改 player store 的设置字段和 setter。
+- 不改变 MCP、缓存、输出设备等服务调用行为。
+- 不迁移到新的状态管理方案。
+- 每完成一个步骤运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 SettingsView 拆分计划 | 已完成 | 文档已更新 | 明确按 tab 功能拆，不做业务语义改动。 |
+| 2. 拆分通用设置面板 | 已完成 | `npm run build` 已通过 | 已抽 `GeneralSettingsPanel`，承载关闭行为、搜索历史、列表列、右键菜单、语言、下载目录。 |
+| 3. 拆分播放设置面板 | 已完成 | `npm run build` 已通过 | 已抽 `PlaybackSettingsPanel`，承载播放过渡、缓存、输出设备、定时关闭、失败策略。 |
+| 4. 拆分歌词 / MCP / 插件设置面板 | 已完成 | `npm run build` 已通过 | 已抽 `LyricsSettingsPanel`、`McpSettingsPanel`、`PluginSettingsPanel`。 |
+| 5. 构建验证与收尾扫描 | 已完成 | `npm run build` 已通过，引用点已扫描 | 已回写最终验证结果。 |
+
+### 执行记录
+
+- 2026-07-21：写入 SettingsView 功能拆分计划，后续按步骤执行并回写状态。
+- 2026-07-21：新增 `GeneralSettingsPanel`，迁移通用设置 tab 模板和下载目录选择逻辑；`npm run build` 通过。
+- 2026-07-21：新增 `PlaybackSettingsPanel`，迁移播放过渡、缓存管理、输出设备、定时关闭和播放失败策略；`npm run build` 通过。
+- 2026-07-21：新增 `LyricsSettingsPanel`、`McpSettingsPanel`、`PluginSettingsPanel`，迁移歌词、MCP、插件设置 tab；`npm run build` 通过。
+- 2026-07-21：将设置页样式按组件归属迁回各 settings 面板的 scoped style，`SettingsView.vue` 只保留页面壳和兜底 tab 样式；`npm run build` 通过。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `SettingsView.vue` 从 973 行降到 71 行，入口只保留 tab 编排、标题区域、页面壳样式和兜底 tab 样式。
+- 已新增 `components/settings/GeneralSettingsPanel.vue`、`PlaybackSettingsPanel.vue`、`LyricsSettingsPanel.vue`、`McpSettingsPanel.vue`、`PluginSettingsPanel.vue`。
+- 设置页样式已按组件归属放回各 settings 面板的 scoped style，没有保留单独的全局设置页 CSS。
+- 已扫描父组件，通用设置、播放设置、歌词设置、MCP 设置、插件设置相关函数和常量没有继续残留在 `SettingsView.vue`。
+- 本轮只拆分设置页前端组件，没有修改 player store、Rust 后端、播放流程、MCP 服务行为和设置字段语义。
+
+## PluginManagerView 功能拆分计划
+
+### 目标
+
+按插件管理页的真实 UI 功能边界拆分 `PluginManagerView.vue`，让入口组件继续负责插件数据加载、安装卸载、拖拽排序和批量动作，子组件只负责展示和事件转发。暂不改变插件服务调用、插件排序、订阅保存和安装卸载语义。
+
+### 边界
+
+- 不修改 `services/plugins.ts`。
+- 不修改插件数据结构、订阅结构和安装卸载流程。
+- 不改拖拽排序逻辑，只迁移表格模板事件。
+- 每完成一个步骤运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 PluginManagerView 拆分计划 | 已完成 | 文档已更新 | 明确只拆 UI 功能块，不改插件业务语义。 |
+| 2. 拆分顶部操作和订阅输入区 | 已完成 | `npm run build` 已通过 | 已抽 `PluginManagerActions`、`PluginSubscriptionForm`。 |
+| 3. 拆分批量操作区和插件表格 | 已完成 | `npm run build` 已通过 | 已抽 `PluginBulkActions`、`PluginTable`，保留父组件状态和事件处理。 |
+| 4. 拆分加载覆盖层并收敛样式 | 已完成 | `npm run build` 已通过 | 已抽 `PluginLoadingOverlay`，并将插件管理页样式按组件迁回 scoped style。 |
+| 5. 构建验证与收尾扫描 | 已完成 | `npm run build` 已通过，引用点已扫描 | 已回写最终验证结果。 |
+
+### 执行记录
+
+- 2026-07-21：写入 PluginManagerView 功能拆分计划，后续按步骤执行并回写状态。
+- 2026-07-21：新增 `PluginManagerActions`、`PluginSubscriptionForm`，迁移顶部操作按钮和订阅输入区；`npm run build` 通过。
+- 2026-07-21：新增 `PluginBulkActions`、`PluginTable` 和插件行类型文件，迁移批量操作条、插件表格、空状态和行内操作；`npm run build` 通过。
+- 2026-07-21：新增 `PluginLoadingOverlay`，迁移添加订阅加载层；插件管理页样式已按组件迁回 scoped style，删除全局 `styles/plugin-manager.css` 引用；`npm run build` 通过。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `PluginManagerView.vue` 从 901 行降到 367 行，入口继续保留插件数据加载、安装卸载、拖拽排序和批量动作。
+- 已新增 `components/plugin-manager/PluginManagerActions.vue`、`PluginSubscriptionForm.vue`、`PluginBulkActions.vue`、`PluginTable.vue`、`PluginLoadingOverlay.vue`、`types.ts`。
+- 插件管理页样式已按组件归属放回 `PluginManagerView.vue` 和 `components/plugin-manager/*.vue` 的 scoped style，没有保留独立全局 `plugin-manager.css`。
+- 已扫描父组件，顶部按钮图标、订阅输入、批量操作、插件表格、空状态和加载覆盖层模板没有继续残留在 `PluginManagerView.vue`。
+- 本轮只拆分插件管理页前端组件和样式位置，没有修改插件服务、插件数据结构、订阅保存、安装卸载和拖拽排序语义。
+
+## ThemeView 功能拆分计划
+
+### 目标
+
+按主题页功能边界拆分 `ThemeView.vue`，让入口组件保留主题数据、系统主题监听、导入/安装/选择事件编排；子组件负责本地主题列表、主题市场列表和各自 scoped CSS。拆分时不改变主题变量、主题安装、主题删除和系统主题预览语义。
+
+### 边界
+
+- 不修改 player store 的主题字段和 setter。
+- 不修改内置主题变量和市场主题变量。
+- 不改变自定义主题导入、删除、安装、使用逻辑。
+- CSS 跟随拆出来的组件，避免新增全局主题页 CSS。
+- 每完成一个步骤运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 ThemeView 拆分计划 | 已完成 | 文档已更新 | 明确只拆主题页 UI 功能块和 scoped CSS。 |
+| 2. 拆分本地主题列表 | 已完成 | `npm run build` 已通过 | 已抽 `LocalThemeGrid`，承载导入卡、内置主题卡、自定义主题卡和本地主题 CSS。 |
+| 3. 拆分主题市场列表 | 已完成 | `npm run build` 已通过 | 已抽 `MarketThemeGrid`，承载市场主题卡、下载/使用按钮和市场主题 CSS。 |
+| 4. 构建验证与收尾扫描 | 已完成 | `npm run build` 已通过，引用点已扫描 | 已回写最终验证结果。 |
+
+### 执行记录
+
+- 2026-07-21：写入 ThemeView 功能拆分计划，后续按步骤执行并回写状态。
+- 2026-07-21：新增 `components/theme/types.ts`，将主题卡片类型从父组件移出。
+- 2026-07-21：新增 `LocalThemeGrid`，迁移导入主题卡、内置主题卡、自定义主题卡和本地主题 scoped CSS；`npm run build` 通过。
+- 2026-07-21：新增 `MarketThemeGrid`，迁移主题市场卡、下载/使用按钮和市场主题 scoped CSS；`npm run build` 通过。
+- 2026-07-21：`ThemeView.vue` 接入两个主题列表子组件，父组件只保留主题数据、系统主题监听、导入/安装/选择事件编排和页面壳样式；`npm run build` 通过。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `ThemeView.vue` 从 808 行降到 364 行。
+- 主题卡片列表模板已迁移到 `components/theme/LocalThemeGrid.vue` 和 `components/theme/MarketThemeGrid.vue`。
+- 主题卡片相关 CSS 已跟随各自组件放入 scoped style，没有新增全局主题页 CSS。
+- 已扫描 `ThemeView.vue` 和 `components/theme`，父组件没有继续保留 `theme-card`、`theme-card-preview`、`theme-card-actions`、`theme-card-delete` 等卡片模板和样式。
+- 本轮只拆分主题页前端组件和样式位置，没有修改 player store、主题变量、自定义主题导入/删除/安装/使用逻辑和系统主题预览语义。

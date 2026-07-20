@@ -2,15 +2,16 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronDown, Maximize2, Minimize2, Music } from '@lucide/vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useLyricsDownload } from '../composables/useLyricsDownload';
+import { useLyricsSearch } from '../composables/useLyricsSearch';
 import { useScrollingState } from '../composables/useScrollingState';
-import { downloadCoverFile, downloadLyricsFile } from '../services/downloads';
-import { clearCoverThumbnailCache, readCover, readCoverThumbnail, resolveLocalTrackLyrics, resolveLyricsSource } from '../services/music';
+import { readCover, readCoverThumbnail, resolveLyricsSource } from '../services/music';
 import type { LyricLine, Track } from '../types/music';
 import { isTauriRuntime } from '../services/music';
-import { getPluginLyricsMetadata, listPluginLyricSearchProviders, searchPluginLyrics as searchPluginLyricsFromProviders } from '../services/pluginSearch';
+import { getPluginLyricsMetadata } from '../services/pluginSearch';
 import { t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
-import type { PluginSearchProvider, PluginSearchTrack } from '../types/plugin';
+import type { PluginSearchTrack } from '../types/plugin';
 import { artworkDisplaySrc, coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, usableArtworkDisplaySrc } from '../utils/artwork';
 import BaseDialog from './BaseDialog.vue';
 import DefaultCover from './DefaultCover.vue';
@@ -21,7 +22,7 @@ import { getErrorMessage } from '../utils/error';
 import { parseRawLyrics } from '../utils/lyrics';
 import { getPlayerOriginalCoverCache, playerCoverCacheKey } from '../services/playerCoverCache';
 import { normalizeTrackLyrics } from '../utils/trackLyrics';
-import { pluginSearchTrackKey, trackIdentityKey } from '../utils/trackKey';
+import { trackIdentityKey } from '../utils/trackKey';
 
 const MAX_LYRICS_COVER_CACHE = 80;
 const lyricsCoverCache = new Map<string, { url: string; data: number[] | null; mimeType: string | null }>();
@@ -72,21 +73,6 @@ const isFontMenuOpen = ref(false);
 const isFullscreen = ref(false);
 const isLyricSyncOpen = ref(false);
 const lyricTimeOffset = ref(0);
-const isSearchDialogOpen = ref(false);
-const lyricSearchQuery = ref('');
-const lyricSearchResults = ref<PluginSearchTrack[]>([]);
-const lyricSearchProviders = ref<PluginSearchProvider[]>([]);
-const lyricSearchProviderId = ref<string | null>(null);
-const lyricSearchStatus = ref('');
-const isSearchingPluginLyrics = ref(false);
-const isLoadingMorePluginLyrics = ref(false);
-const lyricSearchPage = ref(1);
-const isLyricSearchEnd = ref(true);
-const resolvingLyricTrackKey = ref<string | null>(null);
-const lyricProviderTabItems = computed(() => [
-  { id: null, label: '全部' },
-  ...lyricSearchProviders.value.map((provider) => ({ id: provider.id, label: provider.name, disabled: !provider.enabled })),
-]);
 const fontMenuLeft = ref(0);
 const fontMenuTop = ref(0);
 const smoothCurrentTime = ref(0);
@@ -99,9 +85,31 @@ let restoreMaximizedAfterFullscreen = false;
 const MIN_LYRIC_FONT_SIZE = 14;
 const MAX_LYRIC_FONT_SIZE = 34;
 const player = usePlayerStore();
+const {
+  closeLyricSearchDialog,
+  handleLyricSearchResultsScroll,
+  isLoadingMorePluginLyrics,
+  isSearchDialogOpen,
+  isSearchingPluginLyrics,
+  lyricProviderTabItems,
+  lyricSearchProviderId,
+  lyricSearchProviders,
+  lyricSearchQuery,
+  lyricSearchResults,
+  lyricSearchStatus,
+  lyricTrackKey,
+  openLyricSearchDialog,
+  resolvingLyricTrackKey,
+  searchPluginLyrics,
+  selectLyricSearchProvider,
+} = useLyricsSearch({
+  defaultQuery: defaultLyricSearchQuery,
+  beforeOpen: closeFontMenu,
+});
 const lyricFontSize = computed(() => player.settings.lyricFontSize);
 const syncedLyricTime = computed(() => smoothCurrentTime.value + lyricTimeOffset.value);
 const activeLyrics = computed(() => normalizeTrackLyrics(props.activeTrack));
+const activeTrackRef = computed(() => props.activeTrack);
 const isLyricsPending = computed(() => (
   !loadedLyricLines.value.length && (props.lyricsStatus === 'loading' || isLoadingLyrics.value)
 ));
@@ -125,11 +133,20 @@ const downloadableLyricFormats = computed(() => {
   }
   return items;
 });
-function isLocalTrackPath(path?: string | null) {
-  if (!path) return false;
-  return !path.startsWith('http://') && !path.startsWith('https://') && !path.startsWith('plugin://');
-}
-
+const {
+  downloadCover,
+  downloadLyrics,
+  hasDownloadableCover,
+  linkedLyricsLabel,
+} = useLyricsDownload({
+  activeLyricFormats: availableLyricFormats,
+  activeLyrics,
+  activeTrack: activeTrackRef,
+  closeMenu: closeFontMenu,
+  onCoverChanged: () => emit('coverChanged'),
+  onNotify: (message, variant) => emit('notify', message, variant),
+  player,
+});
 const activeTrackIdentityKey = computed(() => trackIdentityKey(props.activeTrack));
 
 function resolveRawLyrics(rawLyrics: string, format?: string | null) {
@@ -569,106 +586,6 @@ function defaultLyricSearchQuery() {
   return [props.activeTrack?.title, props.activeTrack?.artist].filter(Boolean).join(' ').trim();
 }
 
-function lyricTrackKey(track: PluginSearchTrack) {
-  return pluginSearchTrackKey(track);
-}
-
-function resetLyricSearchPaging() {
-  lyricSearchPage.value = 1;
-  isLyricSearchEnd.value = true;
-  isLoadingMorePluginLyrics.value = false;
-}
-
-async function openLyricSearchDialog() {
-  closeFontMenu();
-  lyricSearchQuery.value = defaultLyricSearchQuery();
-  lyricSearchResults.value = [];
-  lyricSearchStatus.value = '';
-  resetLyricSearchPaging();
-  resolvingLyricTrackKey.value = null;
-  isSearchDialogOpen.value = true;
-
-  try {
-    lyricSearchProviders.value = await listPluginLyricSearchProviders();
-    const enabledProvider = lyricSearchProviders.value.find((provider) => provider.enabled);
-    lyricSearchProviderId.value = enabledProvider?.id ?? null;
-    if (lyricSearchQuery.value) {
-      await searchPluginLyrics();
-    }
-  } catch (error) {
-    lyricSearchStatus.value = getErrorMessage(error);
-  }
-}
-
-function closeLyricSearchDialog() {
-  isSearchDialogOpen.value = false;
-  isLoadingMorePluginLyrics.value = false;
-  resolvingLyricTrackKey.value = null;
-}
-
-async function selectLyricSearchProvider(providerId: string | null) {
-  lyricSearchProviderId.value = providerId;
-  await searchPluginLyrics();
-}
-
-async function searchPluginLyrics() {
-  const query = lyricSearchQuery.value.trim();
-  if (!query) {
-    lyricSearchResults.value = [];
-    lyricSearchStatus.value = '请输入歌曲名或歌手';
-    resetLyricSearchPaging();
-    return;
-  }
-
-  isSearchingPluginLyrics.value = true;
-  lyricSearchStatus.value = '';
-  lyricSearchPage.value = 1;
-  isLyricSearchEnd.value = true;
-  try {
-    const result = await searchPluginLyricsFromProviders(query, lyricSearchProviderId.value, 1, 30);
-    lyricSearchResults.value = result.tracks;
-    isLyricSearchEnd.value = result.isEnd;
-    if (result.tracks.length === 0) {
-      lyricSearchStatus.value = '没有找到匹配歌曲';
-    }
-  } catch (error) {
-    lyricSearchResults.value = [];
-    isLyricSearchEnd.value = true;
-    lyricSearchStatus.value = getErrorMessage(error);
-  } finally {
-    isSearchingPluginLyrics.value = false;
-  }
-}
-
-async function loadMorePluginLyrics() {
-  const query = lyricSearchQuery.value.trim();
-  if (!query || isSearchingPluginLyrics.value || isLoadingMorePluginLyrics.value || isLyricSearchEnd.value) return;
-
-  isLoadingMorePluginLyrics.value = true;
-  lyricSearchStatus.value = '';
-  try {
-    const nextPage = lyricSearchPage.value + 1;
-    const result = await searchPluginLyricsFromProviders(query, lyricSearchProviderId.value, nextPage, 30);
-    const existingKeys = new Set(lyricSearchResults.value.map(lyricTrackKey));
-    const nextTracks = result.tracks.filter((track) => !existingKeys.has(lyricTrackKey(track)));
-    lyricSearchResults.value = [...lyricSearchResults.value, ...nextTracks];
-    lyricSearchPage.value = nextPage;
-    isLyricSearchEnd.value = result.isEnd || nextTracks.length === 0;
-  } catch (error) {
-    lyricSearchStatus.value = getErrorMessage(error);
-  } finally {
-    isLoadingMorePluginLyrics.value = false;
-  }
-}
-
-function handleLyricSearchResultsScroll(event: Event) {
-  const target = event.currentTarget as HTMLElement;
-  const remaining = target.scrollHeight - target.scrollTop - target.clientHeight;
-  if (remaining < 96) {
-    void loadMorePluginLyrics();
-  }
-}
-
 async function applyPluginLyrics(track: PluginSearchTrack) {
   const key = lyricTrackKey(track);
   resolvingLyricTrackKey.value = key;
@@ -766,158 +683,6 @@ function clearAssociatedLyrics() {
   coverMimeType.value = null;
   emit('lyricsCleared');
   closeFontMenu();
-}
-
-async function rawLyricsForDownload(format: string) {
-  const activeTrack = props.activeTrack;
-  const associatedLyrics = activeTrack?.associatedLyrics ?? null;
-  if (!activeTrack || !associatedLyrics?.rawLyrics?.trim()) return '';
-
-  const sourceFormat = format === 'txt' && availableLyricFormats.value.includes('lrc') ? 'lrc' : format;
-  const associatedFormat = associatedLyrics.format ?? associatedLyrics.defaultFormat ?? null;
-  if (sourceFormat === associatedFormat) {
-    return associatedLyrics.rawLyrics.trim();
-  }
-
-  const pluginTrack = activeTrackAsPluginTrack();
-  const source = pluginTrack
-    ? await getPluginLyricsMetadata(pluginTrack, sourceFormat)
-    : isLocalTrackPath(activeTrack.path)
-      ? await resolveLocalTrackLyrics(activeTrack, sourceFormat)
-      : null;
-
-  return source?.rawLyrics?.trim() || '';
-}
-
-function isOnlineTrackPath(path: string) {
-  return /^https?:\/\//i.test(path) || path.startsWith('plugin://');
-}
-
-function localTrackFolder(path: string) {
-  if (!path || isOnlineTrackPath(path)) return '';
-
-  const normalizedPath = path.replace(/\//g, '\\');
-  const separatorIndex = normalizedPath.lastIndexOf('\\');
-  return separatorIndex > 0 ? normalizedPath.slice(0, separatorIndex) : '';
-}
-
-function lyricsDownloadDir(track: Track) {
-  return localTrackFolder(track.path) || player.settings.downloadDir;
-}
-
-function linkedLyricsLabel(track: Track) {
-  const lyrics = normalizeTrackLyrics(track);
-  if (lyrics?.lyricsUrl) return lyrics.lyricsUrl;
-  if (lyrics?.providerName) return lyrics.providerName;
-  if (isOnlineTrackPath(track.path)) return track.sourceName || '在线歌词';
-  return '本地歌词';
-}
-
-function lyricsDownloadTitle(track: Track) {
-  const title = track.title.trim();
-  const artist = track.artist?.trim();
-  if (!artist || title.endsWith(` - ${artist}`)) {
-    return title;
-  }
-  return `${title} - ${artist}`;
-}
-
-async function downloadLyrics(format: string) {
-  const activeTrack = props.activeTrack;
-  if (!activeTrack) {
-    emit('notify', '当前歌曲没有可下载的歌词');
-    return;
-  }
-
-  const downloadDir = lyricsDownloadDir(activeTrack);
-  if (!downloadDir) {
-    emit('notify', '请先在设置中选择下载位置');
-    return;
-  }
-
-  try {
-    const rawLyrics = await rawLyricsForDownload(format);
-    if (!rawLyrics) {
-      emit('notify', '当前歌曲没有可下载的歌词');
-      return;
-    }
-
-    await downloadLyricsFile({
-      downloadDir,
-      title: lyricsDownloadTitle(activeTrack),
-      artist: null,
-      lyrics: rawLyrics,
-      format,
-    });
-    emit('notify', '下载成功', 'success');
-    closeFontMenu();
-  } catch (error) {
-    const message = getErrorMessage(error);
-    emit('notify', `歌词下载失败：${message}`);
-  }
-}
-
-function activeTrackAsPluginTrack(): PluginSearchTrack | null {
-  const track = props.activeTrack;
-  const lyrics = activeLyrics.value;
-  const providerId = lyrics?.providerId ?? track?.sourceProviderId;
-  const trackId = lyrics?.trackId ?? track?.sourceId;
-  if (!track || !providerId || !trackId) return null;
-  return {
-    id: trackId,
-    providerId,
-    providerName: lyrics?.providerName ?? track.sourceName ?? providerId,
-    title: track.title,
-    artist: track.artist ?? '',
-    album: track.album ?? '',
-    duration: track.duration ?? null,
-    artwork: track.artwork ?? null,
-    raw: lyrics?.trackRaw ?? track.sourceRaw ?? {
-      id: trackId,
-      title: track.title,
-      artist: track.artist,
-      album: track.album,
-      duration: track.duration,
-    },
-  };
-}
-
-function hasDownloadableCover() {
-  return Boolean(props.activeTrack?.associatedArtwork);
-}
-
-async function downloadCover() {
-  const activeTrack = props.activeTrack;
-  if (!activeTrack || !hasDownloadableCover()) {
-    emit('notify', '当前歌曲没有可下载的封面');
-    return;
-  }
-
-  if (!player.settings.downloadDir) {
-    emit('notify', '请先在设置中选择下载位置');
-    return;
-  }
-
-  try {
-    const result = await downloadCoverFile({
-      downloadDir: player.settings.downloadDir,
-      trackPath: activeTrack.path,
-      title: activeTrack.title,
-      artist: activeTrack.artist,
-      artworkUrl: activeTrack.associatedArtwork ?? null,
-      mimeType: null,
-      data: null,
-    });
-    if (result.embeddedInTrack) {
-      await clearCoverThumbnailCache(activeTrack.path);
-      emit('coverChanged');
-    }
-    emit('notify', result.embeddedInTrack ? '封面已写入歌曲文件' : '封面已保存为图片', 'success');
-    closeFontMenu();
-  } catch (error) {
-    const message = getErrorMessage(error);
-    emit('notify', `封面下载失败：${message}`);
-  }
 }
 
 async function updateFullscreenState() {

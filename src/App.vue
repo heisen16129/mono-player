@@ -24,10 +24,18 @@ import TrackMetadataDialog from './components/TrackMetadataDialog.vue';
 import type { TrackMetadataFormValue } from './components/TrackMetadataDialog.vue';
 import WindowControls from './components/WindowControls.vue';
 import WorkspaceView from './components/WorkspaceView.vue';
+import { useActiveTrackState } from './composables/useActiveTrackState';
+import { useDownloadState } from './composables/useDownloadState';
 import { useLibraryNavigation } from './composables/useLibraryNavigation';
+import { useLibraryPanelResize } from './composables/useLibraryPanelResize';
+import { useLyricsDockAutoHide } from './composables/useLyricsDockAutoHide';
+import { useLyricsState } from './composables/useLyricsState';
+import { useOnlineSearch } from './composables/useOnlineSearch';
+import { useOnlineQualityRefresh } from './composables/useOnlineQualityRefresh';
 import { usePlaybackSession } from './composables/usePlaybackSession';
 import { usePlaylistActions } from './composables/usePlaylistActions';
 import { useScanFolders } from './composables/useScanFolders';
+import { useSearchHistory } from './composables/useSearchHistory';
 import { useSidebarCollapse } from './composables/useSidebarCollapse';
 import { useTrayIntegration } from './composables/useTrayIntegration';
 import { resolveLocale, t } from './i18n';
@@ -40,16 +48,22 @@ import {
 } from './services/desktopLyrics';
 import { deleteDownloadedTrackFile, enqueueDownloadOnlineTrack, openDownloadedTrackInFolder, type DownloadOnlineTrackRequest, type DownloadQueueEvent } from './services/downloads';
 import { clearCoverThumbnailCache, exitApp, isTauriRuntime, refreshTrackDuration, resolveLocalTrackLyrics, updateTrackCover, updateTrackMetadata } from './services/music';
-import { getPluginLyricsMetadata, listPluginSearchProviders, resolvePluginPlaybackQualitiesWithRust, searchPluginMusic } from './services/pluginSearch';
+import { getPluginLyricsMetadata } from './services/pluginSearch';
 import { changeRustBackendQueueTrackQuality, getRustBackendDefaultCacheDir, listenRustBackendQueue, playRustBackendNext, playRustBackendPrevious, removeRustBackendQueueSource, restoreRustBackendQueue, setRustBackendCacheDir, startRustBackendQueue, stopRustBackend, type RustQueueSnapshot } from './services/playerBackend';
-import { readPersistentValue, writePersistentValue } from './services/persistentStore';
 import { clearSystemMedia, listenSystemMediaAction, updateSystemMedia, type SystemMediaAction } from './services/systemMedia';
 import { usePlayerStore } from './stores/player';
 import type { DownloadItem, PlaybackMode, Track, TrackLyrics } from './types/music';
-import type { PluginPlaybackQuality, PluginPlaybackQualityOption, PluginSearchProvider, PluginSearchTrack } from './types/plugin';
+import type { PluginPlaybackQuality, PluginSearchTrack } from './types/plugin';
 import { getErrorMessage } from './utils/error';
+import {
+  buildOnlinePlaybackQueue as buildOnlinePlaybackQueueFromTracks,
+  createOnlineQueueTrack,
+  findPluginTrackForQueueTrack as findPluginTrackForQueueTrackFromCandidates,
+  isSameOnlineTrackIdentity,
+} from './utils/onlineTrack';
 import { folderTitle, normalizePath } from './utils/path';
 import { normalizeTrackLyrics } from './utils/trackLyrics';
+import { pluginSearchTrackKey, positiveStableStringHash } from './utils/trackKey';
 import { shouldSkipWindowDrag } from './utils/windowDrag';
 
 const player = usePlayerStore();
@@ -61,32 +75,8 @@ const togglePlaybackRequestId = ref(0);
 const playbackTime = ref(0);
 const isAudioPlaying = ref(false);
 const playbackSpectrumLevels = ref<number[]>([]);
-const isLyricsDockHovered = ref(false);
-const isLyricsDockReadyToHide = ref(false);
 const seekRequestId = ref(0);
 const seekTime = ref(0);
-const selectedTrack = ref<Track | null>(null);
-const currentPlaybackTrack = ref<Track | null>(null);
-const rustPlaybackQueue = ref<Track[]>([]);
-const isOnlineSearchOpen = ref(false);
-const isOnlineSearching = ref(false);
-const isOnlineLoadingMore = ref(false);
-const onlineSearchQuery = ref('');
-const onlineSearchError = ref<string | null>(null);
-const onlineLoadMoreError = ref<string | null>(null);
-const onlineSearchProviders = ref<PluginSearchProvider[]>([]);
-const onlineSearchResults = ref<PluginSearchTrack[]>([]);
-const activeOnlineProviderId = ref<string | null>(null);
-const onlineSearchPage = ref(1);
-const onlineSearchHasMore = ref(false);
-const onlineActiveTrack = ref<Track | null>(null);
-const onlineActivePluginTrack = ref<PluginSearchTrack | null>(null);
-const onlinePlaybackSource = ref('');
-const onlinePlaybackQuality = ref<PluginPlaybackQuality>('');
-const onlinePlaybackQualityOptions = ref<PluginPlaybackQualityOption[]>([]);
-const onlineResolvingTrackKey = ref<string | null>(null);
-const onlineActiveTrackKey = ref<string | null>(null);
-const queueSwitchingTrackKey = ref<string | null>(null);
 type OnlineToastVariant = 'success' | 'error';
 type SleepTimerAction = 'stop' | 'exit' | 'finishTrack';
 interface McpSleepTimerRequest {
@@ -100,65 +90,69 @@ const sleepTimerRequest = ref<McpSleepTimerRequest | null>(null);
 const metadataEditingTrack = ref<Track | null>(null);
 const isSavingTrackMetadata = ref(false);
 const trackMetadataError = ref<string | null>(null);
-const downloadItems = ref<DownloadItem[]>([]);
-const searchHistory = ref<string[]>([]);
-const DOWNLOAD_ITEMS_KEY = 'downloads.items';
-const SEARCH_HISTORY_KEY = 'search.history';
-const EXCLUDED_SEARCH_HISTORY_KEYWORDS = new Set(['热门歌曲', '热门歌手']);
 const RUST_CROSSFADE_DURATION_MS = 3000;
-const LIBRARY_PANEL_WIDTH_KEY = 'layout.libraryPanelWidth';
-const MIN_LIBRARY_PANEL_WIDTH = 220;
-const MAX_LIBRARY_PANEL_WIDTH = 260;
-let lyricsDockHideTimer: number | null = null;
 let onlineToastTimer: number | null = null;
-let onlineQualityRefreshTimer: number | null = null;
-let onlineQualityRefreshRequestId = 0;
 let desktopLyricsActionUnlisten: UnlistenFn | null = null;
 let desktopLyricsReadyUnlisten: UnlistenFn | null = null;
 let downloadEventUnlisten: UnlistenFn | null = null;
 let mcpSleepTimerUnlisten: UnlistenFn | null = null;
 let rustQueueUnlisten: UnlistenFn | null = null;
 let systemMediaUnlisten: UnlistenFn | null = null;
-let libraryPanelResizeStartX = 0;
-let libraryPanelResizeStartWidth = 0;
 let lastSystemMediaSyncKey = '';
 let lastSystemMediaSyncAt = 0;
 const localLyricsRequests = new Map<string, Promise<TrackLyrics | null>>();
 const onlineLyricsRequests = new Map<string, Promise<void>>();
 
-type LyricsViewStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
-
-const lyricsViewState = ref<{
-  trackKey: string | null;
-  status: LyricsViewStatus;
-  error: string | null;
-}>({
-  trackKey: null,
-  status: 'idle',
-  error: null,
-});
-
 const searchHistoryLimit = computed(() => Math.max(1, Math.round(player.settings.searchHistoryLimit)));
-const libraryPanelWidth = ref(260);
-const isResizingLibraryPanel = ref(false);
-const appGridStyle = computed(() => ({
-  '--library-width': `${libraryPanelWidth.value}px`,
-}));
+const {
+  loadSearchHistory,
+  saveSearchHistory,
+  searchHistory,
+} = useSearchHistory(searchHistoryLimit);
+const {
+  appGridStyle,
+  isResizingLibraryPanel,
+  loadLibraryPanelWidth,
+  startLibraryPanelResize,
+} = useLibraryPanelResize();
 const shouldShowLibraryResizeHandle = computed(() => {
   if (activeView.value === 'artists') return true;
   return activeView.value === 'library' && activeCollection.value === 'all' && isLibraryPanelMode.value;
 });
+const {
+  downloadItems,
+  downloadedTrackKeys,
+  handleDownloadQueueEvent: applyDownloadQueueEvent,
+  isTrackDownloaded,
+  isTrackDownloadPending,
+  loadDownloadItems,
+  pendingDownloadTrackKeys,
+  persistDownloadItems,
+  updateDownloadItem,
+} = useDownloadState();
+const {
+  activeOnlineProviderId,
+  closeOnlineSearchState,
+  isOnlineLoadingMore,
+  isOnlineSearching,
+  isOnlineSearchOpen,
+  loadMoreOnlineMusic,
+  onlineLoadMoreError,
+  onlineSearchError,
+  onlineSearchHasMore,
+  onlineSearchProviders,
+  onlineSearchQuery,
+  onlineSearchResults,
+  runOnlineSearch,
+  selectOnlineProvider,
+} = useOnlineSearch({
+  loadMoreErrorFallback: () => (resolveLocale(player.settings.locale) === 'en-US' ? 'Failed to load more results.' : '加载更多失败'),
+  normalizeErrorMessage: normalizeOnlineErrorMessage,
+  onError: showOnlineToast,
+  searchErrorFallback: () => (resolveLocale(player.settings.locale) === 'en-US' ? 'Plugin search failed.' : '插件搜索失败'),
+  trackKey: getOnlineTrackKey,
+});
 const shouldShowDownloadsMenu = computed(() => player.settings.enablePlugins || downloadItems.value.length > 0);
-const downloadedTrackKeys = computed(() => (
-  downloadItems.value
-    .filter((item) => item.status === 'downloaded')
-    .map((item) => item.id)
-));
-const pendingDownloadTrackKeys = computed(() => (
-  downloadItems.value
-    .filter((item) => item.status === 'downloading' || item.status === 'paused')
-    .map((item) => item.id)
-));
 
 function normalizePlaybackQueuePath(path: string) {
   return path.replace(/\\/g, '/').replace(/^\/\/\?\//, '').toLocaleLowerCase();
@@ -347,68 +341,58 @@ const visibleTracks = computed(() => {
   return folderVisibleTracks.value;
 });
 
-const activeTrack = computed(() => {
-  return currentPlaybackTrack.value ?? selectedTrack.value ?? visibleTracks.value[0] ?? null;
-});
-const activeLyricsViewStatus = computed(() => lyricsViewState.value.status);
-
-function lyricsTrackKey(track: Track | null) {
-  if (!track) return null;
-  const providerId = track.sourceProviderId?.trim();
-  const sourceId = track.sourceId?.trim();
-  if (providerId && sourceId) return `plugin:${providerId}:${sourceId}`;
-  return `${track.id}:${track.path}`;
-}
-
-function hasTrackSourceLyrics(track: Track | null) {
-  return Boolean(track?.lyrics?.rawLyrics?.trim() || track?.rawLyrics?.trim());
-}
-
-function setLyricsViewState(track: Track | null, status: LyricsViewStatus, error: string | null = null) {
-  lyricsViewState.value = {
-    trackKey: lyricsTrackKey(track),
-    status,
-    error,
-  };
-}
-
-function syncLyricsViewStateForTrack(track: Track | null) {
-  if (!track) {
-    setLyricsViewState(null, 'idle');
-    return;
-  }
-  if (normalizeTrackLyrics(track)?.rawLyrics?.trim()) {
-    setLyricsViewState(track, 'ready');
-    return;
-  }
-  setLyricsViewState(track, 'loading');
-}
-
-function updateLyricsViewStateForRequest(track: Track, status: LyricsViewStatus, error: string | null = null) {
-  if (lyricsViewState.value.trackKey !== lyricsTrackKey(track)) return;
-  setLyricsViewState(track, status, error);
-}
-
-const currentPlaybackSource = computed(() => {
-  if (onlineActiveTrack.value) return onlinePlaybackSource.value;
-  return onlinePlaybackSource.value || player.currentSource;
+const {
+  activeTrack,
+  currentPlaybackSource,
+  currentPlaybackTrack,
+  isPreparingActiveTrack,
+  onlineActivePluginTrack,
+  onlineActiveTrack,
+  onlineActiveTrackKey,
+  onlinePlaybackSource,
+  onlinePreparingTrackKey,
+  onlineResolvingTrackKey,
+  queueSwitchingTrackKey,
+  rustPlaybackQueue,
+  selectedTrack,
+  shouldShowOnlineQuality,
+} = useActiveTrackState({
+  currentSource: computed(() => player.currentSource),
+  isRemoteTrack,
+  visibleTracks,
 });
 
-const shouldShowOnlineQuality = computed(() => {
-  return Boolean(
-    onlineActiveTrack.value
-    && onlineActivePluginTrack.value
-    && isRemoteTrack(onlineActiveTrack.value),
-  );
+const {
+  onlinePlaybackQuality,
+  onlinePlaybackQualityOptions,
+} = useOnlineQualityRefresh({
+  activePluginTrack: onlineActivePluginTrack,
+  trackKey: getOnlineTrackKey,
 });
-const activeLyricFormats = computed(() => {
-  const formats = normalizeTrackLyrics(activeTrack.value)?.formats ?? [];
-  return formats.filter((format, index) => format && formats.indexOf(format) === index);
+
+const {
+  hoverLyricsDock,
+  isLyricsDockHidden,
+  leaveLyricsDock,
+  shouldAutoHideLyricsDock,
+} = useLyricsDockAutoHide({
+  activeTrack,
+  autoHideEnabled: computed(() => player.settings.autoHideLyricsDock),
+  isAudioPlaying,
+  isLyricsOpen,
 });
-const activeLyricFormat = computed(() => {
-  const lyrics = normalizeTrackLyrics(activeTrack.value);
-  return lyrics?.format ?? lyrics?.defaultFormat ?? activeLyricFormats.value[0] ?? null;
-});
+
+const {
+  activeLyricFormat,
+  activeLyricFormats,
+  activeLyricsViewStatus,
+  hasTrackSourceLyrics,
+  lyricsTrackKey,
+  lyricsViewState,
+  setLyricsViewState,
+  syncLyricsViewStateForTrack,
+  updateLyricsViewStateForRequest,
+} = useLyricsState(activeTrack);
 const shouldShowLyricFormat = computed(() => {
   const active = activeTrack.value;
   return Boolean(
@@ -424,16 +408,6 @@ const isActiveOnlineTrackDownloaded = computed(() => (
 const isActiveOnlineTrackDownloading = computed(() => (
   onlineActiveTrack.value ? isTrackDownloadPending(onlineActiveTrack.value) : false
 ));
-const isPreparingActiveTrack = computed(() => Boolean(
-  onlineActiveTrack.value
-  && onlineActiveTrackKey.value
-  && (
-    onlineActiveTrackKey.value === onlineResolvingTrackKey.value
-    || onlineActiveTrackKey.value === queueSwitchingTrackKey.value
-  ),
-));
-const onlinePreparingTrackKey = computed(() => onlineResolvingTrackKey.value ?? queueSwitchingTrackKey.value);
-
 const canUseLocalTrackContextActions = computed(() => (
   activeView.value === 'library'
   && activeCollection.value === 'all'
@@ -608,54 +582,6 @@ watch(
   },
 );
 
-watch(
-  () => onlineActivePluginTrack.value ? getOnlineTrackKey(onlineActivePluginTrack.value) : '',
-  () => {
-    scheduleOnlinePlaybackQualitiesRefresh();
-  },
-);
-
-function clearOnlinePlaybackQualitiesRefreshTimer() {
-  if (onlineQualityRefreshTimer === null) return;
-  window.clearTimeout(onlineQualityRefreshTimer);
-  onlineQualityRefreshTimer = null;
-}
-
-function scheduleOnlinePlaybackQualitiesRefresh() {
-  onlineQualityRefreshRequestId += 1;
-  clearOnlinePlaybackQualitiesRefreshTimer();
-  onlinePlaybackQualityOptions.value = [];
-  if (!onlineActivePluginTrack.value) return;
-
-  onlineQualityRefreshTimer = window.setTimeout(() => {
-    onlineQualityRefreshTimer = null;
-    void refreshOnlinePlaybackQualities(onlineQualityRefreshRequestId);
-  }, 120);
-}
-
-async function refreshOnlinePlaybackQualities(requestId: number) {
-  const track = onlineActivePluginTrack.value;
-  if (!track) return;
-
-  try {
-    const result = await resolvePluginPlaybackQualitiesWithRust(track);
-    if (requestId !== onlineQualityRefreshRequestId) return;
-    onlinePlaybackQualityOptions.value = result.qualities;
-    const availableIds = result.qualities
-      .filter((quality) => quality.available)
-      .map((quality) => quality.id);
-    const nextQuality = result.defaultQuality && availableIds.includes(result.defaultQuality)
-      ? result.defaultQuality
-      : availableIds[0];
-    if (nextQuality) {
-      onlinePlaybackQuality.value = nextQuality as PluginPlaybackQuality;
-    }
-  } catch {
-    if (requestId !== onlineQualityRefreshRequestId) return;
-    onlinePlaybackQualityOptions.value = [];
-  }
-}
-
 function queueSourceKey(track: Track) {
   const providerId = track.sourceProviderId?.trim();
   const sourceId = track.sourceId?.trim();
@@ -699,10 +625,6 @@ const isActiveTrackFavorite = computed(() => player.isFavorite(activeTrack.value
 const hasThemeBackground = computed(() => {
   return player.customThemes.some((theme) => theme.id === player.settings.theme && Boolean(theme.background));
 });
-const shouldAutoHideLyricsDock = computed(() => {
-  return player.settings.autoHideLyricsDock && isLyricsOpen.value && isAudioPlaying.value && isLyricsDockReadyToHide.value;
-});
-const isLyricsDockHidden = computed(() => shouldAutoHideLyricsDock.value && !isLyricsDockHovered.value);
 const folderTones = ['desk', 'night', 'mist', 'road'] as const;
 
 const localFolders = computed(() => {
@@ -776,45 +698,6 @@ async function startWindowDrag(event: PointerEvent) {
   await getCurrentWindow().startDragging();
 }
 
-function clampLibraryPanelWidth(width: number) {
-  return Math.min(MAX_LIBRARY_PANEL_WIDTH, Math.max(MIN_LIBRARY_PANEL_WIDTH, Math.round(width)));
-}
-
-async function loadLibraryPanelWidth() {
-  const storedWidth = await readPersistentValue<number>(LIBRARY_PANEL_WIDTH_KEY);
-  if (typeof storedWidth === 'number' && Number.isFinite(storedWidth)) {
-    libraryPanelWidth.value = clampLibraryPanelWidth(storedWidth);
-  }
-}
-
-function startLibraryPanelResize(event: PointerEvent) {
-  if (event.button !== 0) return;
-  event.preventDefault();
-  event.stopPropagation();
-
-  libraryPanelResizeStartX = event.clientX;
-  libraryPanelResizeStartWidth = libraryPanelWidth.value;
-  isResizingLibraryPanel.value = true;
-  document.body.classList.add('is-resizing-library-panel');
-  window.addEventListener('pointermove', resizeLibraryPanel);
-  window.addEventListener('pointerup', stopLibraryPanelResize, { once: true });
-}
-
-function resizeLibraryPanel(event: PointerEvent) {
-  if (!isResizingLibraryPanel.value) return;
-  libraryPanelWidth.value = clampLibraryPanelWidth(libraryPanelResizeStartWidth + event.clientX - libraryPanelResizeStartX);
-}
-
-function stopLibraryPanelResize() {
-  if (!isResizingLibraryPanel.value) return;
-  isResizingLibraryPanel.value = false;
-  document.body.classList.remove('is-resizing-library-panel');
-  window.removeEventListener('pointermove', resizeLibraryPanel);
-  void writePersistentValue(LIBRARY_PANEL_WIDTH_KEY, libraryPanelWidth.value);
-}
-
-
-
 onMounted(async () => {
   await player.hydratePersistedState();
   if (!player.settings.audioCacheDir) {
@@ -843,9 +726,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  clearLyricsDockHideTimer();
   clearOnlineToastTimer();
-  clearOnlinePlaybackQualitiesRefreshTimer();
   downloadEventUnlisten?.();
   downloadEventUnlisten = null;
   mcpSleepTimerUnlisten?.();
@@ -858,14 +739,7 @@ onBeforeUnmount(() => {
   rustQueueUnlisten = null;
   systemMediaUnlisten?.();
   systemMediaUnlisten = null;
-  stopLibraryPanelResize();
 });
-
-function clearLyricsDockHideTimer() {
-  if (lyricsDockHideTimer === null) return;
-  window.clearTimeout(lyricsDockHideTimer);
-  lyricsDockHideTimer = null;
-}
 
 function clearOnlineToastTimer() {
   if (onlineToastTimer === null) return;
@@ -1126,47 +1000,6 @@ function normalizePlaybackErrorMessage(error: unknown, fallback = '播放失败'
   return message || fallback;
 }
 
-async function loadDownloadItems() {
-  const storedItems = await readPersistentValue<DownloadItem[]>(DOWNLOAD_ITEMS_KEY);
-  downloadItems.value = (storedItems ?? []).map((item) => (
-    item.status === 'downloading'
-      ? { ...item, status: 'failed', progress: 0, error: item.error ?? '下载已中断' }
-      : item
-  ));
-  await persistDownloadItems();
-}
-
-async function persistDownloadItems() {
-  await writePersistentValue(DOWNLOAD_ITEMS_KEY, downloadItems.value);
-}
-
-async function loadSearchHistory() {
-  const storedHistory = await readPersistentValue<string[]>(SEARCH_HISTORY_KEY);
-  searchHistory.value = (storedHistory ?? [])
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => item.trim())
-    .filter((item) => Boolean(item) && !EXCLUDED_SEARCH_HISTORY_KEYWORDS.has(item))
-    .slice(0, searchHistoryLimit.value);
-  await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
-}
-
-async function saveSearchHistory(keyword: string) {
-  const normalizedKeyword = keyword.trim();
-  if (!normalizedKeyword || EXCLUDED_SEARCH_HISTORY_KEYWORDS.has(normalizedKeyword)) return;
-
-  searchHistory.value = [
-    normalizedKeyword,
-    ...searchHistory.value.filter((item) => item !== normalizedKeyword),
-  ].slice(0, searchHistoryLimit.value);
-  await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
-}
-
-watch(searchHistoryLimit, async (limit) => {
-  if (searchHistory.value.length <= limit) return;
-  searchHistory.value = searchHistory.value.slice(0, limit);
-  await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
-});
-
 async function startDownloadEventListener() {
   if (!isTauriRuntime() || downloadEventUnlisten) return;
   downloadEventUnlisten = await listen<DownloadQueueEvent>('download://event', (event) => {
@@ -1220,42 +1053,13 @@ async function startSystemMediaActionListener() {
 }
 
 function handleDownloadQueueEvent(event: DownloadQueueEvent) {
-  const currentItem = downloadItems.value.find((entry) => entry.id === event.taskId);
-  if (event.status === 'downloaded') {
-    updateDownloadItem(event.taskId, {
-      status: 'downloaded',
-      progress: 100,
-      filePath: event.filePath,
-      lyricsPath: event.lyricsPath,
-      error: null,
-    });
-    const item = downloadItems.value.find((entry) => entry.id === event.taskId);
-    if (item) {
-      showOnlineToast(`下载完成：${item.title}`, 'success');
-    }
-    return;
+  const result = applyDownloadQueueEvent(event);
+  if (result?.status === 'downloaded') {
+    showOnlineToast(`下载完成：${result.item.title}`, 'success');
   }
-
-  if (event.status === 'failed') {
-    if (currentItem?.status === 'paused') return;
-    updateDownloadItem(event.taskId, {
-      status: 'failed',
-      progress: event.progress,
-      error: event.error ?? '下载失败',
-    });
-    const item = downloadItems.value.find((entry) => entry.id === event.taskId);
-    if (item) {
-      showOnlineToast(`${item.title} 下载失败：${event.error ?? '下载失败'}`);
-    }
-    return;
+  if (result?.status === 'failed') {
+    showOnlineToast(`${result.item.title} 下载失败：${result.error}`);
   }
-
-  if (currentItem?.status === 'paused') return;
-  updateDownloadItem(event.taskId, {
-    status: 'downloading',
-    progress: event.progress,
-    error: null,
-  });
 }
 
 function closeOnlineToast() {
@@ -1263,80 +1067,25 @@ function closeOnlineToast() {
   onlineToastMessage.value = null;
 }
 
-function scheduleLyricsDockHide() {
-  clearLyricsDockHideTimer();
-  isLyricsDockReadyToHide.value = false;
-
-  if (!player.settings.autoHideLyricsDock || !isLyricsOpen.value || !isAudioPlaying.value) {
-    return;
-  }
-
-  lyricsDockHideTimer = window.setTimeout(() => {
-    isLyricsDockReadyToHide.value = true;
-    lyricsDockHideTimer = null;
-  }, 10000);
-}
-
-watch(isAudioPlaying, (playing) => {
-  if (!playing) {
-    clearLyricsDockHideTimer();
-    isLyricsDockReadyToHide.value = false;
-    isLyricsDockHovered.value = false;
-    return;
-  }
-
-  isLyricsDockHovered.value = false;
-  scheduleLyricsDockHide();
-});
-
-watch(
-  () => activeTrack.value?.id,
-  () => {
-    scheduleLyricsDockHide();
-    isLyricsDockHovered.value = false;
-  },
-);
-
-watch(
-  [isLyricsOpen, () => player.settings.autoHideLyricsDock],
-  () => {
-    scheduleLyricsDockHide();
-    isLyricsDockHovered.value = false;
-  },
-);
-
-
 function selectTrack(track: Track) {
   selectedTrack.value = track;
 }
 
 function returnToLocalLibrary() {
-  isOnlineSearchOpen.value = false;
-  onlineSearchError.value = null;
-  onlineLoadMoreError.value = null;
+  closeOnlineSearchState();
   onlineResolvingTrackKey.value = null;
-  isOnlineLoadingMore.value = false;
-  onlineSearchHasMore.value = false;
   openLibraryView();
 }
 
 function openLocalFolderFromPanel(path: string) {
-  isOnlineSearchOpen.value = false;
-  onlineSearchError.value = null;
-  onlineLoadMoreError.value = null;
+  closeOnlineSearchState();
   onlineResolvingTrackKey.value = null;
-  isOnlineLoadingMore.value = false;
-  onlineSearchHasMore.value = false;
   openFolder(path);
 }
 
 function openRecentAddedFromPanel() {
-  isOnlineSearchOpen.value = false;
-  onlineSearchError.value = null;
-  onlineLoadMoreError.value = null;
+  closeOnlineSearchState();
   onlineResolvingTrackKey.value = null;
-  isOnlineLoadingMore.value = false;
-  onlineSearchHasMore.value = false;
   openRecentAddedInLibrary();
 }
 
@@ -1350,16 +1099,7 @@ async function searchOnlineMusic(keyword: string, providerId?: string | null) {
   if (!query) return;
   const shouldStayInDiscover = activeView.value === 'discover';
 
-  onlineSearchQuery.value = query;
   await saveSearchHistory(query);
-  isOnlineSearchOpen.value = true;
-  isOnlineSearching.value = true;
-  onlineSearchError.value = null;
-  onlineLoadMoreError.value = null;
-  onlineSearchResults.value = [];
-  onlineSearchPage.value = 1;
-  onlineSearchHasMore.value = false;
-  isOnlineLoadingMore.value = false;
   activeView.value = shouldStayInDiscover ? 'discover' : 'library';
   activeCollection.value = 'all';
   activeLibraryFilter.value = 'all';
@@ -1367,89 +1107,14 @@ async function searchOnlineMusic(keyword: string, providerId?: string | null) {
   activeFolderPath.value = null;
   activePlaylistId.value = null;
   activeArtistName.value = null;
-
-  try {
-    onlineSearchProviders.value = await listPluginSearchProviders();
-    const enabledProviderIds = new Set(onlineSearchProviders.value.filter((provider) => provider.enabled).map((provider) => provider.id));
-    const preferredProviderId = providerId ?? activeOnlineProviderId.value;
-    const nextProviderId = preferredProviderId && enabledProviderIds.has(preferredProviderId)
-      ? preferredProviderId
-      : onlineSearchProviders.value.find((provider) => provider.enabled)?.id ?? null;
-    activeOnlineProviderId.value = nextProviderId;
-    const result = await searchPluginMusic(query, nextProviderId, 1, 30);
-    onlineSearchResults.value = result.tracks;
-    onlineSearchHasMore.value = !result.isEnd;
-  } catch (error) {
-    onlineSearchProviders.value = await listPluginSearchProviders();
-    const message = normalizeOnlineErrorMessage(error, resolveLocale(player.settings.locale) === 'en-US' ? 'Plugin search failed.' : '插件搜索失败');
-    onlineSearchError.value = message;
-    showOnlineToast(message);
-  } finally {
-    isOnlineSearching.value = false;
-  }
+  await runOnlineSearch(query, providerId);
 }
 
 function openDiscoverMusicView() {
   if (!player.settings.enablePlugins) return;
   openDiscoverView();
-  isOnlineSearchOpen.value = false;
-  onlineSearchError.value = null;
-  onlineLoadMoreError.value = null;
+  closeOnlineSearchState();
   onlineResolvingTrackKey.value = null;
-  isOnlineLoadingMore.value = false;
-  onlineSearchHasMore.value = false;
-}
-
-async function selectOnlineProvider(providerId: string) {
-  if (activeOnlineProviderId.value === providerId || isOnlineSearching.value || isOnlineLoadingMore.value) return;
-  activeOnlineProviderId.value = providerId;
-  await searchOnlineMusic(onlineSearchQuery.value, providerId);
-}
-
-async function loadMoreOnlineMusic(force = false) {
-  if (isOnlineSearching.value || isOnlineLoadingMore.value || !onlineSearchHasMore.value) return;
-  if (!force && onlineLoadMoreError.value) return;
-  const query = onlineSearchQuery.value.trim();
-  if (!query || !activeOnlineProviderId.value) return;
-
-  isOnlineLoadingMore.value = true;
-  onlineLoadMoreError.value = null;
-  let nextPage = onlineSearchPage.value + 1;
-
-  try {
-    const existingKeys = new Set(onlineSearchResults.value.map(getOnlineTrackKey));
-    let appendedTracks: PluginSearchTrack[] = [];
-    let reachedEnd = false;
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const result = await searchPluginMusic(query, activeOnlineProviderId.value, nextPage, 30);
-      const nextTracks = result.tracks.filter((track) => !existingKeys.has(getOnlineTrackKey(track)));
-      reachedEnd = result.isEnd;
-
-      if (nextTracks.length > 0 || result.isEnd) {
-        appendedTracks = nextTracks;
-        break;
-      }
-
-      nextPage += 1;
-    }
-
-    if (appendedTracks.length > 0) {
-      const nextResults = [...onlineSearchResults.value, ...appendedTracks];
-      onlineSearchResults.value = nextResults;
-      onlineSearchPage.value = nextPage;
-      onlineSearchHasMore.value = !reachedEnd;
-    } else {
-      onlineSearchPage.value = nextPage;
-      onlineSearchHasMore.value = false;
-    }
-  } catch (error) {
-    const message = normalizeOnlineErrorMessage(error, resolveLocale(player.settings.locale) === 'en-US' ? 'Failed to load more results.' : '加载更多失败');
-    onlineLoadMoreError.value = message;
-    showOnlineToast(message);
-  } finally {
-    isOnlineLoadingMore.value = false;
-  }
 }
 
 async function playOnlineTrack(track: PluginSearchTrack, startTime = 0, queueTracks?: Track[]) {
@@ -1472,23 +1137,13 @@ async function playOnlineTrack(track: PluginSearchTrack, startTime = 0, queueTra
 }
 
 function buildOnlinePlaybackQueue(sourceTrack: PluginSearchTrack, playbackTrack: Track, queueTracks?: Track[]) {
-  const sourceKey = getOnlineTrackKey(sourceTrack);
-  const contextQueue = queueTracks
-    ?.filter((track) => track.path)
-    .map((track) => {
-      const pluginTrack = findPluginTrackForQueueTrack(track);
-      return pluginTrack && getOnlineTrackKey(pluginTrack) === sourceKey ? playbackTrack : track;
-    })
-    .map(withDownloadedPlaybackSource) ?? [];
-  if (contextQueue.length > 0) {
-    return dedupePlaybackQueue(contextQueue);
-  }
-
-  const searchQueue = onlineSearchResults.value.map((item) => (
-    getOnlineTrackKey(item) === sourceKey ? playbackTrack : withDownloadedPlaybackSource(createOnlineQueueTrack(item))
-  ));
-
-  return dedupePlaybackQueue(searchQueue.length > 0 ? searchQueue : [playbackTrack]);
+  return buildOnlinePlaybackQueueFromTracks(sourceTrack, playbackTrack, {
+    queueTracks,
+    searchResults: onlineSearchResults.value,
+    findPluginTrack: findPluginTrackForQueueTrack,
+    mapPlaybackTrack: withDownloadedPlaybackSource,
+    dedupeTracks: dedupePlaybackQueue,
+  });
 }
 
 async function handleOnlinePlaybackFailure(track: PluginSearchTrack, message: string) {
@@ -1518,91 +1173,11 @@ function findNextOnlineSearchTrack(track: PluginSearchTrack) {
   return onlineSearchResults.value[index + 1] ?? null;
 }
 
-function createOnlineQueueTrack(track: PluginSearchTrack, source?: {
-  url?: string;
-  path?: string;
-  title?: string;
-  artist?: string;
-  album?: string;
-  duration?: number | null;
-  artwork?: string | null;
-  year?: number | null;
-  genre?: string | null;
-  trackNumber?: number | null;
-  lyrics?: {
-    rawLyrics?: string | null;
-    lyricsUrl?: string | null;
-    formats?: string[];
-    defaultFormat?: string | null;
-    format?: string | null;
-  } | null;
-  sourceId?: string;
-  sourceName?: string;
-  sourceProviderId?: string;
-  sourceRaw?: unknown;
-}): Track {
-  const rawLyrics = source?.lyrics?.rawLyrics?.trim() || null;
-  const lyrics = rawLyrics ? {
-    rawLyrics,
-    lyricsUrl: source?.lyrics?.lyricsUrl ?? `${track.providerName}@${track.providerId}`,
-    formats: source?.lyrics?.formats ?? [],
-    defaultFormat: source?.lyrics?.defaultFormat ?? null,
-    format: source?.lyrics?.format ?? source?.lyrics?.defaultFormat ?? null,
-    providerId: track.providerId,
-    providerName: track.providerName,
-    trackId: track.id,
-    trackRaw: track.raw ?? track,
-  } : null;
-  return {
-    id: getOnlineTrackId(track),
-    path: source?.path ?? source?.url ?? `plugin://${track.providerId}/${encodeURIComponent(track.id)}`,
-    title: source?.title ?? track.title,
-    artist: source?.artist ?? track.artist,
-    album: source?.album ?? track.album,
-    duration: source?.duration ?? track.duration,
-    artwork: source?.artwork ?? track.artwork ?? null,
-    year: source?.year ?? track.year ?? null,
-    genre: source?.genre ?? track.genre ?? null,
-    trackNumber: source?.trackNumber ?? track.trackNumber ?? null,
-    lyrics,
-    sourceId: source?.sourceId ?? track.id,
-    sourceName: source?.sourceName ?? track.providerName,
-    sourceProviderId: source?.sourceProviderId ?? track.providerId,
-    sourceRaw: source?.sourceRaw ?? track.raw ?? track,
-  };
-}
-
 function findPluginTrackForQueueTrack(track: Track) {
-  const cachedTrack = onlineSearchResults.value.find((item) => {
-    if (getOnlineTrackId(item) === track.id) return true;
-    return Boolean(track.sourceProviderId && track.sourceId)
-      && item.providerId === track.sourceProviderId
-      && item.id === track.sourceId;
-  })
-    ?? (onlineActivePluginTrack.value && (
-      getOnlineTrackId(onlineActivePluginTrack.value) === track.id
-      || (
-        Boolean(track.sourceProviderId && track.sourceId)
-        && onlineActivePluginTrack.value.providerId === track.sourceProviderId
-        && onlineActivePluginTrack.value.id === track.sourceId
-      )
-    )
-      ? onlineActivePluginTrack.value
-      : null);
-  if (cachedTrack) return cachedTrack;
-
-  if (!track.sourceProviderId || !track.sourceId) return null;
-  return {
-    id: track.sourceId,
-    providerId: track.sourceProviderId,
-    providerName: track.sourceName ?? track.sourceProviderId,
-    title: track.title,
-    artist: track.artist ?? '',
-    album: track.album ?? '',
-    duration: track.duration,
-    artwork: track.artwork ?? null,
-    raw: track.sourceRaw ?? track,
-  };
+  return findPluginTrackForQueueTrackFromCandidates(track, {
+    searchResults: onlineSearchResults.value,
+    activePluginTrack: onlineActivePluginTrack.value,
+  });
 }
 
 async function changeOnlinePlaybackQuality(quality: PluginPlaybackQuality) {
@@ -1793,7 +1368,7 @@ function updateCurrentLocalTrackLyrics(track: Track, lyrics: TrackLyrics) {
 }
 
 function getOnlineTrackKey(track: PluginSearchTrack) {
-  return `${track.providerId}:${track.id}`;
+  return pluginSearchTrackKey(track);
 }
 
 function findDownloadedItemForQueueTrack(track: Track) {
@@ -1823,12 +1398,6 @@ function isDownloadedOnlineLocalPlaybackTrack(track: Track | null) {
   return Boolean(downloadedItem?.filePath && normalizePath(downloadedItem.filePath) === normalizePath(track.path));
 }
 
-function isSameOnlineTrackIdentity(left: Track, right: Track) {
-  return Boolean(left.sourceProviderId && left.sourceId)
-    && left.sourceProviderId === right.sourceProviderId
-    && left.sourceId === right.sourceId;
-}
-
 async function retryActiveDownloadedOnlineTrackFromPlugin(startPosition = 0) {
   const active = activeTrack.value;
   if (!isDownloadedOnlineLocalPlaybackTrack(active)) return false;
@@ -1842,10 +1411,6 @@ async function retryActiveDownloadedOnlineTrackFromPlugin(startPosition = 0) {
   )));
 
   return startRustPlaybackQueue(fallbackQueue, fallbackTrack, startPosition);
-}
-
-function getOnlineTrackId(track: PluginSearchTrack) {
-  return -Math.abs(hashOnlineTrackId(getOnlineTrackKey(track)));
 }
 
 async function startRustPlaybackQueue(tracks: Track[], requestedTrack: Track | null, startPosition = 0) {
@@ -1890,15 +1455,6 @@ async function restoreRustPlaybackQueue(track: Track, currentTime: number) {
   }
 }
 
-function hashOnlineTrackId(value: string) {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
-  }
-
-  return hash || 1;
-}
-
 async function playTrack(track: Track) {
   if (!track.path) {
     player.error = resolveLocale(player.settings.locale) === 'en-US' ? 'This song has no local file path. Scan a music folder first.' : '这首歌没有本地文件路径，请先扫描音乐文件夹后再播放。';
@@ -1931,7 +1487,7 @@ function openOnlineTrackContextMenu(track: PluginSearchTrack, x: number, y: numb
 
 function createDownloadTrack(item: DownloadItem): Track {
   return {
-    id: -Math.abs(hashOnlineTrackId(`download:${item.id}`)),
+    id: -positiveStableStringHash(`download:${item.id}`),
     path: item.filePath ?? '',
     title: item.title,
     artist: item.artist,
@@ -2046,20 +1602,6 @@ async function resumeDownloadItem(item: DownloadItem) {
   await enqueueDownloadItemRequest(item, '继续下载');
 }
 
-function getDownloadTrackKey(track: Track) {
-  const sourceName = track.sourceName ?? '本地';
-  const sourceId = track.sourceId ?? String(track.id);
-  return `${sourceName}:${sourceId}`;
-}
-
-function isTrackDownloaded(track: Track) {
-  return downloadedTrackKeys.value.includes(getDownloadTrackKey(track));
-}
-
-function isTrackDownloadPending(track: Track) {
-  return pendingDownloadTrackKeys.value.includes(getDownloadTrackKey(track));
-}
-
 function downloadActiveOnlineTrack() {
   if (!onlineActiveTrack.value || !isRemoteTrack(onlineActiveTrack.value)) return;
   downloadTrack(onlineActiveTrack.value);
@@ -2126,13 +1668,6 @@ async function prepareAndEnqueueDownload(track: Track, item: DownloadItem) {
     updateDownloadItem(item.id, { status: 'failed', error: message });
     showOnlineToast(`${track.title} 下载失败：${message}`);
   }
-}
-
-function updateDownloadItem(id: string, patch: Partial<DownloadItem>) {
-  downloadItems.value = downloadItems.value.map((item) => (
-    item.id === id ? { ...item, ...patch } : item
-  ));
-  void persistDownloadItems();
 }
 
 async function playPreviousTrack() {
@@ -2897,7 +2432,7 @@ function finishLyricsEnter() {
       v-if="shouldAutoHideLyricsDock"
       class="lyrics-dock-hot-zone"
       aria-hidden="true"
-      @mouseenter="isLyricsDockHovered = true"
+      @mouseenter="hoverLyricsDock"
     ></div>
 
     <Transition name="online-toast">
@@ -2933,8 +2468,8 @@ function finishLyricsEnter() {
       :sleep-timer-request="sleepTimerRequest"
       :sleep-timer-request-id="sleepTimerRequestId"
       :toggle-playback-request-id="togglePlaybackRequestId"
-      @mouseenter="isLyricsDockHovered = true"
-      @mouseleave="isLyricsDockHovered = false"
+      @mouseenter="hoverLyricsDock"
+      @mouseleave="leaveLyricsDock"
       @download-active-track="downloadActiveOnlineTrack"
       @open-desktop-lyrics="openDesktopLyrics"
       @open-lyrics="toggleLyricsView"

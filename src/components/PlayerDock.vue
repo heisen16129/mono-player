@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   Captions,
   CheckCircle2,
@@ -47,13 +47,13 @@ import {
 import { formatDuration } from '../utils/format';
 import { resolveLocale, songCount, t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
+import { useQueuePopover } from '../composables/useQueuePopover';
+import { useSleepTimer, type SleepTimerAction } from '../composables/useSleepTimer';
 import BaseDialog from './BaseDialog.vue';
 import DefaultCover from './DefaultCover.vue';
 import SpinnerIcon from './SpinnerIcon.vue';
 import TrackCoverThumb from './TrackCoverThumb.vue';
 import { clearPlayerOriginalCoverCache, playerCoverCacheKey, setPlayerArtworkCoverCache, setPlayerOriginalCoverCache } from '../services/playerCoverCache';
-
-type SleepTimerAction = 'stop' | 'exit' | 'finishTrack';
 
 const props = defineProps<{
   activeTrack: Track | null;
@@ -118,21 +118,10 @@ const isMuted = ref(false);
 const playbackRates = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 const playbackRate = ref<(typeof playbackRates)[number]>(1);
 const isScrubbingProgress = ref(false);
-const sleepTimerMinutes = ref(player.settings.sleepTimerMinutes);
-const sleepTimerHours = ref(0);
-const sleepTimerEndsAt = ref<number | null>(null);
-const sleepTimerRemainingSeconds = ref(0);
-const sleepTimerPausedRemainingSeconds = ref<number | null>(null);
-const isSleepTimerDialogOpen = ref(false);
-const isSleepTimerStatusOpen = ref(false);
-const sleepTimerTotalSeconds = ref(Math.max(60, player.settings.sleepTimerMinutes * 60));
 const volumeControl = ref<HTMLElement | null>(null);
 const speedControl = ref<HTMLElement | null>(null);
 const qualityControl = ref<HTMLElement | null>(null);
 const lyricFormatControl = ref<HTMLElement | null>(null);
-const isQueueOpen = ref(false);
-const queueControl = ref<HTMLElement | null>(null);
-const queueTrackRefs = ref(new Map<number, HTMLElement>());
 const spectrumLevels = ref<number[]>([]);
 const runtimeDuration = ref(0);
 const coverUrl = ref('');
@@ -143,10 +132,7 @@ const hasThemeBackground = computed(() => {
 const dockStyle = computed(() => ({
   '--dock-cover-bg': coverUrl.value ? `url("${coverUrl.value}")` : undefined,
 }));
-let sleepTimerTimeout = 0;
-let sleepTimerTick = 0;
 let playbackErrorTimeout = 0;
-let sleepTimerStopAfterTrackPending = false;
 let smoothProgressFrame = 0;
 let smoothProgressBaseTime = 0;
 let smoothProgressBasePosition = 0;
@@ -160,6 +146,46 @@ let unlistenRustOutputDeviceFallback: (() => void) | null = null;
 let seamlessQueuedSource = '';
 let rustPlaybackStateHoldUntil = 0;
 let coverLoadId = 0;
+
+const {
+  isQueueOpen,
+  locateQueueTrack,
+  playQueueTrack,
+  setQueueControl,
+  setQueueTrackRef,
+  toggleQueuePanel,
+} = useQueuePopover({
+  activeTrack: computed(() => props.activeTrack),
+  onPlayTrack: (track) => emit('playQueueTrack', track),
+});
+
+const {
+  clearSleepTimer,
+  closeSleepTimerDialog,
+  closeSleepTimerStatus,
+  handleSleepTimerButtonClick,
+  handleSleepTimerRequest,
+  isSleepTimerActive,
+  isSleepTimerDialogOpen,
+  isSleepTimerPaused,
+  isSleepTimerStatusOpen,
+  pauseSleepTimer,
+  resumeSleepTimer,
+  setSleepTimerPreset,
+  sleepTimerExecuteAtLabel,
+  sleepTimerHours,
+  sleepTimerMinutes,
+  sleepTimerPresetMinutes,
+  sleepTimerProgressPercent,
+  sleepTimerRemainingLabel,
+  sleepTimerStopAfterTrackPending,
+  startSleepTimer,
+  syncSleepTimerSetting,
+} = useSleepTimer({
+  player,
+  onStop: stopPlayback,
+  onExit: () => emit('sleepTimerExit'),
+});
 
 async function cachePlayerOriginalCover(path: string, cacheKey: string, loadId: number) {
   try {
@@ -200,25 +226,6 @@ const onlineQualityLabel = computed(() => {
   return props.onlineQualityOptions.find((option) => option.id === props.onlineQuality)?.name ?? props.onlineQuality;
 });
 const lyricFormatLabel = computed(() => props.lyricFormat?.trim().toLowerCase() || props.lyricFormats[0] || '');
-const isSleepTimerActive = computed(() => sleepTimerEndsAt.value !== null);
-const isSleepTimerPaused = computed(() => sleepTimerPausedRemainingSeconds.value !== null);
-const sleepTimerRemainingLabel = computed(() => {
-  const minutes = Math.floor(sleepTimerRemainingSeconds.value / 60);
-  const seconds = sleepTimerRemainingSeconds.value % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-});
-const sleepTimerExecuteAtLabel = computed(() => {
-  if (sleepTimerEndsAt.value === null) return '';
-  return new Intl.DateTimeFormat(resolveLocale(player.settings.locale), {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(sleepTimerEndsAt.value));
-});
-const sleepTimerProgressPercent = computed(() => {
-  if (sleepTimerTotalSeconds.value <= 0) return 0;
-  return Math.max(0, Math.min(100, (sleepTimerRemainingSeconds.value / sleepTimerTotalSeconds.value) * 100));
-});
-const sleepTimerPresetMinutes = [10, 20, 30, 45, 60];
 
 function normalizedBackendPath(path: string | null | undefined) {
   return (path ?? '').replace(/\\/g, '/').toLocaleLowerCase();
@@ -471,15 +478,7 @@ watch(
 watch(
   () => props.sleepTimerRequestId,
   () => {
-    const request = props.sleepTimerRequest;
-    if (!request) return;
-    const minutes = Math.min(999, Math.max(1, Math.round(Number(request.minutes) || 0)));
-    if (request.action) {
-      player.setSleepTimerAction(request.action);
-    }
-    sleepTimerHours.value = Math.floor(minutes / 60);
-    sleepTimerMinutes.value = minutes % 60;
-    startSleepTimer();
+    handleSleepTimerRequest(props.sleepTimerRequest);
   },
 );
 
@@ -620,37 +619,6 @@ function closeLyricFormatPopover() {
   }
 }
 
-function openSleepTimerDialog() {
-  if (!isSleepTimerActive.value && !isSleepTimerPaused.value) {
-    const totalMinutes = Math.max(1, Math.round(Number(sleepTimerMinutes.value) || player.settings.sleepTimerMinutes));
-    sleepTimerHours.value = Math.floor(totalMinutes / 60);
-    sleepTimerMinutes.value = totalMinutes % 60;
-  }
-  isSleepTimerDialogOpen.value = true;
-}
-
-function closeSleepTimerDialog() {
-  isSleepTimerDialogOpen.value = false;
-}
-
-function closeSleepTimerStatus() {
-  isSleepTimerStatusOpen.value = false;
-}
-
-function handleSleepTimerButtonClick() {
-  if (isSleepTimerActive.value || isSleepTimerPaused.value) {
-    isSleepTimerStatusOpen.value = !isSleepTimerStatusOpen.value;
-    return;
-  }
-
-  openSleepTimerDialog();
-}
-
-function setSleepTimerPreset(minutes: number) {
-  sleepTimerHours.value = Math.floor(minutes / 60);
-  sleepTimerMinutes.value = minutes % 60;
-}
-
 function stopPlayback() {
   if (rustBackendActive.value) {
     holdRustPlaybackStoppedState();
@@ -659,97 +627,6 @@ function stopPlayback() {
   isPlaying.value = false;
   stopSmoothProgress();
   emit('playbackStateChange', false);
-}
-
-function clearSleepTimer() {
-  if (sleepTimerTimeout) {
-    window.clearTimeout(sleepTimerTimeout);
-    sleepTimerTimeout = 0;
-  }
-
-  if (sleepTimerTick) {
-    window.clearInterval(sleepTimerTick);
-    sleepTimerTick = 0;
-  }
-
-  sleepTimerEndsAt.value = null;
-  sleepTimerRemainingSeconds.value = 0;
-  sleepTimerPausedRemainingSeconds.value = null;
-  isSleepTimerStatusOpen.value = false;
-  sleepTimerStopAfterTrackPending = false;
-}
-
-function updateSleepTimerRemaining() {
-  if (sleepTimerEndsAt.value === null) return;
-  sleepTimerRemainingSeconds.value = Math.max(0, Math.ceil((sleepTimerEndsAt.value - Date.now()) / 1000));
-}
-
-function runSleepTimerAction() {
-  const action = player.settings.sleepTimerAction;
-  if (action === 'finishTrack') {
-    if (sleepTimerTimeout) {
-      window.clearTimeout(sleepTimerTimeout);
-      sleepTimerTimeout = 0;
-    }
-    if (sleepTimerTick) {
-      window.clearInterval(sleepTimerTick);
-      sleepTimerTick = 0;
-    }
-    sleepTimerEndsAt.value = null;
-    sleepTimerRemainingSeconds.value = 0;
-    sleepTimerPausedRemainingSeconds.value = null;
-    sleepTimerStopAfterTrackPending = true;
-    return;
-  }
-
-  clearSleepTimer();
-  stopPlayback();
-
-  if (action === 'exit') {
-    emit('sleepTimerExit');
-  }
-}
-
-function startSleepTimer() {
-  const hours = Math.min(99, Math.max(0, Math.round(Number(sleepTimerHours.value) || 0)));
-  const minutePart = Math.min(59, Math.max(0, Math.round(Number(sleepTimerMinutes.value) || 0)));
-  const minutes = Math.min(999, Math.max(1, hours * 60 + minutePart));
-  sleepTimerHours.value = Math.floor(minutes / 60);
-  sleepTimerMinutes.value = minutes % 60;
-  player.setSleepTimerMinutes(minutes);
-  clearSleepTimer();
-
-  sleepTimerTotalSeconds.value = minutes * 60;
-  sleepTimerEndsAt.value = Date.now() + minutes * 60_000;
-  updateSleepTimerRemaining();
-  sleepTimerTick = window.setInterval(updateSleepTimerRemaining, 1000);
-  sleepTimerTimeout = window.setTimeout(runSleepTimerAction, minutes * 60_000);
-  closeSleepTimerDialog();
-  isSleepTimerStatusOpen.value = false;
-}
-
-function pauseSleepTimer() {
-  if (sleepTimerEndsAt.value === null) return;
-  sleepTimerPausedRemainingSeconds.value = sleepTimerRemainingSeconds.value;
-  if (sleepTimerTimeout) {
-    window.clearTimeout(sleepTimerTimeout);
-    sleepTimerTimeout = 0;
-  }
-  if (sleepTimerTick) {
-    window.clearInterval(sleepTimerTick);
-    sleepTimerTick = 0;
-  }
-  sleepTimerEndsAt.value = null;
-}
-
-function resumeSleepTimer() {
-  const remainingSeconds = sleepTimerPausedRemainingSeconds.value;
-  if (!remainingSeconds) return;
-  sleepTimerPausedRemainingSeconds.value = null;
-  sleepTimerEndsAt.value = Date.now() + remainingSeconds * 1000;
-  updateSleepTimerRemaining();
-  sleepTimerTick = window.setInterval(updateSleepTimerRemaining, 1000);
-  sleepTimerTimeout = window.setTimeout(runSleepTimerAction, remainingSeconds * 1000);
 }
 
 function requestPreviousTrack() {
@@ -771,57 +648,10 @@ function requestFavoriteToggle() {
   emit('toggleFavorite');
 }
 
-function toggleQueuePanel() {
-  isQueueOpen.value = !isQueueOpen.value;
-}
-
-function closeQueuePanelOnOutsidePointer(event: PointerEvent) {
-  const target = event.target;
-  if (!(target instanceof Node)) return;
-  if (queueControl.value?.contains(target)) return;
-  isQueueOpen.value = false;
-}
-
-function playQueueTrack(track: Track) {
-  if (!track.path) return;
-  emit('playQueueTrack', track);
-}
-
-function setQueueTrackRef(trackId: number, element: Element | ComponentPublicInstance | null) {
-  if (element instanceof HTMLElement) {
-    queueTrackRefs.value.set(trackId, element);
-    return;
-  }
-
-  queueTrackRefs.value.delete(trackId);
-}
-
-async function locateQueueTrack() {
-  if (!props.activeTrack) return;
-
-  await nextTick();
-  queueTrackRefs.value.get(props.activeTrack.id)?.scrollIntoView({
-    block: 'center',
-    behavior: 'smooth',
-  });
-}
-
-watch(isQueueOpen, async (open) => {
-  if (open) {
-    await nextTick();
-    document.addEventListener('pointerdown', closeQueuePanelOnOutsidePointer);
-    return;
-  }
-
-  document.removeEventListener('pointerdown', closeQueuePanelOnOutsidePointer);
-});
-
 watch(
   () => player.settings.sleepTimerMinutes,
   (minutes) => {
-    if (!isSleepTimerActive.value) {
-      sleepTimerMinutes.value = minutes;
-    }
+    syncSleepTimerSetting(minutes);
   },
 );
 
@@ -887,8 +717,8 @@ function handleRustPlaybackState(state: RustPlayerState) {
 
 onMounted(async () => {
   unlistenRustPlaybackAdvanced = await listenRustBackendAdvanced((source) => {
-    if (sleepTimerStopAfterTrackPending) {
-      sleepTimerStopAfterTrackPending = false;
+    if (sleepTimerStopAfterTrackPending.value) {
+      sleepTimerStopAfterTrackPending.value = false;
       void stopRustBackend(false);
       return;
     }
@@ -912,8 +742,8 @@ onMounted(async () => {
   unlistenRustPlaybackEnded = await listenRustBackendEnded(() => {
     if (!rustBackendActive.value) return;
 
-    if (sleepTimerStopAfterTrackPending) {
-      sleepTimerStopAfterTrackPending = false;
+    if (sleepTimerStopAfterTrackPending.value) {
+      sleepTimerStopAfterTrackPending.value = false;
       isPlaying.value = false;
       rustBackendActive.value = false;
       stopSmoothProgress();
@@ -932,7 +762,6 @@ onBeforeUnmount(() => {
   stopSmoothProgress();
   clearSleepTimer();
   clearPlaybackError();
-  document.removeEventListener('pointerdown', closeQueuePanelOnOutsidePointer);
   unlistenRustPlaybackAdvanced?.();
   unlistenRustPlaybackState?.();
   unlistenRustQueue?.();
@@ -1232,7 +1061,7 @@ function handleCoverError() {
           <Volume2 :size="19" />
         </button>
       </div>
-      <div ref="queueControl" class="queue-control">
+      <div :ref="setQueueControl" class="queue-control">
         <button
           class="icon-button queue-button"
           :class="{ 'is-active': isQueueOpen }"
