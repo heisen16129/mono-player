@@ -39,6 +39,43 @@ defineEmits<{
 </template>
 
 <style scoped>
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 42px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid var(--smw-border);
+  border-radius: 10px;
+  color: var(--smw-icon-muted);
+  background: var(--smw-bg-input);
+}
+
+.search-field input {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--smw-text-primary);
+  background: transparent;
+  font-size: 14px;
+}
+
+.search-field input::placeholder {
+  color: var(--smw-text-secondary);
+}
+
+.search-field input::-webkit-search-cancel-button,
+.search-field input::-webkit-search-decoration {
+  appearance: none;
+}
+
+.top-search {
+  width: min(320px, 34vw);
+}
+
 .result-search {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;

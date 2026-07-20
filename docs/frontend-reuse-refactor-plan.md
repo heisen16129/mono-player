@@ -478,3 +478,155 @@
 - 2026-07-21：按评估结论补充 `useRustPlaybackListeners.ts` 实施步骤；本步只迁移 Rust 播放事件监听注册和清理，不迁移事件处理逻辑。
 - 2026-07-21：新增 `composables/useRustPlaybackListeners.ts`，迁移 `state`、`queue`、`advanced`、`ended`、`output-device-fallback` 监听注册和 unlisten 清理；`PlayerDock.vue` 继续保留 `handleRustPlaybackState`、无缝下一首、睡眠播完停止、输出设备回退和队列快照处理；`npm run build` 通过。
 - 2026-07-21：完成 `useRustPlaybackStateHandler.ts` 评估；可以抽，但建议只抽事件处理函数，不迁移状态源。推荐由 `PlayerDock.vue` 继续创建并持有 `isPlaying`、`rustBackendActive`、`rustQueueSnapshot`、`spectrumLevels`、`seamlessQueuedSource`、`rustPlaybackStateHoldUntil`、`sleepTimerStopAfterTrackPending` 和进度 composable 返回值，然后传给 `useRustPlaybackStateHandler`。可迁出的函数包括 `handleRustPlaybackState`、`handleRustAdvanced`、`handleRustEnded`、`handleRustQueue`、`handleRustOutputDeviceFallback`、`isActiveRustPath`、`findQueueTrackBySource`。暂不建议迁移 `resumeAudio`、`togglePlayback`、`stopPlayback`，因为它们属于用户主动播放控制，不是 Rust 事件处理。
+## player.ts store 拆分计划
+
+### 目标
+
+降低 `src/stores/player.ts` 的体积和职责密度，但保持 `usePlayerStore()` 对外返回结构不变，先不拆多个 Pinia store，不改播放行为、不改曲库扫描语义、不改主题效果。
+
+### 边界
+
+- 不修改页面调用 `usePlayerStore()` 的方式。
+- 不修改 `currentTrack`、`queue`、`playbackMode`、`settings` 等状态源。
+- 不迁移播放控制逻辑到其他 store。
+- 每完成一步运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 player.ts store 拆分计划 | 已完成 | 文档已更新 | 明确先做低风险纯逻辑拆分，对外 API 不变。 |
+| 2. 抽离常量和 normalize 纯函数 | 已完成 | `npm run build` 已通过 | 新建 `src/stores/player/constants.ts`、`normalizers.ts`，迁移 storage key、默认设置、范围常量、持久化数据 normalize、路径去重工具。 |
+| 3. 抽离收藏和歌单纯操作辅助函数 | 已完成 | `npm run build` 已通过 | 保持 `favoriteTrackIds`、`settings.playlists` 仍由 `player.ts` 持有，只把 snapshot 和数组更新逻辑拆成 helper。 |
+| 4. 评估主题逻辑拆分 | 已完成 | 只评估，不改代码 | 可拆，但不建议马上动。主题逻辑涉及 DOM 变量、系统主题监听、启动背景缓存和设置持久化副作用，应该单独开计划处理。 |
+| 5. 评估播放会话逻辑拆分 | 已完成 | 只评估，不改代码 | 可拆，但暂不建议本轮迁移。`persistPlaybackSession` / `restorePlaybackSession` 直接影响重启恢复和队列状态，应在播放恢复专项里处理。 |
+
+### 执行记录
+
+- 2026-07-21：写入 `player.ts` store 拆分计划。本轮先执行第 2 步，只抽常量和 normalize 纯函数。
+- 2026-07-21：完成第 2 步。新增 `src/stores/player/constants.ts` 和 `src/stores/player/normalizers.ts`，`player.ts` 从 1096 行降到 843 行；`npm run build` 已通过。
+- 2026-07-21：完成第 3 步。新增 `src/stores/player/favorites.ts` 和 `src/stores/player/playlists.ts`，迁移收藏快照、收藏列表解析、收藏切换、歌单增删改和歌单歌曲增删的数组计算逻辑；`player.ts` 降到 767 行；`npm run build` 已通过。
+- 2026-07-21：完成第 4 步评估。主题逻辑可以抽成 `usePlayerThemeEffects` 或 `stores/player/theme.ts`，但它同时操作 `settings`、`customThemes`、`cachedSystemThemeState`、DOM CSS 变量、窗口 focus/visibility 监听和启动背景缓存。本轮不继续拆，避免把主题副作用和设置持久化一起改乱。
+- 2026-07-21：完成第 5 步评估。播放会话逻辑可以抽 helper，但 `persistPlaybackSession` / `restorePlaybackSession` 与 `currentTrack`、`queue`、`playbackMode`、`usePlaybackSession.ts` 和重启恢复强耦合。本轮不迁移，避免影响之前反复调过的恢复播放行为。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `player.ts` 从 1096 行降到 767 行。
+- 新增 `src/stores/player/constants.ts`、`src/stores/player/normalizers.ts`、`src/stores/player/favorites.ts`、`src/stores/player/playlists.ts`。
+- 本轮只拆常量、normalize 纯函数、收藏/歌单数组计算 helper；没有修改 `usePlayerStore()` 对外返回结构，没有修改播放控制、重启恢复、主题应用和曲库扫描语义。
+
+## player.ts 主题和播放会话拆分执行计划
+
+### 目标
+
+继续降低 `src/stores/player.ts` 的职责密度，把已经确认可以迁移的主题副作用和播放会话计算逻辑拆到 `src/stores/player/` 子模块中。保持 `usePlayerStore()` 对外返回结构不变，不修改页面调用方式。
+
+### 边界
+
+- 不修改主题字段、主题变量值、自定义主题安装/删除/启用语义。
+- 不修改播放会话持久化 key 和恢复结果结构。
+- 不修改 `currentTrack`、`queue`、`playbackMode` 的状态归属。
+- 每完成一步运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入主题和播放会话拆分执行计划 | 已完成 | 文档已更新 | 明确本轮只迁移主题副作用和播放会话计算，不改外部 API。 |
+| 2. 抽离主题副作用控制器 | 已完成 | `npm run build` 已通过 | 新建 `src/stores/player/theme.ts`，迁移 DOM 主题变量、系统主题监听、启动背景缓存和系统主题刷新逻辑。 |
+| 3. 抽离播放会话计算 helper | 已完成 | `npm run build` 已通过 | 新建 `src/stores/player/playbackSession.ts`，迁移保存快照和恢复快照的队列计算逻辑，状态写入仍留在 `player.ts`。 |
+| 4. 收尾扫描 | 已完成 | `git diff --stat` / 行数扫描 | 已确认主题实现迁移到 `theme.ts`，播放会话计算迁移到 `playbackSession.ts`，`player.ts` 保留状态写入入口。 |
+
+### 执行记录
+
+- 2026-07-21：写入主题和播放会话拆分执行计划。
+- 2026-07-21：完成第 2 步。新增 `src/stores/player/theme.ts`，迁移主题变量应用、自定义主题增删、系统主题缓存、系统主题刷新、启动背景缓存和主题切换逻辑；`player.ts` 只保留控制器接线；`npm run build` 已通过。
+- 2026-07-21：完成第 3 步。新增 `src/stores/player/playbackSession.ts`，迁移播放会话保存快照和恢复快照的队列计算；`player.ts` 保留 `persistPlaybackSession` / `restorePlaybackSession` 对外入口和状态赋值；`npm run build` 已通过。
+- 2026-07-21：完成第 4 步收尾扫描。`player.ts` 当前 490 行；主题实现已迁移到 `theme.ts`，播放会话计算已迁移到 `playbackSession.ts`。扫描确认 `player.ts` 中只保留播放会话对外入口，未继续保留主题变量实现函数。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `player.ts` 从本轮开始前的 767 行降到 490 行。
+- 新增 `src/stores/player/theme.ts` 和 `src/stores/player/playbackSession.ts`。
+- `usePlayerStore()` 对外返回结构保持不变。
+- `currentTrack`、`queue`、`playbackMode` 状态归属保持在 `player.ts`，没有迁移到其他 store。
+
+## 全局 CSS 迁回组件计划
+
+### 目标
+
+继续减少 `src/styles.css` 引入的全局样式体积，把只服务单个组件的 CSS 放回对应 `.vue` 的 `<style scoped>`。保留真正跨组件、跨页面、主题变量和响应式布局类全局样式。
+
+### 边界
+
+- `theme-tokens.css` 先不迁移，继续作为主题变量和主题态覆盖入口。
+- `base.css` 只迁单组件私有样式，reset、滚动条、focus、基础按钮继续全局。
+- `app-layout.css` 继续承载应用整体 grid、页面布局和跨组件主题背景样式。
+- `player-dock.css` 暂时保留，因为它依赖 `mono-window.lyrics-open` 和 `player-dock` 组合状态。
+- 每完成一步运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入全局 CSS 迁回组件计划 | 已完成 | 文档已更新 | 明确先迁低风险、单组件 CSS。 |
+| 2. 迁移托盘菜单组件样式 | 已完成 | `npm run build` 已通过 | 将 `.tray-menu-*` 样式移入 `TrayMenu.vue` 的 `<style scoped>`，全局只保留 `body.tray-menu-page` 页面级规则。 |
+| 3. 评估并拆分 `library.css` | 已完成 | `npm run build` 已通过 | 已按组件归属迁移 `SearchInput`、`LibraryPanel`、`LibraryContentLayout` 相关样式，并删除空的 `library.css` 引入。 |
+| 4. 评估 `responsive.css` 可迁移部分 | 已完成 | 只评估，不改代码 | 当前多数规则依赖整体窗口、App grid、歌词页和播放栏组合状态，暂时保留全局；后续如需迁移应按页面专项处理。 |
+| 5. 收尾扫描 | 已完成 | `git diff --stat` / 样式引用扫描 | 已确认 `library.css` import 移除、空 CSS 文件删除，`tray-menu.css` 仅保留页面级规则。 |
+
+### 执行记录
+
+- 2026-07-21：写入全局 CSS 迁回组件计划。本轮先执行第 2 步，迁移托盘菜单组件私有样式。
+- 2026-07-21：完成第 2 步。`TrayMenu.vue` 已新增 scoped style 承载 `.tray-menu-*` 样式，`styles/tray-menu.css` 只保留 `body.tray-menu-page` / `#app` 页面级规则；`npm run build` 已通过。
+- 2026-07-21：完成第 3 步。`SearchInput.vue` 承载 `.search-field` / `.top-search`，`LibraryPanel.vue` 承载曲库侧栏列表、快捷入口、本地文件夹和空文件夹提示样式，`LibraryContentLayout.vue` 承载 `.library-panel` 基础布局和 `library-panel-slide` transition；删除空的 `styles/library.css` 并移除 `styles.css` import；`npm run build` 已通过。
+- 2026-07-21：完成第 4 步评估。`responsive.css` 中 `:root` 宽度变量、`.mono-window`、`.app-grid`、页面 grid、`.lyrics-*`、`.player-dock` 和 `.playback-meta` 均是跨组件响应式组合规则；本轮不迁移，避免影响移动宽度布局。后续如需继续拆，应按 `PrimarySidebar`、`LyricsView`、`PlayerDock`、设置页等专项逐步迁移。
+- 2026-07-21：完成第 5 步收尾扫描。`src/styles.css` 不再引入 `library.css`，`styles/tray-menu.css` 降为 10 行，仅保留 `body.tray-menu-page` / `#app` 页面级规则；当前全局样式剩余 `theme-tokens.css`、`base.css`、`app-layout.css`、`player-dock.css`、`tray-menu.css`、`responsive.css`。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `styles/library.css` 已删除，样式迁回 `SearchInput.vue`、`LibraryPanel.vue`、`LibraryContentLayout.vue`。
+- `styles/tray-menu.css` 从 108 行降到 10 行，托盘菜单私有样式迁回 `TrayMenu.vue`。
+- `responsive.css` 本轮只评估不迁移，保留整体窗口和跨组件响应式规则。
+
+## PrimarySidebar 组件拆分计划
+
+### 目标
+
+降低 `src/components/PrimarySidebar.vue` 体积，把侧边栏按真实 UI 区块拆成品牌栏、主导航/歌单栏、底部账号操作栏。父组件继续作为事件装配入口，不改变 `App.vue` 调用 `PrimarySidebar` 的 props 和 emits。
+
+### 边界
+
+- 不修改侧边栏对外 props / emits。
+- 不修改导航点击、歌单右键菜单、折叠展开语义。
+- 不修改主题变量和全局布局规则。
+- 子组件私有 CSS 放到各自 `<style scoped>`。
+- 每完成一步运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 PrimarySidebar 拆分计划 | 已完成 | 文档已更新 | 明确只拆 UI 区块，不改父组件对外 API。 |
+| 2. 拆分品牌栏 | 已完成 | `npm run build` 已通过 | 新建 `sidebar/SidebarBrand.vue`，迁移 Logo、标题、折叠按钮和品牌区 CSS。 |
+| 3. 拆分主导航和歌单导航 | 已完成 | `npm run build` 已通过 | 新建 `sidebar/SidebarNav.vue`，迁移主导航、歌单列表、滚动状态和导航 CSS。 |
+| 4. 拆分底部账号操作区 | 已完成 | `npm run build` 已通过 | 新建 `sidebar/SidebarAccount.vue`，迁移账号信息、设置/主题按钮和账号区 CSS。 |
+| 5. 收尾扫描 | 已完成 | 行数扫描 / `git diff --stat` | 已确认父组件只保留装配，无遗留已拆模板和样式。 |
+
+### 执行记录
+
+- 2026-07-21：写入 PrimarySidebar 组件拆分计划。
+- 2026-07-21：完成第 2 步。新增 `components/sidebar/SidebarBrand.vue`，迁移品牌 Logo、标题、折叠按钮和品牌区 scoped CSS；`PrimarySidebar.vue` 保留外层装配；`npm run build` 已通过。
+- 2026-07-21：完成第 3 步。新增 `components/sidebar/SidebarNav.vue`，迁移主导航、歌单导航、创建歌单按钮、歌单滚动状态和导航区 scoped CSS；`PrimarySidebar.vue` 只负责转发导航事件；`npm run build` 已通过。
+- 2026-07-21：完成第 4 步。新增 `components/sidebar/SidebarAccount.vue`，迁移账号头像、在线状态、设置/主题按钮和账号区 scoped CSS；`PrimarySidebar.vue` 继续只负责接线；`npm run build` 已通过。
+- 2026-07-21：完成第 5 步收尾扫描。`PrimarySidebar.vue` 当前 89 行；新增 `SidebarBrand.vue`、`SidebarNav.vue`、`SidebarAccount.vue`。扫描确认父组件中没有继续保留品牌、导航、歌单列表、账号区模板和样式实现。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `PrimarySidebar.vue` 从 598 行降到 89 行。
+- 新增 `src/components/sidebar/SidebarBrand.vue`、`src/components/sidebar/SidebarNav.vue`、`src/components/sidebar/SidebarAccount.vue`。
+- `PrimarySidebar` 对外 props / emits 保持不变，`App.vue` 调用方式未修改。

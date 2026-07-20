@@ -97,3 +97,117 @@ onBeforeUnmount(() => {
     </div>
   </main>
 </template>
+
+<style scoped>
+.tray-menu-shell {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 7px;
+  width: 100vw;
+  height: 100vh;
+  padding: 8px;
+  border: 1px solid var(--smw-border);
+  border-radius: 10px;
+  color: var(--smw-text-body);
+  background: color-mix(in srgb, var(--smw-bg-workspace) 96%, transparent);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 18%);
+  font-family: var(--smw-font-sans);
+  box-sizing: border-box;
+}
+
+.tray-menu-now,
+.tray-menu-section button {
+  width: 100%;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.tray-menu-now {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: var(--smw-bg-selected);
+}
+
+.tray-menu-now strong,
+.tray-menu-now span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tray-menu-now strong {
+  color: var(--smw-text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tray-menu-now span {
+  color: var(--smw-text-secondary);
+  font-size: 12px;
+}
+
+.tray-menu-section {
+  display: grid;
+  gap: 2px;
+  padding-top: 7px;
+  border-top: 1px solid var(--smw-border-soft);
+}
+
+.tray-menu-section button,
+.tray-menu-mode > button,
+.tray-menu-submenu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--smw-text-body);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.tray-menu-section button:hover,
+.tray-menu-mode:hover > button,
+.tray-menu-submenu button:hover {
+  background: var(--smw-bg-hover);
+}
+
+.tray-menu-mode {
+  position: relative;
+}
+
+.tray-menu-mode > button {
+  justify-content: space-between;
+}
+
+.tray-menu-submenu {
+  position: absolute;
+  right: calc(100% + 6px);
+  bottom: 0;
+  display: none;
+  width: 116px;
+  padding: 6px;
+  border: 1px solid var(--smw-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--smw-bg-workspace) 97%, transparent);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 16%);
+}
+
+.tray-menu-mode:hover .tray-menu-submenu {
+  display: grid;
+}
+
+.tray-menu-submenu button {
+  justify-content: flex-start;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+</style>

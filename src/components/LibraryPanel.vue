@@ -98,3 +98,128 @@ const emit = defineEmits<{
     </section>
   </aside>
 </template>
+
+<style scoped>
+.panel-title,
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-title h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.quick-list {
+  display: grid;
+  gap: 10px;
+}
+
+.quick-row,
+.playlist-row {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.quick-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+  min-height: 58px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.quick-row:hover,
+.quick-row.selected {
+  background: var(--smw-bg-selected);
+}
+
+.quick-row > span:first-child {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--smw-border);
+  border-radius: 8px;
+  background: var(--smw-bg-input);
+}
+
+.quick-copy {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  min-width: 0;
+}
+
+.quick-row strong {
+  font-size: 14px;
+  font-weight: 520;
+  line-height: 1.2;
+}
+
+.quick-row small {
+  color: var(--smw-text-secondary);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.divider {
+  height: 1px;
+  background: var(--smw-border);
+}
+
+.playlist-section {
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+}
+
+.section-heading {
+  color: var(--smw-text-secondary);
+  font-size: 13px;
+}
+
+.playlist-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 58px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.playlist-row:hover,
+.playlist-row.selected {
+  background: var(--smw-bg-selected);
+}
+
+.playlist-row strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 520;
+}
+
+.playlist-row small {
+  color: var(--smw-text-secondary);
+  font-size: 13px;
+}
+
+.empty-folder-note {
+  margin: 4px 8px 0;
+  color: var(--smw-text-secondary);
+  font-size: 12px;
+}
+</style>
