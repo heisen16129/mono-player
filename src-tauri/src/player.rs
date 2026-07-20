@@ -304,6 +304,23 @@ pub(crate) fn player_restore_queue(
 }
 
 #[tauri::command]
+pub(crate) fn player_set_playback_mode(
+    state: State<'_, PlayerState>,
+    app: AppHandle,
+    playback_mode: String,
+) -> ApiResponse<QueueSnapshot> {
+    ApiResponse::from_result((|| {
+        let snapshot = {
+            let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+            set_playback_mode_backend(&mut backend, playback_mode);
+            queue_snapshot_from_backend(&mut backend)
+        };
+        let _ = app.emit("player://queue", &snapshot);
+        Ok(snapshot)
+    })())
+}
+
+#[tauri::command]
 pub(crate) async fn player_next(
     state: State<'_, PlayerState>,
     app: AppHandle,

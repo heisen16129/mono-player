@@ -78,10 +78,7 @@ pub(super) fn set_queue_backend(
         .into_iter()
         .filter_map(normalize_queue_track)
         .collect();
-    let next_playback_mode = match playback_mode.as_str() {
-        "shuffle" | "fixed" => playback_mode,
-        _ => "repeat".to_string(),
-    };
+    let next_playback_mode = normalize_playback_mode(playback_mode);
     let active_source = current_source
         .map(str::trim)
         .filter(|source| !source.is_empty())
@@ -110,6 +107,44 @@ pub(super) fn set_queue_backend(
         .is_some_and(|source| backend.queue_sources.iter().any(|item| item == source))
     {
         backend.queued_next_source = None;
+    }
+}
+
+pub(super) fn set_playback_mode_backend(
+    backend: &mut PlayerBackend,
+    playback_mode: String,
+) {
+    let next_playback_mode = normalize_playback_mode(playback_mode);
+    let active_source = backend
+        .current_source
+        .as_deref()
+        .and_then(|source| {
+            queue_source_key_for_source(&backend.queue_tracks, source)
+                .or_else(|| normalize_queue_source(source))
+        });
+
+    backend.queue_sources = build_play_order_sources(
+        &backend.queue_tracks,
+        active_source.as_deref(),
+        &next_playback_mode,
+    );
+    backend.playback_mode = next_playback_mode;
+    backend.queue_index = active_source
+        .as_deref()
+        .and_then(|source| queue_order_index_for_source(backend, source));
+    if !backend
+        .queued_next_source
+        .as_ref()
+        .is_some_and(|source| backend.queue_sources.iter().any(|item| item == source))
+    {
+        backend.queued_next_source = None;
+    }
+}
+
+fn normalize_playback_mode(playback_mode: String) -> String {
+    match playback_mode.as_str() {
+        "shuffle" | "fixed" => playback_mode,
+        _ => "repeat".to_string(),
     }
 }
 

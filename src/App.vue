@@ -49,7 +49,7 @@ import {
 import { deleteDownloadedTrackFile, enqueueDownloadOnlineTrack, openDownloadedTrackInFolder, type DownloadOnlineTrackRequest, type DownloadQueueEvent } from './services/downloads';
 import { clearCoverThumbnailCache, exitApp, isTauriRuntime, refreshTrackDuration, resolveLocalTrackLyrics, updateTrackCover, updateTrackMetadata } from './services/music';
 import { getPluginLyricsMetadata } from './services/pluginSearch';
-import { changeRustBackendQueueTrackQuality, getRustBackendDefaultCacheDir, listenRustBackendQueue, playRustBackendNext, playRustBackendPrevious, removeRustBackendQueueSource, restoreRustBackendQueue, setRustBackendCacheDir, startRustBackendQueue, stopRustBackend, type RustQueueSnapshot } from './services/playerBackend';
+import { changeRustBackendQueueTrackQuality, getRustBackendDefaultCacheDir, listenRustBackendQueue, playRustBackendNext, playRustBackendPrevious, removeRustBackendQueueSource, restoreRustBackendQueue, setRustBackendCacheDir, setRustBackendPlaybackMode, startRustBackendQueue, stopRustBackend, type RustQueueSnapshot } from './services/playerBackend';
 import { clearSystemMedia, listenSystemMediaAction, updateSystemMedia, type SystemMediaAction } from './services/systemMedia';
 import { usePlayerStore } from './stores/player';
 import type { DownloadItem, PlaybackMode, Track, TrackLyrics } from './types/music';
@@ -1913,12 +1913,22 @@ function clearActiveTrackLyrics() {
   rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (track.id === active.id ? withoutAssociatedTrackLyrics(track) : track));
 }
 
-function togglePlaybackMode() {
-  player.togglePlaybackMode();
+async function syncRustPlaybackMode() {
+  try {
+    handleRustQueueSnapshot(await setRustBackendPlaybackMode(player.playbackMode));
+  } catch (error) {
+    showOnlineToast(getErrorMessage(error), 'error');
+  }
 }
 
-function setPlaybackMode(mode: PlaybackMode) {
+async function togglePlaybackMode() {
+  player.togglePlaybackMode();
+  await syncRustPlaybackMode();
+}
+
+async function setPlaybackMode(mode: PlaybackMode) {
   player.playbackMode = mode;
+  await syncRustPlaybackMode();
 }
 
 async function removeTrackFromRustQueue(track: Track) {
@@ -1984,17 +1994,17 @@ async function handleTrayMenuAction(action: string) {
   }
 
   if (action === 'mode-shuffle') {
-    setPlaybackMode('shuffle');
+    await setPlaybackMode('shuffle');
     return;
   }
 
   if (action === 'mode-repeat') {
-    setPlaybackMode('repeat');
+    await setPlaybackMode('repeat');
     return;
   }
 
   if (action === 'mode-fixed') {
-    setPlaybackMode('fixed');
+    await setPlaybackMode('fixed');
     return;
   }
 

@@ -354,3 +354,127 @@
 - 主题卡片相关 CSS 已跟随各自组件放入 scoped style，没有新增全局主题页 CSS。
 - 已扫描 `ThemeView.vue` 和 `components/theme`，父组件没有继续保留 `theme-card`、`theme-card-preview`、`theme-card-actions`、`theme-card-delete` 等卡片模板和样式。
 - 本轮只拆分主题页前端组件和样式位置，没有修改 player store、主题变量、自定义主题导入/删除/安装/使用逻辑和系统主题预览语义。
+
+## PlayerDock 功能拆分计划
+
+### 目标
+
+按播放栏真实 UI 功能边界拆分 `PlayerDock.vue`。入口组件继续保留播放状态、Rust 后端事件、播放控制和封面桥接；子组件只负责局部 UI 展示和事件转发。拆分时 CSS 跟随拆出的组件放入各自 `<style scoped>`，不新增全局播放栏 CSS。
+
+### 边界
+
+- 不修改 Rust 播放命令和事件监听语义。
+- 不修改播放队列、播放状态、进度、封面读取和音量设置行为。
+- 每次只拆一个低风险 UI 块，构建通过后回写本文档。
+- 本轮优先拆定时关闭控件，因为状态已经由 `useSleepTimer` 承载，模板和样式相对独立。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 PlayerDock 拆分计划 | 已完成 | 文档已更新 | 明确本轮先拆低风险 UI 块，不改播放语义。 |
+| 2. 拆分定时关闭控件 | 已完成 | `npm run build` 已通过 | 已抽 `SleepTimerControl`，承载定时关闭按钮、状态浮层、设置弹窗和 scoped CSS。 |
+| 3. 拆分音质 / 歌词格式选择控件 | 已完成 | `npm run build` 已通过 | 已抽 `PlaybackOptionControls`，承载音质列表、歌词格式列表和 `.quality-*` scoped CSS。 |
+| 4. 拆分音量 / 倍速控制 | 已完成 | `npm run build` 已通过 | 已抽 `VolumeControl`、`PlaybackSpeedControl`，只转发输入事件，不改音量和倍速语义。 |
+| 5. 拆分播放队列弹层 | 已完成 | `npm run build` 已通过 | 已抽 `PlaybackQueuePopover`，保留 `useQueuePopover` 和队列事件编排在父组件。 |
+| 6. 拆分当前歌曲信息区 | 已完成 | `npm run build` 已通过 | 已抽 `NowPlayingInfo`，只搬封面按钮、标题歌手、时间显示模板和 CSS，封面读取逻辑暂留父组件。 |
+| 7. 拆分播放控制区 | 已完成 | `npm run build` 已通过 | 已抽 `TransportControls`，只转发收藏、上一首、播放暂停、下一首、播放模式事件。 |
+| 8. 拆分右侧控制区 | 已完成 | `npm run build` 已通过 | 已抽 `PlaybackMetaControls`，承载下载、歌词格式、桌面歌词、定时关闭、倍速、音量、播放队列组合和 scoped CSS。 |
+| 9. 评估进度条 / 平滑进度 / 封面缓存 | 已完成 | 本轮不拆 | 这些直接影响播放手感和封面闪烁，暂留 `PlayerDock.vue`，后续单独小步处理。 |
+| 10. 构建验证与收尾扫描 | 已完成 | `npm run build` 已通过，父组件残留已扫描 | 已回写最终验证结果。 |
+
+### 执行记录
+
+- 2026-07-21：写入 PlayerDock 功能拆分计划，本轮先处理定时关闭控件。
+- 2026-07-21：新增 `components/player-dock/SleepTimerControl.vue`，迁移定时关闭按钮、状态浮层、设置弹窗和对应 scoped CSS；`PlayerDock.vue` 保留 `useSleepTimer` 状态和事件编排。
+- 2026-07-21：完成 `npm run build` 验证；普通构建因 Vite/esbuild `spawn EPERM` 被沙箱拦截，提权重跑后构建通过。
+- 2026-07-21：新增 `components/player-dock/PlaybackOptionControls.vue`，迁移音质选择、歌词格式选择和 `.quality-*` scoped CSS；`PlayerDock.vue` 只保留标签派生值和事件转发，`npm run build` 通过。
+- 2026-07-21：新增 `components/player-dock/PlaybackSpeedControl.vue` 和 `VolumeControl.vue`，迁移倍速弹层、音量弹层和对应 scoped CSS；`PlayerDock.vue` 保留倍速/音量状态更新和 Rust 后端调用，`npm run build` 通过。
+- 2026-07-21：新增 `components/player-dock/PlaybackQueuePopover.vue`，迁移播放队列按钮、弹层、队列列表和 `.queue-*` scoped CSS；`PlayerDock.vue` 保留 `useQueuePopover` 状态、定位和播放队列事件编排，`npm run build` 通过。
+- 2026-07-21：新增 `components/player-dock/NowPlayingInfo.vue`，迁移当前歌曲封面按钮、标题歌手、当前时间/总时长显示和对应 scoped CSS；封面读取、封面错误处理和总时长派生仍保留在 `PlayerDock.vue`，`npm run build` 通过。
+- 2026-07-21：新增 `components/player-dock/TransportControls.vue`，迁移收藏、上一首、播放暂停、下一首、播放模式按钮和对应 scoped CSS；播放控制函数仍保留在 `PlayerDock.vue`，`npm run build` 通过。
+- 2026-07-21：新增 `components/player-dock/PlaybackMetaControls.vue`，迁移右侧下载、歌词格式、桌面歌词、定时关闭、倍速、音量、播放队列组合和对应 scoped CSS；`PlayerDock.vue` 保留右侧控制区状态和事件接线，`npm run build` 通过。
+- 2026-07-21：评估进度条、平滑进度和封面缓存：它们直接影响播放手感、Rust 状态同步和封面闪烁，本轮暂不拆，后续需要单独计划和手动播放验证。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `PlayerDock.vue` 从 2405 行降到 1006 行。
+- 定时关闭模板和 CSS 已迁移到 `components/player-dock/SleepTimerControl.vue`。
+- 音质 / 歌词格式选择模板和 `.quality-*` CSS 已迁移到 `components/player-dock/PlaybackOptionControls.vue`。
+- 音量 / 倍速弹层模板和 CSS 已迁移到 `components/player-dock/VolumeControl.vue` 和 `PlaybackSpeedControl.vue`。
+- 播放队列按钮、弹层、列表模板和 `.queue-*` CSS 已迁移到 `components/player-dock/PlaybackQueuePopover.vue`。
+- 当前歌曲封面按钮、标题歌手、时间显示模板和相关 CSS 已迁移到 `components/player-dock/NowPlayingInfo.vue`。
+- 播放控制按钮模板和相关 CSS 已迁移到 `components/player-dock/TransportControls.vue`。
+- 右侧下载、歌词格式、桌面歌词、定时关闭、倍速、音量、播放队列组合和相关 CSS 已迁移到 `components/player-dock/PlaybackMetaControls.vue`。
+- 已扫描 `PlayerDock.vue` 和 `components/player-dock/*.vue`，父组件只保留子组件接线、`useSleepTimer` / `useQueuePopover` 状态、播放控制函数、播放进度、封面读取桥接和必要事件编排，没有继续保留已拆 UI 块的模板和 scoped CSS。
+- 本轮只拆分播放栏定时关闭 UI，没有修改 Rust 播放命令、播放队列、播放状态、进度、封面读取和音量设置行为。
+
+## PlayerDock 后续瘦身计划
+
+### 目标
+
+继续降低 `PlayerDock.vue` 体积，但保持播放行为稳定。优先拆低风险 UI 组件；封面缓存、平滑进度、Rust 监听等运行时逻辑后续单独处理，避免把播放、封面和队列问题混在一次改动里。
+
+### 边界
+
+- 不修改 Rust 播放命令、队列语义、上一首/下一首、播放模式同步逻辑。
+- 不修改当前播放 Track 状态源。
+- 不修改封面读取策略和平滑进度算法。
+- CSS 跟随拆出的组件放入各自 `<style scoped>`。
+- 每完成一步运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 PlayerDock 后续瘦身计划 | 已完成 | 文档已更新 | 明确先拆低风险 UI，不碰播放运行时语义。 |
+| 2. 拆分进度条 UI | 已完成 | `npm run build` 已通过 | 已抽 `PlaybackProgressBar.vue`，只承载 range 模板和 `.dock-progress` scoped CSS，父组件保留 seek 和平滑进度逻辑。 |
+| 3. 拆分播放错误提示 UI | 已完成 | `npm run build` 已通过 | 已抽 `PlaybackErrorToast.vue`，只承载错误提示模板、关闭按钮和过渡 CSS，父组件保留错误状态和定时清理。 |
+| 4. 迁移剩余 player-dock 全局样式 | 不处理 | 用户要求保留 | `styles/player-dock.css` 继续保留跨状态规则，不迁移到组件。 |
+| 5. 评估封面缓存 composable | 已完成 | 已扫描调用点；本步不改代码 | 封面闪烁风险较高，本轮只记录拆分建议，不和 UI 拆分混做。 |
+
+### 执行记录
+
+- 2026-07-21：写入 PlayerDock 后续瘦身计划，后续按步骤逐项执行并回写状态。
+- 2026-07-21：新增 `components/player-dock/PlaybackProgressBar.vue`，迁移播放进度条 range 模板和 `.dock-progress` scoped CSS；`PlayerDock.vue` 保留 `progress` 计算、拖动预览、提交 seek、平滑进度和 Rust seek 调用；`npm run build` 通过。
+- 2026-07-21：新增 `components/player-dock/PlaybackErrorToast.vue`，迁移播放错误提示模板、关闭按钮、过渡动画和对应 scoped CSS；`PlayerDock.vue` 保留错误状态、错误文案生成、定时清理和错误上报；`npm run build` 通过。
+- 2026-07-21：按用户要求回滚 `styles/player-dock.css` 迁移，恢复 `styles.css` import 和 `styles/player-dock.css` 文件；该文件继续承载歌词页热区、歌词页打开时播放栏自动隐藏、封面背景透明等跨状态规则。
+- 2026-07-21：完成封面缓存 composable 评估；`PlayerDock.vue` 的封面逻辑同时承担播放栏即时封面、歌词页原图缓存桥接、封面错误兜底和 object URL 生命周期，仍和 `LyricsView`、`TrackCoverThumb`、`FolderCover` 的缓存策略不同。本轮不抽 composable，后续如处理应单独开计划并重点验证切歌封面闪烁。
+
+## PlayerDock 运行时逻辑拆分计划
+
+### 目标
+
+继续降低 `PlayerDock.vue` 体积，把已经稳定的播放运行时逻辑按职责抽成 composable。入口组件保留组件装配、事件接线和少量播放编排；进度、封面、Rust 生命周期等逻辑逐步迁出。
+
+### 边界
+
+- 不修改播放队列、上一首/下一首、播放模式、在线解析和 Rust 命令语义。
+- 不修改 UI 视觉结构和已拆出的播放栏子组件。
+- 每次只抽一个职责块，构建通过后回写本文档。
+- 封面和 Rust 生命周期风险较高，放在进度逻辑之后处理。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 PlayerDock 运行时拆分计划 | 已完成 | 文档已更新 | 明确本轮先拆进度逻辑，不碰队列和封面。 |
+| 2. 拆分进度 / 时间逻辑 | 已完成 | `npm run build` 已通过 | 已抽 `usePlayerDockProgress.ts`，收敛当前时间、总时长、进度百分比、平滑进度、拖动预览和提交 seek。 |
+| 3. 评估封面逻辑 composable | 已完成 | 已扫描调用点；本步不改代码 | 建议只抽 `usePlayerDockCover`，不合并为通用封面缓存，避免封面闪烁回归。 |
+| 4. 拆分 PlayerDock 封面逻辑 | 已完成 | `npm run build` 已通过 | 已抽 `usePlayerDockCover.ts`，只迁移播放栏封面、背景样式、错误兜底、原图缓存桥接和清理逻辑。 |
+| 5. 评估 Rust 播放生命周期 composable | 已完成 | 已扫描调用点；本步不改代码 | 可以拆，但建议分两步：先抽 Rust 监听注册/清理，再评估播放状态处理器。 |
+| 6. 拆分 Rust 播放监听注册 | 已完成 | `npm run build` 已通过 | 已抽 `useRustPlaybackListeners.ts`，只负责注册和清理 Rust 播放事件监听，事件处理仍留在 `PlayerDock.vue`。 |
+| 7. 评估 Rust 播放状态处理器 | 已完成 | 已扫描调用点；本步不改代码 | 可以抽 `useRustPlaybackStateHandler.ts`，但状态源继续由 `PlayerDock.vue` 持有并传入。 |
+
+### 执行记录
+
+- 2026-07-21：写入 PlayerDock 运行时逻辑拆分计划，后续按步骤逐项执行并回写状态。
+- 2026-07-21：新增 `composables/usePlayerDockProgress.ts`，迁移 `currentTime`、`runtimeDuration`、总时长标签、进度百分比、平滑进度、拖动预览、提交 seek 和外部 seek 请求处理；`PlayerDock.vue` 保留播放状态、错误提示、Rust 生命周期、封面和队列编排；`npm run build` 通过。
+- 2026-07-21：完成封面逻辑评估；`PlayerDock.vue` 的封面逻辑适合单独抽为 `usePlayerDockCover`，但不适合和 `LyricsView`、`TrackCoverThumb`、`FolderCover` 合并为通用封面缓存。原因是播放栏需要即时封面和歌词页原图缓存桥接，歌词页有全图/缩略图引用计数，列表封面有懒加载、并发限制和 LRU 缓存，生命周期不同。后续如实施，只迁移 `PlayerDock` 内部的 `coverUrl`、`dockStyle`、`hasThemeBackground`、封面 watch、错误兜底和 unmount 清理。
+- 2026-07-21：按评估结论补充 `usePlayerDockCover.ts` 实施步骤；本步只拆 `PlayerDock` 内部封面逻辑，不合并歌词页和列表封面缓存。
+- 2026-07-21：新增 `composables/usePlayerDockCover.ts`，迁移 `coverUrl`、`dockStyle`、`hasThemeBackground`、封面 watch、封面读取、错误兜底、`playerCoverCache` 原图桥接和 unmount 清理；`PlayerDock.vue` 只保留封面展示接线；`npm run build` 通过。
+- 2026-07-21：完成 Rust 播放生命周期评估；该逻辑可以继续拆，但不建议一次性抽成大 composable。推荐先抽 `useRustPlaybackListeners.ts`，只负责注册/清理 `state`、`queue`、`advanced`、`ended`、`output-device-fallback` 监听并把事件回调交给 `PlayerDock.vue`；第二步再评估是否抽 `useRustPlaybackStateHandler.ts`。当前风险点是 `sleepTimerStopAfterTrackPending`、`seamlessQueuedSource`、`rustPlaybackStateHoldUntil`、`runtimeDuration`、`spectrumLevels`、`isPlaying`、`rustBackendActive` 和进度同步互相耦合，直接整块迁移容易影响切歌、播完停止、淡出暂停和输出设备回退。
+- 2026-07-21：按评估结论补充 `useRustPlaybackListeners.ts` 实施步骤；本步只迁移 Rust 播放事件监听注册和清理，不迁移事件处理逻辑。
+- 2026-07-21：新增 `composables/useRustPlaybackListeners.ts`，迁移 `state`、`queue`、`advanced`、`ended`、`output-device-fallback` 监听注册和 unlisten 清理；`PlayerDock.vue` 继续保留 `handleRustPlaybackState`、无缝下一首、睡眠播完停止、输出设备回退和队列快照处理；`npm run build` 通过。
+- 2026-07-21：完成 `useRustPlaybackStateHandler.ts` 评估；可以抽，但建议只抽事件处理函数，不迁移状态源。推荐由 `PlayerDock.vue` 继续创建并持有 `isPlaying`、`rustBackendActive`、`rustQueueSnapshot`、`spectrumLevels`、`seamlessQueuedSource`、`rustPlaybackStateHoldUntil`、`sleepTimerStopAfterTrackPending` 和进度 composable 返回值，然后传给 `useRustPlaybackStateHandler`。可迁出的函数包括 `handleRustPlaybackState`、`handleRustAdvanced`、`handleRustEnded`、`handleRustQueue`、`handleRustOutputDeviceFallback`、`isActiveRustPath`、`findQueueTrackBySource`。暂不建议迁移 `resumeAudio`、`togglePlayback`、`stopPlayback`，因为它们属于用户主动播放控制，不是 Rust 事件处理。

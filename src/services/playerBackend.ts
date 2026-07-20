@@ -198,6 +198,14 @@ export function restoreRustBackendQueue(
   });
 }
 
+export function setRustBackendPlaybackMode(playbackMode: string): Promise<RustQueueSnapshot> {
+  if (!isTauriRuntime()) {
+    return Promise.resolve(emptyQueueSnapshot(playbackMode));
+  }
+
+  return invokeApi<RustQueueSnapshot>('player_set_playback_mode', { playbackMode });
+}
+
 export function playRustBackendNext(): Promise<RustQueueSnapshot> {
   if (!isTauriRuntime()) {
     return Promise.resolve(emptyQueueSnapshot());
