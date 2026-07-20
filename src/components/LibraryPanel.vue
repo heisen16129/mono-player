@@ -3,6 +3,7 @@ import { Clock3, Music2, ScanLine } from '@lucide/vue';
 import { songCount, t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
+import EmptyState from './EmptyState.vue';
 import FolderCover from './FolderCover.vue';
 
 const player = usePlayerStore();
@@ -93,7 +94,7 @@ const emit = defineEmits<{
         </span>
       </button>
 
-      <p v-if="localFolders.length === 0" class="empty-folder-note">{{ t(player.settings.locale, 'emptyFolders') }}</p>
+      <EmptyState v-if="localFolders.length === 0" class-name="empty-folder-note" :message="t(player.settings.locale, 'emptyFolders')" />
     </section>
   </aside>
 </template>

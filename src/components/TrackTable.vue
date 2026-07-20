@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { CheckCircle2, Clock3, Download, Heart, Loader2 } from '@lucide/vue';
+import { CheckCircle2, Clock3, Download, Heart } from '@lucide/vue';
 import type { ComponentPublicInstance } from 'vue';
 import { computed, nextTick, ref, watch } from 'vue';
 import { resolveLocale, t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 import { formatDuration } from '../utils/format';
+import { downloadTrackKey } from '../utils/trackKey';
+import SpinnerIcon from './SpinnerIcon.vue';
 import TrackCoverThumb from './TrackCoverThumb.vue';
 
 const props = defineProps<{
@@ -81,18 +83,12 @@ function isFavoriteTrack(track: Track) {
   return favoriteTrackIdSet.value.has(track.id);
 }
 
-function getDownloadTrackKey(track: Track) {
-  const sourceName = track.sourceName ?? '本地';
-  const sourceId = track.sourceId ?? String(track.id);
-  return `${sourceName}:${sourceId}`;
-}
-
 function isDownloadedTrack(track: Track) {
-  return downloadedTrackKeySet.value.has(getDownloadTrackKey(track));
+  return downloadedTrackKeySet.value.has(downloadTrackKey(track));
 }
 
 function isPendingDownloadTrack(track: Track) {
-  return pendingDownloadTrackKeySet.value.has(getDownloadTrackKey(track));
+  return pendingDownloadTrackKeySet.value.has(downloadTrackKey(track));
 }
 
 function canDownloadTrack(track: Track) {
@@ -244,7 +240,7 @@ defineExpose({
           @click.stop="canDownloadTrack(track) && emit('downloadTrack', track)"
         >
           <CheckCircle2 v-if="isDownloadedTrack(track)" :size="17" />
-          <Loader2 v-else-if="isPendingDownloadTrack(track)" :size="17" />
+          <SpinnerIcon v-else-if="isPendingDownloadTrack(track)" :size="17" />
           <Download v-else :size="17" />
         </button>
       </span>

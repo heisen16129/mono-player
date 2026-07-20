@@ -1,7 +1,8 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { ChevronDown, Maximize2, Minimize2, Music, Search, X } from '@lucide/vue';
+import { ChevronDown, Maximize2, Minimize2, Music } from '@lucide/vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useScrollingState } from '../composables/useScrollingState';
 import { downloadCoverFile, downloadLyricsFile } from '../services/downloads';
 import { clearCoverThumbnailCache, readCover, readCoverThumbnail, resolveLocalTrackLyrics, resolveLyricsSource } from '../services/music';
 import type { LyricLine, Track } from '../types/music';
@@ -10,11 +11,17 @@ import { getPluginLyricsMetadata, listPluginLyricSearchProviders, searchPluginLy
 import { t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import type { PluginSearchProvider, PluginSearchTrack } from '../types/plugin';
-import { artworkDisplaySrc } from '../utils/artwork';
+import { artworkDisplaySrc, coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, usableArtworkDisplaySrc } from '../utils/artwork';
+import BaseDialog from './BaseDialog.vue';
+import DefaultCover from './DefaultCover.vue';
+import EmptyState from './EmptyState.vue';
+import SegmentTabs from './SegmentTabs.vue';
+import SearchInput from './SearchInput.vue';
 import { getErrorMessage } from '../utils/error';
 import { parseRawLyrics } from '../utils/lyrics';
 import { getPlayerOriginalCoverCache, playerCoverCacheKey } from '../services/playerCoverCache';
 import { normalizeTrackLyrics } from '../utils/trackLyrics';
+import { pluginSearchTrackKey, trackIdentityKey } from '../utils/trackKey';
 
 const MAX_LYRICS_COVER_CACHE = 80;
 const lyricsCoverCache = new Map<string, { url: string; data: number[] | null; mimeType: string | null }>();
@@ -55,7 +62,7 @@ const loadedLyricLines = ref<LyricLine[]>([]);
 const lyricsPanel = ref<HTMLElement | null>(null);
 const isLoadingLyrics = ref(false);
 const isBrowsingLyrics = ref(false);
-const isLyricsListScrolling = ref(false);
+const { hideScrolling: hideLyricsListScrolling, isScrolling: isLyricsListScrolling, showScrolling: showLyricsListScrolling } = useScrollingState();
 const scrollThumbTop = ref(0);
 const coverUrl = ref('');
 const coverData = ref<number[] | null>(null);
@@ -76,11 +83,14 @@ const isLoadingMorePluginLyrics = ref(false);
 const lyricSearchPage = ref(1);
 const isLyricSearchEnd = ref(true);
 const resolvingLyricTrackKey = ref<string | null>(null);
+const lyricProviderTabItems = computed(() => [
+  { id: null, label: '全部' },
+  ...lyricSearchProviders.value.map((provider) => ({ id: provider.id, label: provider.name, disabled: !provider.enabled })),
+]);
 const fontMenuLeft = ref(0);
 const fontMenuTop = ref(0);
 const smoothCurrentTime = ref(0);
 let browseRestoreTimer = 0;
-let lyricsScrollHideTimer = 0;
 let lyricAnimationFrame = 0;
 let lastLyricFrameAt = 0;
 let lyricsLoadRequestId = 0;
@@ -118,14 +128,6 @@ const downloadableLyricFormats = computed(() => {
 function isLocalTrackPath(path?: string | null) {
   if (!path) return false;
   return !path.startsWith('http://') && !path.startsWith('https://') && !path.startsWith('plugin://');
-}
-
-function trackIdentityKey(track?: Track | null) {
-  const providerId = track?.sourceProviderId?.trim();
-  const sourceId = track?.sourceId?.trim();
-  if (providerId && sourceId) return `plugin:${providerId}:${sourceId}`;
-  if (!track) return '';
-  return `${track.id}:${track.path}`;
 }
 
 const activeTrackIdentityKey = computed(() => trackIdentityKey(props.activeTrack));
@@ -271,7 +273,7 @@ function trimLyricsCoverCache() {
     const [key, cached] = entry;
     if (componentCoverRefs.has(key)) return;
     lyricsCoverCache.delete(key);
-    if (cached.url.startsWith('blob:')) URL.revokeObjectURL(cached.url);
+    revokeTemporaryObjectUrl(cached.url);
   }
 }
 
@@ -286,13 +288,13 @@ function deleteLyricsCoverCache(key: string | null) {
   const cached = lyricsCoverCache.get(key);
   lyricsCoverCache.delete(key);
   componentCoverRefs.delete(key);
-  if (cached?.url.startsWith('blob:')) URL.revokeObjectURL(cached.url);
+  revokeTemporaryObjectUrl(cached?.url);
 }
 
 function clearLyricsCoverCache() {
   lyricsCoverCacheVersion += 1;
   for (const cached of lyricsCoverCache.values()) {
-    if (cached.url.startsWith('blob:')) URL.revokeObjectURL(cached.url);
+    revokeTemporaryObjectUrl(cached.url);
   }
   lyricsCoverCache.clear();
   lyricsCoverRequestCache.clear();
@@ -309,24 +311,23 @@ async function loadLyricsCover(path: string, artwork: string | null | undefined,
 
   const requestCacheVersion = lyricsCoverCacheVersion;
   const request = (async () => {
-    const artworkUrl = artworkDisplaySrc(artwork);
-    if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) {
+    const artworkUrl = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
+    if (artworkUrl) {
       return { url: artworkUrl, data: null, mimeType: null };
     }
 
     const cover = await readCover(path);
-    if (!cover?.data.length) return null;
-
-    const blob = new Blob([new Uint8Array(cover.data)], { type: cover.mime_type });
+    const url = coverImageObjectUrl(cover);
+    if (!cover?.data.length || !url) return null;
     return {
-      url: URL.createObjectURL(blob),
+      url,
       data: cover.data,
       mimeType: cover.mime_type,
     };
   })()
     .then((cover) => {
       if (requestCacheVersion !== lyricsCoverCacheVersion) {
-        if (cover?.url.startsWith('blob:')) URL.revokeObjectURL(cover.url);
+        revokeTemporaryObjectUrl(cover?.url);
         return null;
       }
       if (cover) setLyricsCoverCache(key, cover);
@@ -350,24 +351,23 @@ async function loadLyricsCoverThumbnail(path: string, artwork: string | null | u
 
   const requestCacheVersion = lyricsCoverCacheVersion;
   const request = (async () => {
-    const artworkUrl = artworkDisplaySrc(artwork);
-    if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) {
+    const artworkUrl = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
+    if (artworkUrl) {
       return { url: artworkUrl, data: null, mimeType: null };
     }
 
     const cover = await readCoverThumbnail(path);
-    if (!cover?.data.length) return null;
-
-    const blob = new Blob([new Uint8Array(cover.data)], { type: cover.mime_type });
+    const url = coverImageObjectUrl(cover);
+    if (!cover?.data.length || !url) return null;
     return {
-      url: URL.createObjectURL(blob),
+      url,
       data: null,
       mimeType: cover.mime_type,
     };
   })()
     .then((cover) => {
       if (requestCacheVersion !== lyricsCoverCacheVersion) {
-        if (cover?.url.startsWith('blob:')) URL.revokeObjectURL(cover.url);
+        revokeTemporaryObjectUrl(cover?.url);
         return null;
       }
       if (cover) setLyricsCoverCache(key, cover);
@@ -398,8 +398,7 @@ watch(
       return;
     }
 
-    const artworkUrl = artworkDisplaySrc(artwork);
-    const usableArtworkUrl = artworkUrl && !failedArtworkUrls.has(artworkUrl) ? artworkUrl : '';
+    const usableArtworkUrl = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
     const playerCoverCache = usableArtworkUrl ? null : getPlayerOriginalCoverCache(playerCoverCacheKey(props.activeTrack));
     const nextCoverCacheKey = lyricsCoverCacheKey(identityKey, artwork, coverVersion);
     const nextThumbCacheKey = lyricsCoverThumbCacheKey(identityKey, artwork, coverVersion);
@@ -525,14 +524,7 @@ function scheduleRealtimeLyricsRestore() {
 
 function showLyricsScrollbarWhileScrolling() {
   if (!loadedLyricLines.value.length) return;
-  isLyricsListScrolling.value = true;
-  if (lyricsScrollHideTimer) {
-    window.clearTimeout(lyricsScrollHideTimer);
-  }
-  lyricsScrollHideTimer = window.setTimeout(() => {
-    isLyricsListScrolling.value = false;
-    lyricsScrollHideTimer = 0;
-  }, 800);
+  showLyricsListScrolling();
 }
 
 function handleLyricsWheel() {
@@ -541,11 +533,7 @@ function handleLyricsWheel() {
 }
 
 function hideLyricsScrollbar() {
-  if (lyricsScrollHideTimer) {
-    window.clearTimeout(lyricsScrollHideTimer);
-    lyricsScrollHideTimer = 0;
-  }
-  isLyricsListScrolling.value = false;
+  hideLyricsListScrolling();
 }
 
 function restoreRealtimeLyrics() {
@@ -582,7 +570,7 @@ function defaultLyricSearchQuery() {
 }
 
 function lyricTrackKey(track: PluginSearchTrack) {
-  return `${track.providerId}:${track.id}`;
+  return pluginSearchTrackKey(track);
 }
 
 function resetLyricSearchPaging() {
@@ -985,9 +973,6 @@ onBeforeUnmount(() => {
   if (browseRestoreTimer) {
     window.clearTimeout(browseRestoreTimer);
   }
-  if (lyricsScrollHideTimer) {
-    window.clearTimeout(lyricsScrollHideTimer);
-  }
   if (lyricAnimationFrame) {
     window.cancelAnimationFrame(lyricAnimationFrame);
     lyricAnimationFrame = 0;
@@ -1006,7 +991,7 @@ onBeforeUnmount(() => {
 });
 
 function handleCoverError() {
-  if (coverUrl.value && !coverUrl.value.startsWith('blob:')) {
+  if (coverUrl.value && !isTemporaryObjectUrl(coverUrl.value)) {
     failedArtworkUrls.add(coverUrl.value);
   }
   const key = activeCoverCacheKey.value;
@@ -1068,7 +1053,7 @@ function handleCoverError() {
       <div class="lyrics-cover album-cover" :class="{ 'has-cover-image': displayCoverUrl }">
         <img v-if="displayCoverUrl" :src="displayCoverUrl" alt="" @error="handleCoverError" />
         <template v-else>
-          <Music class="lyrics-cover-placeholder-icon" :size="88" :stroke-width="2.1" />
+          <DefaultCover class="lyrics-cover-placeholder-icon" :size="88" :stroke-width="2.1" />
         </template>
       </div>
 
@@ -1086,10 +1071,11 @@ function handleCoverError() {
           @wheel.passive="handleLyricsWheel"
         >
           <small v-if="isLyricsPending" class="lyrics-hint">{{ t(player.settings.locale, 'lyricsLoading') }}</small>
-          <div v-else-if="!loadedLyricLines.length" class="lyrics-empty">
-            <small class="lyrics-hint">{{ emptyLyricsMessage }}</small>
-            <button class="lyrics-search-link" type="button" @click.stop="openLyricSearchDialog">搜索歌词</button>
-          </div>
+          <EmptyState v-else-if="!loadedLyricLines.length" class-name="lyrics-empty" :message="emptyLyricsMessage">
+            <template #action>
+              <button class="lyrics-search-link" type="button" @click.stop="openLyricSearchDialog">搜索歌词</button>
+            </template>
+          </EmptyState>
           <p
             v-for="(line, index) in loadedLyricLines"
             :key="`${line.time ?? 'plain'}-${line.text}-${index}`"
@@ -1177,42 +1163,37 @@ function handleCoverError() {
       <button v-if="hasAssociatedLyrics" class="lyrics-menu-item" type="button" @click="clearAssociatedLyrics">取消关联歌词</button>
     </div>
 
-    <div v-if="isSearchDialogOpen" class="lyrics-search-overlay" @pointerdown.self="closeLyricSearchDialog">
-      <section class="lyrics-search-dialog" role="dialog" aria-modal="true" aria-label="搜索歌词">
-        <header class="lyrics-search-head">
-          <label class="lyrics-search-field">
-            <Search :size="16" />
-            <input
-              v-model="lyricSearchQuery"
-              type="search"
-              placeholder="搜索歌词"
-              @keydown.enter="searchPluginLyrics"
-            />
-          </label>
-          <button class="lyrics-search-close" type="button" aria-label="关闭" @click="closeLyricSearchDialog">
-            <X :size="18" />
-          </button>
-        </header>
+    <Teleport to="body">
+      <BaseDialog
+        v-if="isSearchDialogOpen"
+        label="搜索歌词"
+        close-label="关闭"
+        close-on-overlay
+        grid-template-rows="auto auto minmax(0, 1fr)"
+        max-height="min(520px, calc(100vh - 80px))"
+        overflow="hidden"
+        panel-class="lyrics-search-dialog"
+        width="min(560px, calc(100vw - 32px))"
+        :z-index="240"
+        @close="closeLyricSearchDialog"
+      >
+        <template #header>
+          <SearchInput
+            v-model="lyricSearchQuery"
+            root-class="lyrics-search-field"
+            placeholder="搜索歌词"
+            @submit="searchPluginLyrics"
+          />
+        </template>
 
-        <nav v-if="lyricSearchProviders.length > 0" class="lyrics-provider-tabs" aria-label="歌词来源">
-          <button
-            type="button"
-            :class="{ active: lyricSearchProviderId === null }"
-            @click="selectLyricSearchProvider(null)"
-          >
-            全部
-          </button>
-          <button
-            v-for="provider in lyricSearchProviders"
-            :key="provider.id"
-            type="button"
-            :class="{ active: lyricSearchProviderId === provider.id }"
-            :disabled="!provider.enabled"
-            @click="selectLyricSearchProvider(provider.id)"
-          >
-            {{ provider.name }}
-          </button>
-        </nav>
+        <SegmentTabs
+          v-if="lyricSearchProviders.length > 0"
+          label="歌词来源"
+          :items="lyricProviderTabItems"
+          :model-value="lyricSearchProviderId"
+          root-class="lyrics-provider-tabs"
+          @select="selectLyricSearchProvider"
+        />
 
         <div class="lyrics-search-results" @scroll="handleLyricSearchResultsScroll">
           <p v-if="isSearchingPluginLyrics" class="lyrics-search-state">正在搜索歌词...</p>
@@ -1239,8 +1220,8 @@ function handleCoverError() {
           </template>
           <p v-if="!isSearchingPluginLyrics && lyricSearchStatus" class="lyrics-search-state">{{ lyricSearchStatus }}</p>
         </div>
-      </section>
-    </div>
+      </BaseDialog>
+    </Teleport>
   </section>
 </template>
 
@@ -1434,7 +1415,6 @@ function handleCoverError() {
   gap: 12px;
 }
 
-.lyrics-empty .lyrics-hint,
 .lyrics-search-link {
   font-size: 14px;
   line-height: 1.4;
@@ -1710,119 +1690,6 @@ function handleCoverError() {
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.lyrics-search-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.28);
-}
-
-.lyrics-search-dialog {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  width: min(600px, calc(100vw - 32px));
-  max-height: min(520px, calc(100vh - 80px));
-  overflow: hidden;
-  border: 1px solid var(--smw-border-soft);
-  border-radius: 8px;
-  background: var(--smw-bg-workspace);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
-}
-
-.lyrics-search-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
-  gap: 10px;
-  align-items: center;
-  padding: 8px 10px 6px 14px;
-}
-
-.lyrics-search-field {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--smw-border);
-  border-radius: 6px;
-  color: var(--smw-text-secondary);
-  background: var(--smw-bg-input);
-}
-
-.lyrics-search-field input {
-  min-width: 0;
-  border: 0;
-  color: var(--smw-text-primary);
-  background: transparent;
-  font: inherit;
-  font-size: 14px;
-  outline: none;
-}
-
-.lyrics-search-close {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border: 0;
-  color: var(--smw-text-secondary);
-  background: transparent;
-  cursor: pointer;
-}
-
-.lyrics-search-close:hover {
-  color: var(--smw-text-primary);
-}
-
-.lyrics-provider-tabs {
-  display: flex;
-  gap: 22px;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 12px 16px 4px;
-  border-bottom: 1px solid var(--smw-border-soft);
-  scrollbar-width: thin;
-}
-
-.lyrics-provider-tabs button {
-  position: relative;
-  flex: 0 0 auto;
-  min-height: 30px;
-  border: 0;
-  color: var(--smw-text-secondary);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.lyrics-provider-tabs button.active {
-  color: var(--smw-text-primary);
-  font-weight: 620;
-}
-
-.lyrics-provider-tabs button.active::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--smw-accent-blue, #2f7df6);
-  content: "";
-}
-
-.lyrics-provider-tabs button:disabled {
-  cursor: default;
-  opacity: 0.42;
 }
 
 .lyrics-search-results {

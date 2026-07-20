@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Music } from '@lucide/vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
-import { artworkDisplaySrc } from '../utils/artwork';
+import { coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, usableArtworkDisplaySrc } from '../utils/artwork';
+import DefaultCover from './DefaultCover.vue';
 
 const MAX_CACHED_COVERS = 360;
 const coverUrlCache = new Map<string, string | null>();
@@ -60,7 +60,7 @@ function touchCachedCover(key: string, value: string | null) {
     const [oldestKey, oldestUrl] = coverUrlCache.entries().next().value ?? [];
     if (!oldestKey) return;
     coverUrlCache.delete(oldestKey);
-    if (oldestUrl?.startsWith('blob:')) URL.revokeObjectURL(oldestUrl);
+    revokeTemporaryObjectUrl(oldestUrl);
   }
 }
 
@@ -95,7 +95,11 @@ async function getCachedCoverUrl(path: string, cacheKey: string) {
         return null;
       }
 
-      const objectUrl = URL.createObjectURL(new Blob([new Uint8Array(cover.data)], { type: cover.mime_type }));
+      const objectUrl = coverImageObjectUrl(cover);
+      if (!objectUrl) {
+        touchCachedCover(cacheKey, null);
+        return null;
+      }
       touchCachedCover(cacheKey, objectUrl);
       return objectUrl;
     })
@@ -115,8 +119,8 @@ async function loadCover(id: number, path: string, artwork: string | null | unde
   const currentLoadId = ++loadId;
   coverUrl.value = '';
 
-  const artworkUrl = artworkDisplaySrc(artwork);
-  if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) {
+  const artworkUrl = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
+  if (artworkUrl) {
     coverUrl.value = artworkUrl;
     return;
   }
@@ -168,10 +172,10 @@ function handleImageError() {
   const failedUrl = coverUrl.value;
   if (!failedUrl) return;
 
-  if (failedUrl.startsWith('blob:')) {
+  if (isTemporaryObjectUrl(failedUrl)) {
     const failedEntry = Array.from(coverUrlCache.entries()).find(([, cachedUrl]) => cachedUrl === failedUrl);
     if (failedEntry) {
-      URL.revokeObjectURL(failedUrl);
+      revokeTemporaryObjectUrl(failedUrl);
       touchCachedCover(failedEntry[0], null);
     }
   } else {
@@ -186,7 +190,7 @@ function handleImageError() {
 <template>
   <span ref="coverRoot" class="track-cover-thumb" :class="{ 'has-cover': coverUrl, active, loading, playing }" aria-hidden="true">
     <img v-if="coverUrl" :src="coverUrl" alt="" @error="handleImageError" />
-    <Music v-else-if="!active && !loading" class="cover-placeholder-icon" :size="18" :stroke-width="2.4" />
+    <DefaultCover v-else-if="!active && !loading" class="cover-placeholder-icon" :size="18" :stroke-width="2.4" />
     <span v-if="active || loading" class="cover-equalizer" :class="{ 'is-playing': playing, 'is-loading': loading }">
       <i v-for="(bar, index) in spectrumBars" :key="index" :style="bar"></i>
     </span>

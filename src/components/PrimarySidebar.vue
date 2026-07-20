@@ -12,14 +12,13 @@ import {
   Clock3,
   UserRound,
 } from '@lucide/vue';
-import { onBeforeUnmount, ref } from 'vue';
+import { useScrollingState } from '../composables/useScrollingState';
 import { t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import type { UserPlaylist } from '../types/music';
 
 const player = usePlayerStore();
-const isPlaylistListScrolling = ref(false);
-let playlistListScrollTimer: number | undefined;
+const { isScrolling: isPlaylistListScrolling, showScrolling: showPlaylistListScrolling } = useScrollingState();
 
 defineProps<{
   activeView: 'library' | 'discover' | 'artists' | 'settings' | 'themes' | 'plugins' | 'downloads';
@@ -50,16 +49,8 @@ const emit = defineEmits<{
 }>();
 
 function handlePlaylistListScroll() {
-  isPlaylistListScrolling.value = true;
-  window.clearTimeout(playlistListScrollTimer);
-  playlistListScrollTimer = window.setTimeout(() => {
-    isPlaylistListScrolling.value = false;
-  }, 800);
+  showPlaylistListScrolling();
 }
-
-onBeforeUnmount(() => {
-  window.clearTimeout(playlistListScrollTimer);
-});
 </script>
 
 <template>

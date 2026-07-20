@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import DownloadItemContextMenu from './DownloadItemContextMenu.vue';
+import EmptyState from './EmptyState.vue';
+import SegmentTabs from './SegmentTabs.vue';
 import TrackTable from './TrackTable.vue';
 import type { DownloadItem, Track } from '../types/music';
+import { downloadItemTrackId } from '../utils/trackKey';
 
 const props = defineProps<{
   activeTrack: Track | null;
@@ -27,6 +30,10 @@ const emit = defineEmits<{
 
 const activeTab = ref<'downloaded' | 'downloading'>('downloaded');
 const downloadContextMenu = ref<{ item: DownloadItem; x: number; y: number } | null>(null);
+const downloadTabs = [
+  { id: 'downloaded', label: '已下载' },
+  { id: 'downloading', label: '下载中' },
+];
 
 const visibleItems = computed(() => {
   return props.items.filter((item) => {
@@ -38,7 +45,7 @@ const visibleItems = computed(() => {
 const visibleTracks = computed(() => visibleItems.value.map(toDownloadTrack));
 
 const itemByTrackId = computed(() => new Map(
-  visibleItems.value.map((item) => [hashDownloadItemId(item.id), item]),
+  visibleItems.value.map((item) => [downloadItemTrackId(item.id), item]),
 ));
 
 function getStatusText(item: DownloadItem | null | undefined) {
@@ -60,17 +67,9 @@ function closeDownloadContextMenu() {
   downloadContextMenu.value = null;
 }
 
-function hashDownloadItemId(id: string) {
-  let hash = 0;
-  for (let index = 0; index < id.length; index += 1) {
-    hash = ((hash << 5) - hash + id.charCodeAt(index)) | 0;
-  }
-  return Math.abs(hash) || 1;
-}
-
 function toDownloadTrack(item: DownloadItem): Track {
   return {
-    id: hashDownloadItemId(item.id),
+    id: downloadItemTrackId(item.id),
     path: item.filePath ?? '',
     title: item.title,
     artist: item.artist,
@@ -103,6 +102,10 @@ function emitMenuAction(action: 'queueNext' | 'addToPlaylist' | 'deleteDownload'
   if (action === 'resumeDownload') emit('resumeDownload', item);
   closeDownloadContextMenu();
 }
+
+function selectDownloadTab(tab: string | null) {
+  if (tab === 'downloaded' || tab === 'downloading') activeTab.value = tab;
+}
 </script>
 
 <template>
@@ -120,22 +123,7 @@ function emitMenuAction(action: 'queueNext' | 'addToPlaylist' | 'deleteDownload'
       @resume-download="emitMenuAction('resumeDownload', $event)"
     />
 
-    <header class="download-tabs" aria-label="下载管理">
-      <button
-        type="button"
-        :class="{ active: activeTab === 'downloaded' }"
-        @click="activeTab = 'downloaded'"
-      >
-        已下载
-      </button>
-      <button
-        type="button"
-        :class="{ active: activeTab === 'downloading' }"
-        @click="activeTab = 'downloading'"
-      >
-        下载中
-      </button>
-    </header>
+    <SegmentTabs label="下载管理" :items="downloadTabs" :model-value="activeTab" root-class="download-tabs" @select="selectDownloadTab" />
 
     <TrackTable
       v-if="visibleTracks.length > 0"
@@ -164,9 +152,7 @@ function emitMenuAction(action: 'queueNext' | 'addToPlaylist' | 'deleteDownload'
       </template>
     </TrackTable>
 
-    <p v-else class="download-empty">
-      {{ activeTab === 'downloaded' ? '还没有已下载歌曲' : '当前没有下载任务' }}
-    </p>
+    <EmptyState v-else class-name="download-empty" :message="activeTab === 'downloaded' ? '还没有已下载歌曲' : '当前没有下载任务'" />
   </section>
 </template>
 
@@ -179,42 +165,6 @@ function emitMenuAction(action: 'queueNext' | 'addToPlaylist' | 'deleteDownload'
   overflow: hidden;
   padding: 22px 20px 24px;
   background: var(--smw-bg-workspace);
-}
-
-.download-tabs {
-  display: flex;
-  gap: 26px;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 0 14px;
-}
-
-.download-tabs button {
-  position: relative;
-  height: 30px;
-  padding: 0 0 4px;
-  border: 0;
-  color: var(--smw-text-secondary);
-  background: transparent;
-  font: inherit;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.download-tabs button.active {
-  color: var(--smw-text-primary);
-  font-weight: 700;
-}
-
-.download-tabs button.active::after {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--smw-button-primary);
-  content: "";
 }
 
 .download-manager-view :deep(.track-table) {
@@ -239,10 +189,7 @@ function emitMenuAction(action: 'queueNext' | 'addToPlaylist' | 'deleteDownload'
 }
 
 .download-empty {
-  display: grid;
   min-height: 220px;
-  place-items: center;
-  color: var(--smw-text-secondary);
   font-size: 13px;
 }
 </style>

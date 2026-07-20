@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Plus, X } from '@lucide/vue';
+import { Plus } from '@lucide/vue';
+import BaseDialog from './BaseDialog.vue';
 import FolderCover from './FolderCover.vue';
 import { t } from '../i18n';
 import type { Locale, Track, UserPlaylist } from '../types/music';
@@ -19,14 +20,10 @@ defineEmits<{
 </script>
 
 <template>
-  <div class="scan-dialog-overlay add-playlist-overlay" role="presentation" @click="$emit('close')">
-    <section class="scan-dialog add-playlist-dialog" role="dialog" aria-modal="true" aria-label="添加到歌单" @click.stop>
-      <header class="scan-dialog-head add-playlist-head">
-        <h2>添加到歌单 <span>共 1 首</span></h2>
-        <button class="icon-button" type="button" :aria-label="t(locale, 'close')" @click="$emit('close')">
-          <X :size="18" />
-        </button>
-      </header>
+  <BaseDialog label="添加到歌单" :close-label="t(locale, 'close')" close-on-overlay panel-class="add-playlist-dialog" width="min(400px, calc(100vw - 32px))" @close="$emit('close')">
+    <template #header>
+      <h2 class="add-playlist-title">添加到歌单 <span>共 1 首</span></h2>
+    </template>
 
       <div class="add-playlist-list">
         <button class="add-playlist-row" type="button" @click="$emit('createPlaylist')">
@@ -46,68 +43,29 @@ defineEmits<{
           <span>{{ playlist.name }}</span>
         </button>
       </div>
-    </section>
-  </div>
+  </BaseDialog>
 </template>
 
 <style scoped>
-.scan-dialog-overlay {
-  position: fixed;
-  inset: 0 0 var(--player-height) 0;
-  z-index: 120;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: color-mix(in srgb, var(--smw-bg-canvas) 82%, transparent);
-  backdrop-filter: blur(10px);
-}
-
-.scan-dialog {
-  display: grid;
-  width: min(490px, calc(100vw - 32px));
-  border: 1px solid var(--smw-border-soft);
-  border-radius: 8px;
-  background: var(--smw-bg-workspace);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
-}
-
-.scan-dialog-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 12px 12px;
-  border-bottom: 1px solid var(--smw-border-soft);
-}
-
-.scan-dialog-head h2 {
-  margin: 0;
-  color: var(--smw-text-primary);
-  font-size: 17px;
-  font-weight: 560;
-}
-
-.add-playlist-overlay {
-  align-items: center;
-}
-
-.add-playlist-dialog {
-  width: min(400px, calc(100vw - 32px));
+:deep(.add-playlist-dialog) {
   overflow: hidden;
 }
 
-.add-playlist-head {
+:deep(.add-playlist-dialog .base-dialog-head) {
   padding: 10px 12px;
 }
 
-.add-playlist-head h2 {
+.add-playlist-title {
   display: flex;
   align-items: baseline;
   gap: 5px;
+  margin: 0;
+  color: var(--smw-text-primary);
   font-size: 16px;
+  font-weight: 560;
 }
 
-.add-playlist-head h2 span {
+.add-playlist-title span {
   color: var(--smw-text-secondary);
   font-size: 12px;
   font-weight: 420;

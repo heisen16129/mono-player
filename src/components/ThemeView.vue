@@ -13,9 +13,15 @@ import { getSystemThemeState, importThemeFolder } from '../services/music';
 import { usePlayerStore } from '../stores/player';
 import type { AppTheme, CustomTheme, SystemThemeState } from '../types/music';
 import { getErrorMessage } from '../utils/error';
+import PageHeader from './PageHeader.vue';
+import SegmentTabs from './SegmentTabs.vue';
 
 const player = usePlayerStore();
 const activeThemeTab = ref<'local' | 'market'>('local');
+const themeTabItems = computed(() => [
+  { id: 'local', label: t(player.settings.locale, 'localThemes') },
+  { id: 'market', label: t(player.settings.locale, 'themeStore') },
+]);
 const systemThemePreviewMode = ref<SystemThemeState['mode']>('light');
 const systemThemePreviewAccent = ref('#dfe4f2');
 let unlistenSystemThemePreview: UnlistenFn | null = null;
@@ -315,30 +321,19 @@ async function importCustomTheme() {
     player.error = getErrorMessage(err);
   }
 }
+
+function selectThemeTab(tab: string | null) {
+  if (tab === 'local' || tab === 'market') {
+    activeThemeTab.value = tab;
+  }
+}
 </script>
 
 <template>
   <section class="theme-view">
-    <header class="theme-toolbar">
-      <h1 class="theme-view-title">{{ t(player.settings.locale, 'themeStyle') }}</h1>
-    </header>
+    <PageHeader class="theme-toolbar" :title="t(player.settings.locale, 'themeStyle')" title-class="theme-view-title" />
 
-    <nav class="theme-tabs" aria-label="Theme tabs">
-      <button
-        :class="{ active: activeThemeTab === 'local' }"
-        type="button"
-        @click="activeThemeTab = 'local'"
-      >
-        {{ t(player.settings.locale, 'localThemes') }}
-      </button>
-      <button
-        :class="{ active: activeThemeTab === 'market' }"
-        type="button"
-        @click="activeThemeTab = 'market'"
-      >
-        {{ t(player.settings.locale, 'themeStore') }}
-      </button>
-    </nav>
+    <SegmentTabs label="Theme tabs" :items="themeTabItems" :model-value="activeThemeTab" root-class="theme-tabs" @select="selectThemeTab" />
 
     <div v-if="activeThemeTab === 'local'" class="theme-grid-list">
       <button class="theme-card theme-import-card" type="button" @click="importCustomTheme">
@@ -452,53 +447,6 @@ async function importCustomTheme() {
   overflow: auto;
   padding: 12px 22px 40px;
   background: var(--smw-bg-workspace);
-}
-
-.theme-toolbar {
-  display: flex;
-  align-items: center;
-  min-height: 42px;
-}
-
-.theme-view-title {
-  margin: 0;
-  color: var(--smw-text-primary);
-  font-size: 18px;
-  font-weight: 720;
-  line-height: 1.2;
-}
-
-.theme-tabs {
-  display: flex;
-  gap: 30px;
-  border-bottom: 1px solid var(--smw-border-soft);
-}
-
-.theme-tabs button {
-  position: relative;
-  height: 38px;
-  padding: 0;
-  border: 0;
-  color: var(--smw-text-body);
-  background: transparent;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.theme-tabs button.active {
-  color: var(--smw-text-primary);
-  font-weight: 700;
-}
-
-.theme-tabs button.active::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--smw-button-primary);
-  content: "";
 }
 
 .theme-grid-list {

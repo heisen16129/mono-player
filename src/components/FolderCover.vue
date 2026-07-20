@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { Music } from '@lucide/vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
-import { artworkDisplaySrc } from '../utils/artwork';
+import { coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, usableArtworkDisplaySrc } from '../utils/artwork';
+import DefaultCover from './DefaultCover.vue';
 
 const props = defineProps<{
   tracks: Track[];
@@ -43,7 +43,7 @@ function trimFolderCoverCache() {
     if (folderCoverCache.size <= MAX_FOLDER_COVER_CACHE) break;
     if (cached.refs > 0) continue;
     for (const url of cached.urls) {
-      if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+      revokeTemporaryObjectUrl(url);
     }
     folderCoverCache.delete(key);
   }
@@ -57,7 +57,7 @@ function trimTrackCoverCache() {
   while (trackCoverUrlCache.size > MAX_TRACK_COVER_CACHE) {
     const [key, url] = trackCoverUrlCache.entries().next().value ?? [];
     if (typeof key !== 'string') break;
-    if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+    revokeTemporaryObjectUrl(url);
     trackCoverUrlCache.delete(key);
   }
 }
@@ -88,8 +88,8 @@ async function loadCoverUrlsForTracks(tracks: Track[]) {
 }
 
 async function coverUrlForTrack(track: Track) {
-  const artworkUrl = artworkDisplaySrc(track.artwork);
-  if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) return artworkUrl;
+  const artworkUrl = usableArtworkDisplaySrc(track.artwork, failedArtworkUrls);
+  if (artworkUrl) return artworkUrl;
   if (!track.path) return null;
 
   const cacheKey = trackCacheKey(track);
@@ -102,9 +102,7 @@ async function coverUrlForTrack(track: Track) {
 
   const request = readCoverThumbnail(track.path)
     .then((cover) => {
-      if (!cover?.data.length) return null;
-      const blob = new Blob([new Uint8Array(cover.data)], { type: cover.mime_type });
-      return URL.createObjectURL(blob);
+      return coverImageObjectUrl(cover);
     })
     .then((url) => {
       trackCoverUrlCache.set(cacheKey, url);
@@ -128,7 +126,7 @@ function trackForVisibleCover(index: number) {
 async function handleCoverError(index: number) {
   const failedUrl = visibleCovers.value[index];
   const track = trackForVisibleCover(index);
-  if (failedUrl && !failedUrl.startsWith('blob:')) failedArtworkUrls.add(failedUrl);
+  if (failedUrl && !isTemporaryObjectUrl(failedUrl)) failedArtworkUrls.add(failedUrl);
   if (!track?.path) {
     coverUrls.value[index] = null;
     return;
@@ -163,7 +161,7 @@ watch(
     if (currentLoadId !== loadId) {
       if (!folderCoverCache.has(cacheKey)) {
         for (const url of urls) {
-          if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+          revokeTemporaryObjectUrl(url);
         }
       }
       return;
@@ -188,13 +186,13 @@ if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     for (const cached of folderCoverCache.values()) {
       for (const url of cached.urls) {
-        if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+        revokeTemporaryObjectUrl(url);
       }
     }
     folderCoverCache.clear();
     folderCoverRequestCache.clear();
     for (const url of trackCoverUrlCache.values()) {
-      if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+      revokeTemporaryObjectUrl(url);
     }
     trackCoverUrlCache.clear();
     trackCoverRequestCache.clear();
@@ -221,7 +219,7 @@ if (import.meta.hot) {
     </template>
     <img v-else-if="visibleCovers[0]" :src="visibleCovers[0]" alt="" @error="handleCoverError(0)" />
     <template v-else>
-      <Music class="folder-cover-placeholder-icon" :size="80" :stroke-width="2.1" />
+      <DefaultCover class="folder-cover-placeholder-icon" :size="80" :stroke-width="2.1" />
     </template>
   </span>
 </template>

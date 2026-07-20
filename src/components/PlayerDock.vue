@@ -10,8 +10,6 @@ import {
   Gauge,
   ListMusic,
   LocateFixed,
-  Loader2,
-  Music,
   Pause,
   Play,
   Repeat1,
@@ -25,7 +23,7 @@ import {
 } from '@lucide/vue';
 import type { PlaybackMode, Track } from '../types/music';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption } from '../types/plugin';
-import { artworkDisplaySrc } from '../utils/artwork';
+import { coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, usableArtworkDisplaySrc } from '../utils/artwork';
 import { getErrorMessage } from '../utils/error';
 import { readCover, readCoverThumbnail } from '../services/music';
 import {
@@ -49,6 +47,9 @@ import {
 import { formatDuration } from '../utils/format';
 import { resolveLocale, songCount, t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
+import BaseDialog from './BaseDialog.vue';
+import DefaultCover from './DefaultCover.vue';
+import SpinnerIcon from './SpinnerIcon.vue';
 import TrackCoverThumb from './TrackCoverThumb.vue';
 import { clearPlayerOriginalCoverCache, playerCoverCacheKey, setPlayerArtworkCoverCache, setPlayerOriginalCoverCache } from '../services/playerCoverCache';
 
@@ -159,12 +160,6 @@ let unlistenRustOutputDeviceFallback: (() => void) | null = null;
 let seamlessQueuedSource = '';
 let rustPlaybackStateHoldUntil = 0;
 let coverLoadId = 0;
-
-function revokeTemporaryCoverUrl(url: string) {
-  if (url.startsWith('blob:')) {
-    URL.revokeObjectURL(url);
-  }
-}
 
 async function cachePlayerOriginalCover(path: string, cacheKey: string, loadId: number) {
   try {
@@ -420,12 +415,12 @@ watch(
   async ([path, artwork]) => {
     const currentLoadId = ++coverLoadId;
     if (coverUrl.value) {
-      revokeTemporaryCoverUrl(coverUrl.value);
+      revokeTemporaryObjectUrl(coverUrl.value);
     }
     coverUrl.value = '';
 
-    const artworkUrl = artworkDisplaySrc(artwork);
-    if (artworkUrl && !failedArtworkUrls.has(artworkUrl)) {
+    const artworkUrl = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
+    if (artworkUrl) {
       coverUrl.value = artworkUrl;
       setPlayerArtworkCoverCache(playerCoverCacheKey(props.activeTrack), artworkUrl);
       return;
@@ -441,10 +436,7 @@ watch(
     try {
       const cover = await readCoverThumbnail(path);
       if (currentLoadId !== coverLoadId) return;
-      if (!cover?.data.length) return;
-
-      const blob = new Blob([new Uint8Array(cover.data)], { type: cover.mime_type });
-      coverUrl.value = URL.createObjectURL(blob);
+      coverUrl.value = coverImageObjectUrl(cover) ?? '';
     } catch {
       coverUrl.value = '';
     }
@@ -947,7 +939,7 @@ onBeforeUnmount(() => {
   unlistenRustOutputDeviceFallback?.();
   unlistenRustPlaybackEnded?.();
   if (coverUrl.value) {
-    revokeTemporaryCoverUrl(coverUrl.value);
+    revokeTemporaryObjectUrl(coverUrl.value);
   }
   clearPlayerOriginalCoverCache();
 });
@@ -955,8 +947,8 @@ onBeforeUnmount(() => {
 function handleCoverError() {
   const failedUrl = coverUrl.value;
   if (failedUrl) {
-    if (failedUrl.startsWith('blob:')) {
-      revokeTemporaryCoverUrl(failedUrl);
+    if (isTemporaryObjectUrl(failedUrl)) {
+      revokeTemporaryObjectUrl(failedUrl);
     } else {
       failedArtworkUrls.add(failedUrl);
     }
@@ -969,8 +961,8 @@ function handleCoverError() {
     const currentLoadId = coverLoadId;
     try {
       const cover = await readCoverThumbnail(track.path);
-      if (currentLoadId !== coverLoadId || !cover?.data.length) return;
-      coverUrl.value = URL.createObjectURL(new Blob([new Uint8Array(cover.data)], { type: cover.mime_type }));
+      if (currentLoadId !== coverLoadId) return;
+      coverUrl.value = coverImageObjectUrl(cover) ?? '';
     } catch {
       coverUrl.value = '';
     }
@@ -1014,7 +1006,7 @@ function handleCoverError() {
           </span>
           <span v-else key="artwork" class="cover-mini cover-artwork-shell">
             <img v-if="coverUrl" class="cover-image" :src="coverUrl" alt="" @error="handleCoverError" />
-            <span v-else class="cover-placeholder-fill"><Music :size="24" :stroke-width="2.4" /></span>
+            <DefaultCover v-else class="cover-placeholder-fill" :size="24" :stroke-width="2.4" />
           </span>
         </Transition>
         <span v-if="!lyricsOpen && coverUrl" class="cover-hover-cue" aria-hidden="true">
@@ -1091,7 +1083,7 @@ function handleCoverError() {
         @click="!isActiveTrackDownloading && emit('downloadActiveTrack')"
       >
         <CheckCircle2 v-if="isActiveTrackDownloaded" :size="18" />
-        <Loader2 v-else-if="isActiveTrackDownloading" :size="18" />
+        <SpinnerIcon v-else-if="isActiveTrackDownloading" :size="18" />
         <Download v-else :size="18" />
       </button>
       <div v-if="showOnlineQuality && onlineQualityOptions.length > 0" ref="qualityControl" class="quality-control" @mouseleave="closeQualityPopover">
@@ -1312,15 +1304,8 @@ function handleCoverError() {
   </footer>
 
   <Teleport to="body">
-    <div v-if="isSleepTimerDialogOpen" class="sleep-timer-dialog-backdrop" @click.self="closeSleepTimerDialog">
-      <section class="sleep-timer-dialog" role="dialog" aria-modal="true" aria-label="定时关闭">
-        <header>
-          <h2>定时关闭</h2>
-          <button type="button" aria-label="关闭" @click="closeSleepTimerDialog">
-            <X :size="20" />
-          </button>
-        </header>
-
+    <BaseDialog v-if="isSleepTimerDialogOpen" label="定时关闭" close-label="关闭" close-on-overlay title="定时关闭" panel-class="sleep-timer-dialog" width="min(478px, calc(100vw - 28px))" :z-index="500" @close="closeSleepTimerDialog">
+      <div class="sleep-timer-dialog-body">
         <p class="sleep-timer-section-label">选择时长</p>
         <div class="sleep-timer-presets">
           <button
@@ -1398,8 +1383,8 @@ function handleCoverError() {
           <button v-if="isSleepTimerActive || isSleepTimerPaused" type="button" @click="clearSleepTimer">取消定时</button>
           <button type="button" @click="startSleepTimer">确认开启</button>
         </footer>
-      </section>
-    </div>
+      </div>
+    </BaseDialog>
   </Teleport>
 </template>
 
@@ -2007,49 +1992,20 @@ function handleCoverError() {
   background: transparent;
 }
 
-.sleep-timer-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 500;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.34);
-}
-
 .sleep-timer-dialog {
-  display: grid;
-  width: min(478px, calc(100vw - 28px));
-  gap: 18px;
-  padding: 26px 22px 22px;
-  border-radius: 12px;
   color: var(--smw-text-primary);
-  background: var(--smw-bg-workspace);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
 }
 
-.sleep-timer-dialog header,
+.sleep-timer-dialog-body {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+}
+
 .sleep-timer-dialog footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.sleep-timer-dialog h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.sleep-timer-dialog header button {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  color: var(--smw-text-secondary);
-  background: transparent;
-  cursor: pointer;
 }
 
 .sleep-timer-section-label {

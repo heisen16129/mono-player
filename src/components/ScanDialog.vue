@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Trash2, X } from '@lucide/vue';
+import { Trash2 } from '@lucide/vue';
 import { t } from '../i18n';
 import type { Locale } from '../types/music';
+import BaseDialog from './BaseDialog.vue';
 
 defineProps<{
   confirming: boolean;
@@ -22,14 +23,7 @@ defineEmits<{
 </script>
 
 <template>
-  <div class="scan-dialog-overlay" role="presentation">
-    <section class="scan-dialog" role="dialog" aria-modal="true" :aria-label="t(locale, 'scanDialogTitle')">
-      <header class="scan-dialog-head">
-        <h2>{{ t(locale, 'scanDialogTitle') }}</h2>
-        <button class="icon-button" type="button" :aria-label="t(locale, 'close')" :disabled="confirming" @click="$emit('close')">
-          <X :size="18" />
-        </button>
-      </header>
+  <BaseDialog :label="t(locale, 'scanDialogTitle')" :close-label="t(locale, 'close')" :close-disabled="confirming" :title="t(locale, 'scanDialogTitle')" @close="$emit('close')">
 
       <div class="scan-dialog-toolbar">
         <span>{{ t(locale, 'scanHint') }}</span>
@@ -69,48 +63,14 @@ defineEmits<{
           {{ confirming ? t(locale, 'scanning') : t(locale, 'confirm') }}
         </button>
       </footer>
-    </section>
-  </div>
+  </BaseDialog>
 </template>
 
 <style scoped>
-.scan-dialog-overlay {
-  position: fixed;
-  inset: 0 0 var(--player-height) 0;
-  z-index: 120;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: color-mix(in srgb, var(--smw-bg-canvas) 82%, transparent);
-  backdrop-filter: blur(10px);
-}
-
-.scan-dialog {
-  display: grid;
-  width: min(490px, calc(100vw - 32px));
-  border: 1px solid var(--smw-border-soft);
-  border-radius: 8px;
-  background: var(--smw-bg-workspace);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
-}
-
-.scan-dialog-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 12px 12px;
-  border-bottom: 1px solid var(--smw-border-soft);
-}
-
-.scan-dialog-head h2 {
-  margin: 0;
-  color: var(--smw-text-primary);
-  font-size: 17px;
-  font-weight: 560;
-}
-
 .scan-dialog-toolbar {
+  --button-min-height: 30px;
+  --button-padding-x: 14px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -118,23 +78,6 @@ defineEmits<{
   padding: 12px;
   color: var(--smw-text-secondary);
   font-size: 12px;
-}
-
-.secondary-button {
-  display: inline-grid;
-  min-height: 30px;
-  place-items: center;
-  padding: 0 14px;
-  border: 1px solid var(--smw-border);
-  border-radius: 7px;
-  color: var(--smw-text-primary);
-  background: var(--smw-bg-input);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.secondary-button:hover {
-  background: var(--smw-bg-hover);
 }
 
 .scan-folder-list {
@@ -191,6 +134,9 @@ defineEmits<{
 }
 
 .scan-dialog-actions {
+  --button-min-height: 30px;
+  --button-padding-x: 14px;
+
   display: flex;
   align-items: center;
   gap: 8px;
@@ -208,31 +154,4 @@ defineEmits<{
   white-space: nowrap;
 }
 
-.confirm-button {
-  min-width: 52px;
-  min-height: 30px;
-  border: 1px solid var(--smw-button-primary);
-  border-radius: 8px;
-  color: #fff;
-  background: var(--smw-button-primary);
-  cursor: pointer;
-  font-weight: 560;
-}
-
-.confirm-button:hover {
-  filter: brightness(0.96);
-}
-
-.secondary-button:disabled,
-.confirm-button:disabled {
-  cursor: default;
-  filter: none;
-}
-
-.confirm-button:disabled {
-  border-color: color-mix(in srgb, var(--smw-button-primary) 34%, var(--smw-border));
-  color: #fff;
-  background: color-mix(in srgb, var(--smw-button-primary) 62%, var(--smw-bg-input));
-  opacity: 1;
-}
 </style>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { X } from '@lucide/vue';
 import { computed } from 'vue';
 import { resolveLocale, t } from '../i18n';
 import type { Locale } from '../types/music';
+import BaseDialog from './BaseDialog.vue';
 
 const props = defineProps<{
   editing: boolean;
@@ -21,14 +21,7 @@ const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist
 </script>
 
 <template>
-  <div class="scan-dialog-overlay" role="presentation">
-    <section class="scan-dialog playlist-dialog" role="dialog" aria-modal="true" :aria-label="title">
-      <header class="scan-dialog-head">
-        <h2>{{ title }}</h2>
-        <button class="icon-button" type="button" :aria-label="t(locale, 'close')" @click="$emit('close')">
-          <X :size="18" />
-        </button>
-      </header>
+  <BaseDialog :label="title" :close-label="t(locale, 'close')" :title="title" width="min(420px, calc(100vw - 32px))" @close="$emit('close')">
 
       <form class="playlist-dialog-form" @submit.prevent="$emit('confirm')">
         <div class="playlist-dialog-body">
@@ -52,51 +45,10 @@ const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist
           </button>
         </footer>
       </form>
-    </section>
-  </div>
+  </BaseDialog>
 </template>
 
 <style scoped>
-.scan-dialog-overlay {
-  position: fixed;
-  inset: 0 0 var(--player-height) 0;
-  z-index: 120;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: color-mix(in srgb, var(--smw-bg-canvas) 82%, transparent);
-  backdrop-filter: blur(10px);
-}
-
-.scan-dialog {
-  display: grid;
-  width: min(490px, calc(100vw - 32px));
-  border: 1px solid var(--smw-border-soft);
-  border-radius: 8px;
-  background: var(--smw-bg-workspace);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
-}
-
-.scan-dialog-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 12px 12px;
-  border-bottom: 1px solid var(--smw-border-soft);
-}
-
-.scan-dialog-head h2 {
-  margin: 0;
-  color: var(--smw-text-primary);
-  font-size: 17px;
-  font-weight: 560;
-}
-
-.playlist-dialog {
-  width: min(420px, calc(100vw - 32px));
-}
-
 .playlist-dialog-body {
   padding: 12px 12px 18px;
 }
@@ -125,55 +77,13 @@ const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist
 }
 
 .scan-dialog-actions {
+  --button-min-height: 30px;
+  --button-padding-x: 14px;
+
   display: flex;
   gap: 8px;
   justify-content: flex-end;
   padding: 16px 12px 12px;
 }
 
-.secondary-button {
-  display: inline-grid;
-  min-width: 52px;
-  min-height: 30px;
-  place-items: center;
-  padding: 0 14px;
-  border: 1px solid var(--smw-border);
-  border-radius: 7px;
-  color: var(--smw-text-primary);
-  background: var(--smw-bg-input);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.secondary-button:hover {
-  background: var(--smw-bg-hover);
-}
-
-.confirm-button {
-  min-width: 52px;
-  min-height: 30px;
-  border: 1px solid var(--smw-button-primary);
-  border-radius: 8px;
-  color: #fff;
-  background: var(--smw-button-primary);
-  cursor: pointer;
-  font-weight: 560;
-}
-
-.confirm-button:hover {
-  filter: brightness(0.96);
-}
-
-.secondary-button:disabled,
-.confirm-button:disabled {
-  cursor: default;
-  filter: none;
-}
-
-.confirm-button:disabled {
-  border-color: color-mix(in srgb, var(--smw-button-primary) 34%, var(--smw-border));
-  color: #fff;
-  background: color-mix(in srgb, var(--smw-button-primary) 62%, var(--smw-bg-input));
-  opacity: 1;
-}
 </style>

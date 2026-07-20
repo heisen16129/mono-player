@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Flame, Search, UserRound } from '@lucide/vue';
+import { Flame, UserRound } from '@lucide/vue';
 import { computed } from 'vue';
+import SearchInput from './SearchInput.vue';
 
 const props = defineProps<{
   modelValue: string;
@@ -33,11 +34,11 @@ function submitSearch(keyword = query.value) {
     <div class="discover-stage">
       <h1>发现音乐</h1>
 
-      <form class="discover-search" @submit.prevent="submitSearch()">
-        <Search :size="24" />
-        <input v-model="query" type="search" placeholder="搜索歌曲 / 歌手 / 专辑" />
-        <kbd>Enter</kbd>
-      </form>
+      <SearchInput v-model="query" root-class="discover-search" placeholder="搜索歌曲 / 歌手 / 专辑" :icon-size="24" @submit="submitSearch">
+        <template #after>
+          <kbd>Enter</kbd>
+        </template>
+      </SearchInput>
 
       <div class="quick-keywords" aria-label="快捷搜索">
         <button
@@ -90,58 +91,6 @@ function submitSearch(keyword = query.value) {
   font-size: clamp(36px, 5vw, 56px);
   font-weight: 780;
   letter-spacing: 0;
-}
-
-.discover-search {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  align-items: center;
-  width: min(760px, 100%);
-  height: 76px;
-  gap: 14px;
-  padding: 0 26px;
-  border: 1px solid color-mix(in srgb, var(--smw-button-primary) 28%, var(--smw-border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--smw-bg-panel) 88%, transparent);
-  box-shadow: 0 20px 60px color-mix(in srgb, var(--smw-button-primary) 10%, transparent);
-}
-
-.discover-search svg {
-  color: var(--smw-icon-muted);
-}
-
-.discover-search input {
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  box-shadow: none;
-  color: var(--smw-text-primary);
-  background: transparent;
-  font: inherit;
-  font-size: 22px;
-}
-
-.discover-search input:focus,
-.discover-search input:focus-visible {
-  box-shadow: none;
-}
-
-.discover-search input::placeholder {
-  color: var(--smw-text-muted);
-}
-
-.discover-search kbd {
-  display: inline-grid;
-  min-width: 58px;
-  height: 28px;
-  place-items: center;
-  border: 1px solid var(--smw-border);
-  border-radius: 7px;
-  color: var(--smw-text-secondary);
-  background: var(--smw-bg-panel);
-  font-size: 13px;
-  font-family: inherit;
-  font-weight: 520;
 }
 
 .quick-keywords {
@@ -201,20 +150,6 @@ function submitSearch(keyword = query.value) {
 
   .discover-stage {
     gap: 24px;
-  }
-
-  .discover-search {
-    height: auto;
-    min-height: 64px;
-    padding: 0 18px;
-  }
-
-  .discover-search input {
-    font-size: 18px;
-  }
-
-  .discover-search kbd {
-    display: none;
   }
 }
 </style>

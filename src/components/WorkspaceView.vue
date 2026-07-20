@@ -1,10 +1,12 @@
 ﻿<script setup lang="ts">
-import { Search } from '@lucide/vue';
 import type { Track } from '../types/music';
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { durationText, songCountLong, t } from '../i18n';
+import { useScrollingState } from '../composables/useScrollingState';
 import { usePlayerStore } from '../stores/player';
 import CollectionHero from './CollectionHero.vue';
+import EmptyState from './EmptyState.vue';
+import SearchInput from './SearchInput.vue';
 import TrackTable from './TrackTable.vue';
 
 const props = defineProps<{
@@ -38,8 +40,7 @@ const emit = defineEmits<{
 }>();
 
 const trackTableRef = ref<InstanceType<typeof TrackTable> | null>(null);
-const isTrackListScrolling = ref(false);
-let trackListScrollTimer: number | undefined;
+const { isScrolling: isTrackListScrolling, showScrolling: showTrackListScrolling } = useScrollingState();
 const player = usePlayerStore();
 
 const favoriteStats = computed(() => {
@@ -121,35 +122,18 @@ async function locateActiveTrack() {
 }
 
 function handleTrackListScroll(event: Event) {
-  isTrackListScrolling.value = true;
+  showTrackListScrolling();
   const target = event.currentTarget;
   if (target instanceof HTMLElement && target.scrollHeight - target.scrollTop - target.clientHeight < 180) {
     trackTableRef.value?.loadNextPage();
   }
-
-  window.clearTimeout(trackListScrollTimer);
-  trackListScrollTimer = window.setTimeout(() => {
-    isTrackListScrolling.value = false;
-  }, 800);
 }
-
-onBeforeUnmount(() => {
-  window.clearTimeout(trackListScrollTimer);
-});
 </script>
 
 <template>
   <section class="workspace" :class="{ 'favorites-workspace': isWideCollection }">
     <header class="workspace-toolbar">
-      <label class="search-field top-search">
-        <Search :size="16" />
-        <input
-          :value="modelValue"
-          type="search"
-          :placeholder="t(player.settings.locale, 'searchPlaceholder')"
-          @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
-        />
-      </label>
+      <SearchInput :model-value="modelValue" :placeholder="t(player.settings.locale, 'searchPlaceholder')" @update:model-value="emit('update:modelValue', $event)" />
     </header>
 
     <CollectionHero
@@ -172,9 +156,7 @@ onBeforeUnmount(() => {
       @scroll="handleTrackListScroll"
     >
       <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="tracks.length === 0" class="empty-state favorites-empty">
-        {{ collectionEmptyText }}
-      </p>
+      <EmptyState v-if="tracks.length === 0" class-name="favorites-empty" :message="collectionEmptyText" />
 
       <TrackTable
         v-else
@@ -216,19 +198,6 @@ onBeforeUnmount(() => {
 
 .icon-button.muted {
   color: var(--smw-text-muted);
-}
-
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 7px;
-  color: #fff;
-  background: var(--smw-button-primary);
-  cursor: pointer;
 }
 
 :root[data-theme='dark'] .play-button {

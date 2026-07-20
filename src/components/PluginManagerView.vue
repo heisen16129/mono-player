@@ -1,6 +1,8 @@
 ﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
+import EmptyState from './EmptyState.vue';
+import PageHeader from './PageHeader.vue';
 import {
   Download,
   FolderInput,
@@ -390,22 +392,20 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="plugin-manager-view">
-    <header class="plugin-header">
-      <div>
-        <h1>插件管理</h1>
-        <p>管理 WASM 原生插件。</p>
-      </div>
-      <div class="plugin-actions">
-        <button class="secondary-button" type="button" @click="importFromLocalFile">
-          <FolderInput :size="16" />
-          从本地文件安装
-        </button>
-        <button class="secondary-button" type="button" :disabled="isRefreshingSubscriptions" @click="refreshCatalogs()">
-          <RefreshCw :size="16" :class="{ spinning: isRefreshingSubscriptions }" />
-          更新订阅
-        </button>
-      </div>
-    </header>
+    <PageHeader class="plugin-header" title="插件管理" subtitle="管理 WASM 原生插件。">
+      <template #actions>
+        <div class="plugin-actions">
+          <button class="secondary-button" type="button" @click="importFromLocalFile">
+            <FolderInput :size="16" />
+            从本地文件安装
+          </button>
+          <button class="secondary-button" type="button" :disabled="isRefreshingSubscriptions" @click="refreshCatalogs()">
+            <RefreshCw :size="16" :class="{ spinning: isRefreshingSubscriptions }" />
+            更新订阅
+          </button>
+        </div>
+      </template>
+    </PageHeader>
 
     <section class="subscription-row" aria-label="插件订阅">
       <label>
@@ -522,9 +522,7 @@ onBeforeUnmount(() => {
         </tbody>
       </table>
 
-      <p v-if="!isLoading && visiblePlugins.length === 0" class="empty-plugins">
-        暂无插件，添加订阅或从本地文件安装。
-      </p>
+      <EmptyState v-if="!isLoading && visiblePlugins.length === 0" class-name="empty-plugins" message="暂无插件，添加订阅或从本地文件安装。" />
     </div>
 
     <div v-if="isAddingSubscription" class="plugin-loading-overlay" role="status" aria-live="polite">
@@ -549,70 +547,11 @@ onBeforeUnmount(() => {
   background: var(--smw-bg-workspace);
 }
 
-.plugin-header {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 116px 18px 0;
-  border-bottom: 1px solid var(--smw-border);
-}
-
-.plugin-header h1 {
-  margin: 0 0 6px;
-  color: var(--smw-text-primary);
-  font-size: 28px;
-  font-weight: 760;
-  line-height: 1.15;
-}
-
-.plugin-header p {
-  margin: 0;
-  color: var(--smw-text-secondary);
-  font-size: 13px;
-}
-
 .plugin-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
-}
-
-.primary-button,
-.secondary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 0 13px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 560;
-  cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, opacity 140ms ease;
-}
-
-.primary-button {
-  border-color: var(--smw-button-primary);
-  color: #fff;
-  background: var(--smw-button-primary);
-}
-
-.primary-button:hover:not(:disabled) {
-  filter: brightness(0.96);
-}
-
-.primary-button:disabled {
-  cursor: default;
-  border-color: color-mix(in srgb, var(--smw-button-primary) 34%, var(--smw-border));
-  color: #fff;
-  background: color-mix(in srgb, var(--smw-button-primary) 62%, var(--smw-bg-input));
-  opacity: 1;
-  filter: none;
 }
 
 .subscription-submit {
@@ -622,28 +561,6 @@ onBeforeUnmount(() => {
 
 .subscription-submit span {
   font-size: 13px;
-}
-
-.secondary-button {
-  border: 1px solid var(--smw-border);
-  color: var(--smw-text-body);
-  background: var(--smw-bg-input);
-}
-
-.secondary-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--smw-text-secondary) 30%, var(--smw-border));
-  background: color-mix(in srgb, var(--smw-bg-input) 80%, var(--smw-bg-selected));
-}
-
-.secondary-button.compact {
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
-.secondary-button:disabled {
-  cursor: default;
-  opacity: 0.62;
 }
 
 .subscription-row {
@@ -1012,11 +929,8 @@ onBeforeUnmount(() => {
 }
 
 .empty-plugins {
-  margin: 0;
   padding: 34px 16px;
-  color: var(--smw-text-secondary);
   font-size: 13px;
-  text-align: center;
 }
 
 .plugin-loading-overlay {

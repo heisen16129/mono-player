@@ -7,6 +7,8 @@ import { clearRustBackendCache, getRustBackendCacheStatus, getRustBackendDefault
 import { usePlayerStore } from '../stores/player';
 import type { Locale, PlaybackQualityFallback } from '../types/music';
 import { getErrorMessage } from '../utils/error';
+import PageHeader from './PageHeader.vue';
+import SegmentTabs from './SegmentTabs.vue';
 
 const player = usePlayerStore();
 const tabKeys = ['settings', 'playback', 'lyrics', 'mcp', 'plugins', 'shortcuts', 'network', 'backup'] as const;
@@ -91,6 +93,7 @@ const mcpFeatureGroups = [
   },
 ] as const;
 const locale = computed(() => player.settings.locale);
+const settingsTabItems = computed(() => tabKeys.map((tab) => ({ id: tab, label: t(locale.value, tab) })));
 const outputDevices = ref<{ id: string; name: string; isDefault: boolean }[]>([]);
 const cacheCleanupMessage = ref('');
 const mcpCopyMessage = ref('');
@@ -127,6 +130,12 @@ const mcpStartedAtLabel = computed(() => {
 
 function setLocale(event: Event) {
   player.setLocale((event.target as HTMLSelectElement).value as Locale);
+}
+
+function selectSettingsTab(tab: string | null) {
+  if (tab && tabKeys.includes(tab as (typeof tabKeys)[number])) {
+    activeTab.value = tab as (typeof tabKeys)[number];
+  }
 }
 
 function setLyricFontSize(event: Event) {
@@ -246,20 +255,9 @@ onMounted(() => {
 
 <template>
   <section class="settings-view">
-    <header class="settings-header">
-      <h1>{{ t(locale, 'preferences') }}</h1>
-      <nav class="settings-tabs" :aria-label="t(locale, 'settings')">
-        <button
-          v-for="tab in tabKeys"
-          :key="tab"
-          type="button"
-          :class="{ active: activeTab === tab }"
-          @click="activeTab = tab"
-        >
-          {{ t(locale, tab) }}
-        </button>
-      </nav>
-    </header>
+    <PageHeader class="settings-header" :title="t(locale, 'preferences')">
+      <SegmentTabs :label="t(locale, 'settings')" :items="settingsTabItems" :model-value="activeTab" root-class="settings-tabs" @select="selectSettingsTab" />
+    </PageHeader>
 
     <div class="settings-content">
       <section v-if="activeTab === 'settings'" class="settings-section">
@@ -688,6 +686,9 @@ onMounted(() => {
 
 <style scoped>
 .settings-view {
+  --button-min-height: 36px;
+  --button-padding-x: 14px;
+
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
@@ -701,51 +702,6 @@ onMounted(() => {
   display: none;
 }
 
-
-.settings-header {
-  border-bottom: 1px solid var(--smw-border);
-}
-
-.settings-header h1 {
-  margin: 0 0 18px;
-  font-size: 30px;
-  font-weight: 760;
-  line-height: 1.1;
-}
-
-.settings-tabs {
-  display: flex;
-  gap: 30px;
-  overflow-x: auto;
-}
-
-.settings-tabs button {
-  position: relative;
-  height: 34px;
-  padding: 0;
-  border: 0;
-  color: var(--smw-text-body);
-  background: transparent;
-  font-size: 15px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.settings-tabs button.active {
-  color: var(--smw-button-primary);
-  font-weight: 680;
-}
-
-.settings-tabs button.active::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--smw-button-primary);
-  content: "";
-}
 
 .settings-content {
   display: grid;
@@ -1071,21 +1027,6 @@ onMounted(() => {
   color: var(--smw-text-body);
   font-size: 12px;
   line-height: 1.5;
-}
-
-.secondary-button.compact {
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--smw-border);
-  border-radius: 8px;
-  color: var(--smw-text-body);
-  background: var(--smw-bg-input);
-  font: inherit;
-  cursor: pointer;
-  transition:
-    border-color 150ms ease,
-    background-color 150ms ease,
-    box-shadow 150ms ease;
 }
 
 .secondary-button.compact:hover {

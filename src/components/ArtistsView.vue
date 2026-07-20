@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { Search, UserRound } from '@lucide/vue';
+import { UserRound } from '@lucide/vue';
 import type { ComponentPublicInstance } from 'vue';
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { songCount, t } from '../i18n';
+import { useScrollingState } from '../composables/useScrollingState';
 import { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
+import EmptyState from './EmptyState.vue';
 import LibraryContentLayout from './LibraryContentLayout.vue';
+import SearchInput from './SearchInput.vue';
 import TrackTable from './TrackTable.vue';
 
 interface ArtistGroup {
@@ -35,10 +38,8 @@ const emit = defineEmits<{
 const player = usePlayerStore();
 const artistRowRefs = ref(new Map<string, HTMLElement>());
 const trackTableRef = ref<InstanceType<typeof TrackTable> | null>(null);
-const isArtistListScrolling = ref(false);
-const isArtistTrackScrolling = ref(false);
-let artistListScrollTimer: number | undefined;
-let artistTrackScrollTimer: number | undefined;
+const { isScrolling: isArtistListScrolling, showScrolling: showArtistListScrolling } = useScrollingState();
+const { isScrolling: isArtistTrackScrolling, showScrolling: showArtistTrackScrolling } = useScrollingState();
 
 const selectedArtist = computed(() => {
   return props.artistGroups.find((group) => group.name === props.activeArtistName) ?? props.artistGroups[0] ?? null;
@@ -69,24 +70,15 @@ async function scrollSelectedArtistIntoView() {
 }
 
 function handleArtistListScroll() {
-  isArtistListScrolling.value = true;
-  window.clearTimeout(artistListScrollTimer);
-  artistListScrollTimer = window.setTimeout(() => {
-    isArtistListScrolling.value = false;
-  }, 800);
+  showArtistListScrolling();
 }
 
 function handleArtistTrackScroll(event: Event) {
-  isArtistTrackScrolling.value = true;
+  showArtistTrackScrolling();
   const target = event.currentTarget;
   if (target instanceof HTMLElement && target.scrollHeight - target.scrollTop - target.clientHeight < 180) {
     trackTableRef.value?.loadNextPage();
   }
-
-  window.clearTimeout(artistTrackScrollTimer);
-  artistTrackScrollTimer = window.setTimeout(() => {
-    isArtistTrackScrolling.value = false;
-  }, 800);
 }
 
 watch(
@@ -97,10 +89,6 @@ watch(
   { immediate: true },
 );
 
-onBeforeUnmount(() => {
-  window.clearTimeout(artistListScrollTimer);
-  window.clearTimeout(artistTrackScrollTimer);
-});
 </script>
 
 <template>
@@ -136,7 +124,7 @@ onBeforeUnmount(() => {
             </span>
           </button>
 
-          <p v-if="artistGroups.length === 0" class="empty-state">{{ t(player.settings.locale, 'emptyArtists') }}</p>
+          <EmptyState v-if="artistGroups.length === 0" :message="t(player.settings.locale, 'emptyArtists')" />
         </div>
       </aside>
     </template>
@@ -144,15 +132,7 @@ onBeforeUnmount(() => {
     <template #detail>
       <section class="artist-detail">
         <header class="workspace-toolbar">
-          <label class="search-field top-search">
-            <Search :size="16" />
-            <input
-              :value="modelValue"
-              type="search"
-              :placeholder="t(player.settings.locale, 'searchPlaceholder')"
-              @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
-            />
-          </label>
+          <SearchInput :model-value="modelValue" :placeholder="t(player.settings.locale, 'searchPlaceholder')" @update:model-value="emit('update:modelValue', $event)" />
         </header>
 
         <div class="artist-hero">

@@ -169,6 +169,82 @@ button:disabled {
   opacity: 0.46;
 }
 
+.primary-button,
+.secondary-button,
+.confirm-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--button-gap, 7px);
+  min-width: var(--button-min-width, 0);
+  min-height: var(--button-min-height, 36px);
+  padding: 0 var(--button-padding-x, 13px);
+  border: 1px solid transparent;
+  border-radius: var(--button-radius, 8px);
+  font: inherit;
+  font-size: var(--button-font-size, 13px);
+  font-weight: var(--button-font-weight, 560);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, opacity 140ms ease, box-shadow 140ms ease;
+}
+
+.primary-button,
+.confirm-button {
+  border-color: var(--smw-button-primary);
+  color: #fff;
+  background: var(--smw-button-primary);
+}
+
+.primary-button:hover:not(:disabled),
+.confirm-button:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.primary-button:disabled,
+.confirm-button:disabled {
+  cursor: default;
+  border-color: color-mix(in srgb, var(--smw-button-primary) 34%, var(--smw-border));
+  color: #fff;
+  background: color-mix(in srgb, var(--smw-button-primary) 62%, var(--smw-bg-input));
+  opacity: 1;
+  filter: none;
+}
+
+.secondary-button {
+  border-color: var(--smw-border);
+  color: var(--smw-text-body);
+  background: var(--smw-bg-input);
+}
+
+.secondary-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--smw-text-secondary) 30%, var(--smw-border));
+  background: color-mix(in srgb, var(--smw-bg-input) 80%, var(--smw-bg-selected));
+}
+
+.secondary-button:focus-visible {
+  border-color: var(--smw-button-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
+  outline: none;
+}
+
+.secondary-button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.secondary-button.compact {
+  --button-min-height: 30px;
+  --button-padding-x: 10px;
+  --button-font-size: 12px;
+}
+
+.confirm-button {
+  --button-min-width: 52px;
+  --button-min-height: 30px;
+  --button-padding-x: 14px;
+}
+
 .favorite-button.is-favorite,
 .favorite-icon.is-favorite {
   color: #e5484d;
