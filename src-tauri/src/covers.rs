@@ -131,6 +131,26 @@ pub(crate) fn cached_cover_original_file_url_in(
     Ok(cover_file_url(&cache_path))
 }
 
+pub(crate) fn refresh_cached_cover_original_file_url_in(
+    cache_root: &Path,
+    audio_path: &Path,
+) -> Result<Option<String>, String> {
+    let Some(cover) = read_cover_uncached(audio_path)? else {
+        return Ok(None);
+    };
+
+    let cache_dir = mono_cache_dir(cache_root).join("cover-originals");
+    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+    let cache_path = cache_dir.join(format!(
+        "{}.{}",
+        cover_cache_key(audio_path),
+        cover_extension(&cover.mime_type)
+    ));
+    fs::write(&cache_path, &cover.data).map_err(|err| err.to_string())?;
+
+    Ok(cover_file_url(&cache_path))
+}
+
 fn cached_cover_thumbnail_path(cache_root: &Path, audio_path: &Path) -> Result<PathBuf, String> {
     let cache_dir = mono_cache_dir(cache_root).join("cover-thumbnails");
     fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;

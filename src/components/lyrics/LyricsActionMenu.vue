@@ -43,7 +43,7 @@ const emit = defineEmits<{
       </button>
     </div>
     <span class="lyrics-menu-separator" aria-hidden="true"></span>
-    <button class="lyrics-menu-item" type="button" disabled>歌曲操作</button>
+    <button class="lyrics-menu-item" type="button" disabled>操作</button>
     <button class="lyrics-menu-item" type="button" @click="emit('toggleFullscreen')">
       {{ isFullscreen ? '退出全屏' : '全屏显示' }}
     </button>

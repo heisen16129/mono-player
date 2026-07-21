@@ -1,17 +1,19 @@
 use crate::api_response::ApiResponse;
 use crate::models::{Track, TrackLyrics};
+use crate::state::AppState;
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::prelude::Accessor;
 use lofty::tag::{ItemKey, Tag};
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, State};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct DownloadTrackRequest {
@@ -239,12 +241,18 @@ pub(crate) fn download_lyrics_file(
 
 #[tauri::command]
 pub(crate) fn download_cover_file(
+    state: State<'_, AppState>,
+    player_state: State<'_, crate::player::PlayerState>,
     request: DownloadCoverRequest,
 ) -> ApiResponse<DownloadCoverResult> {
-    ApiResponse::from_result(download_cover_file_inner(request))
+    ApiResponse::from_result(download_cover_file_inner(state, player_state, request))
 }
 
-fn download_cover_file_inner(request: DownloadCoverRequest) -> Result<DownloadCoverResult, String> {
+fn download_cover_file_inner(
+    state: State<'_, AppState>,
+    player_state: State<'_, crate::player::PlayerState>,
+    request: DownloadCoverRequest,
+) -> Result<DownloadCoverResult, String> {
     let download_dir = PathBuf::from(request.download_dir.trim());
     if download_dir.as_os_str().is_empty() {
         return Err("请先在设置中选择下载位置。".to_string());
@@ -306,6 +314,19 @@ fn download_cover_file_inner(request: DownloadCoverRequest) -> Result<DownloadCo
         }
     };
     if embedded_in_track {
+        if let Some(track_path) = request.track_path.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+            if let Some(artwork) = crate::covers::refresh_cached_cover_original_file_url_in(
+                &player_state.cache_dir()?,
+                Path::new(track_path),
+            )? {
+                let db = state.db.lock().map_err(|err| err.to_string())?;
+                db.execute(
+                    "UPDATE tracks SET artwork = ?1, updated_at = CURRENT_TIMESTAMP WHERE path = ?2",
+                    params![artwork, track_path],
+                )
+                .map_err(|err| err.to_string())?;
+            }
+        }
         return Ok(DownloadCoverResult {
             path: None,
             embedded_in_track,

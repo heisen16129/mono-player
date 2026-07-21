@@ -104,6 +104,7 @@ const localLyricsRequests = new Map<string, Promise<TrackLyrics | null>>();
 const onlineLyricsRequests = new Map<string, Promise<void>>();
 
 const searchHistoryLimit = computed(() => Math.max(1, Math.round(player.settings.searchHistoryLimit)));
+const localLyricsMetadataByKey = ref(new Map<string, TrackLyrics>());
 const {
   loadSearchHistory,
   saveSearchHistory,
@@ -192,6 +193,12 @@ function mergeQueueRuntimeMetadata(tracks: Track[]) {
 
 function localLyricsRequestKey(track: Track, format?: string | null) {
   return `${normalizePath(track.path)}::${format?.trim() ?? ''}`;
+}
+
+function cacheLocalTrackLyrics(track: Track, lyrics: TrackLyrics) {
+  const nextCache = new Map(localLyricsMetadataByKey.value);
+  nextCache.set(localLyricsRequestKey(track), lyrics);
+  localLyricsMetadataByKey.value = nextCache;
 }
 
 function findKnownTrackLyrics(track: Track) {
@@ -383,8 +390,6 @@ const {
 });
 
 const {
-  activeLyricFormat,
-  activeLyricFormats,
   activeLyricsViewStatus,
   hasTrackSourceLyrics,
   lyricsTrackKey,
@@ -393,10 +398,25 @@ const {
   syncLyricsViewStateForTrack,
   updateLyricsViewStateForRequest,
 } = useLyricsState(activeTrack);
+const playbackLyricMetadata = computed(() => {
+  const active = activeTrack.value;
+  const lyrics = normalizeTrackLyrics(active);
+  if (lyrics) return lyrics;
+  if (!active || isRemoteTrack(active)) return null;
+  return localLyricsMetadataByKey.value.get(localLyricsRequestKey(active)) ?? null;
+});
+const playbackLyricFormats = computed(() => {
+  const formats = playbackLyricMetadata.value?.formats ?? [];
+  return formats.filter((format, index) => format && formats.indexOf(format) === index);
+});
+const playbackLyricFormat = computed(() => {
+  const lyrics = playbackLyricMetadata.value;
+  return lyrics?.format ?? lyrics?.defaultFormat ?? playbackLyricFormats.value[0] ?? null;
+});
 const shouldShowLyricFormat = computed(() => {
   const active = activeTrack.value;
   return Boolean(
-    activeLyricFormats.value.length > 1
+    playbackLyricFormats.value.length > 1
     && active
     && (findPluginTrackForQueueTrack(active) || !isRemoteTrack(active)),
   );
@@ -587,6 +607,16 @@ function queueSourceKey(track: Track) {
   const sourceId = track.sourceId?.trim();
   if (providerId && sourceId) return `plugin://${providerId}/${sourceId}`;
   return track.path;
+}
+
+function isSameTrackForMetadata(track: Track | null | undefined, target: Track) {
+  if (!track) return false;
+  const trackSourceKey = queueSourceKey(track).trim();
+  const targetSourceKey = queueSourceKey(target).trim();
+  if (trackSourceKey && targetSourceKey) {
+    return normalizePath(trackSourceKey) === normalizePath(targetSourceKey);
+  }
+  return track.id === target.id;
 }
 
 function onlineTrackKeyForQueueTrack(track: Track) {
@@ -1227,7 +1257,7 @@ async function changeOnlinePlaybackQuality(quality: PluginPlaybackQuality) {
 
 async function changeLyricFormat(format: string) {
   const active = activeTrack.value;
-  if (!active || format === activeLyricFormat.value) return;
+  if (!active || format === playbackLyricFormat.value) return;
 
   try {
     const pluginTrack = findPluginTrackForQueueTrack(active);
@@ -1247,7 +1277,7 @@ async function changeLyricFormat(format: string) {
       active.associatedArtwork ?? null,
       pluginTrack?.providerName ?? null,
       source.lyricsUrl ?? (pluginTrack ? `${pluginTrack.providerName}@${pluginTrack.providerId}` : null),
-      source.formats ?? activeLyricFormats.value,
+      source.formats ?? playbackLyricFormats.value,
       source.defaultFormat ?? normalizeTrackLyrics(active)?.defaultFormat ?? null,
       source.format ?? format,
       pluginTrack?.providerId ?? null,
@@ -1325,6 +1355,7 @@ function requestLocalTrackLyrics(track: Track, format?: string | null) {
 async function loadLocalTrackLyricsInBackground(track: Track) {
   const knownLyrics = findKnownTrackLyrics(track);
   if (knownLyrics) {
+    cacheLocalTrackLyrics(track, knownLyrics);
     updateCurrentLocalTrackLyrics(track, knownLyrics);
     updateLyricsViewStateForRequest(track, 'ready');
     return;
@@ -1337,6 +1368,7 @@ async function loadLocalTrackLyricsInBackground(track: Track) {
       updateLyricsViewStateForRequest(track, 'empty');
       return;
     }
+    cacheLocalTrackLyrics(track, lyrics);
     updateCurrentLocalTrackLyrics(track, lyrics);
     updateLyricsViewStateForRequest(track, 'ready');
   } catch (error) {
@@ -1832,23 +1864,23 @@ function updateTrackLyricsState(
   if (!active) return;
 
   const nextTrack = withTrackLyrics(active, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
-  if (onlineActiveTrack.value?.id === active.id) {
+  if (isSameTrackForMetadata(onlineActiveTrack.value, active)) {
     onlineActiveTrack.value = nextTrack;
   }
-  if (selectedTrack.value?.id === active.id) {
+  if (isSameTrackForMetadata(selectedTrack.value, active)) {
     selectedTrack.value = nextTrack;
   }
-  if (currentPlaybackTrack.value?.id === active.id) {
+  if (isSameTrackForMetadata(currentPlaybackTrack.value, active)) {
     currentPlaybackTrack.value = nextTrack;
   }
-  if (player.currentTrack?.id === active.id) {
+  if (isSameTrackForMetadata(player.currentTrack, active)) {
     player.setCurrentTrack(nextTrack);
   }
   updateLyricsViewStateForRequest(nextTrack, 'ready');
 
-  player.tracks = player.tracks.map((track) => (track.id === active.id ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
-  player.queue = player.queue.map((track) => (track.id === active.id ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
-  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (track.id === active.id ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
+  player.tracks = player.tracks.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
+  player.queue = player.queue.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
+  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
 }
 
 function updateActiveTrackSourceLyrics(
@@ -1894,23 +1926,23 @@ function clearActiveTrackLyrics() {
   if (!active) return;
 
   const nextTrack = withoutAssociatedTrackLyrics(active);
-  if (onlineActiveTrack.value?.id === active.id) {
+  if (isSameTrackForMetadata(onlineActiveTrack.value, active)) {
     onlineActiveTrack.value = nextTrack;
   }
-  if (selectedTrack.value?.id === active.id) {
+  if (isSameTrackForMetadata(selectedTrack.value, active)) {
     selectedTrack.value = nextTrack;
   }
-  if (currentPlaybackTrack.value?.id === active.id) {
+  if (isSameTrackForMetadata(currentPlaybackTrack.value, active)) {
     currentPlaybackTrack.value = nextTrack;
   }
-  if (player.currentTrack?.id === active.id) {
+  if (isSameTrackForMetadata(player.currentTrack, active)) {
     player.setCurrentTrack(nextTrack);
   }
   syncLyricsViewStateForTrack(nextTrack);
 
-  player.tracks = player.tracks.map((track) => (track.id === active.id ? withoutAssociatedTrackLyrics(track) : track));
-  player.queue = player.queue.map((track) => (track.id === active.id ? withoutAssociatedTrackLyrics(track) : track));
-  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (track.id === active.id ? withoutAssociatedTrackLyrics(track) : track));
+  player.tracks = player.tracks.map((track) => (isSameTrackForMetadata(track, active) ? withoutAssociatedTrackLyrics(track) : track));
+  player.queue = player.queue.map((track) => (isSameTrackForMetadata(track, active) ? withoutAssociatedTrackLyrics(track) : track));
+  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (isSameTrackForMetadata(track, active) ? withoutAssociatedTrackLyrics(track) : track));
 }
 
 async function syncRustPlaybackMode() {
@@ -2460,8 +2492,8 @@ function finishLyricsEnter() {
       :is-favorite="isActiveTrackFavorite"
       :playback-mode="player.playbackMode"
       :playback-mode-label="player.playbackModeLabel"
-      :lyric-format="activeLyricFormat"
-      :lyric-formats="activeLyricFormats"
+      :lyric-format="playbackLyricFormat"
+      :lyric-formats="playbackLyricFormats"
       :online-quality="onlinePlaybackQuality"
       :online-quality-options="onlinePlaybackQualityOptions"
       :queue="rustPlaybackQueue"
