@@ -630,3 +630,382 @@
 - `PrimarySidebar.vue` 从 598 行降到 89 行。
 - 新增 `src/components/sidebar/SidebarBrand.vue`、`src/components/sidebar/SidebarNav.vue`、`src/components/sidebar/SidebarAccount.vue`。
 - `PrimarySidebar` 对外 props / emits 保持不变，`App.vue` 调用方式未修改。
+
+## LyricsView 组件拆分计划
+
+### 目标
+
+降低 `src/components/LyricsView.vue` 体积，先拆低风险 UI 区块，把搜索歌词弹窗、字号/下载菜单、封面展示这类独立视图移到 `src/components/lyrics/` 下。`LyricsView.vue` 继续保留当前播放 Track、歌词解析、高亮、滚动、封面加载和关联歌词等核心状态源，避免再次引入歌词页抖动、切换歌词类型失效或当前播放状态混乱。
+
+### 边界
+
+- 不修改歌词解析、逐字高亮、滚动定位、播放进度同步逻辑。
+- 不修改 `activeTrack` / `displayTrack` / `currentLyrics` 等当前播放状态来源。
+- 不修改搜索歌词、关联歌词、取消关联歌词的业务语义。
+- 子组件第一轮只承载模板和私有 CSS，父组件继续持有状态和处理函数。
+- 每完成一步运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入 LyricsView 拆分计划 | 已完成 | 文档已更新 | 明确本轮只做低风险 UI 拆分，不碰歌词核心逻辑。 |
+| 2. 拆分搜索歌词弹窗 | 已完成 | `npm run build` 已通过 | 新建 `components/lyrics/LyricsSearchDialog.vue`，迁移弹窗模板和搜索弹窗 scoped CSS，状态和事件仍由父组件传入。 |
+| 3. 拆分字号/下载菜单 UI | 已完成 | `npm run build` 已通过 | 新建 `components/lyrics/LyricsActionMenu.vue`，迁移右下角菜单模板和 CSS，菜单开关、字号调整、下载/取消关联处理仍在父组件。 |
+| 4. 拆分歌词页封面展示 UI | 已完成 | `npm run build` 已通过 | 新建 `LyricsCoverPanel.vue`，只迁移封面 DOM 和 CSS，封面读取、缓存、asset URL 转换仍在父组件。 |
+| 5. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有遗留已拆 CSS 和无用 import；本轮不继续拆 composable。 |
+
+### 执行记录
+
+- 2026-07-21：写入 LyricsView 组件拆分计划。本轮先执行第 2 步，拆搜索歌词弹窗；暂不触碰歌词滚动、高亮、封面加载和当前播放状态源。
+- 2026-07-21：完成第 2 步。新增 `components/lyrics/LyricsSearchDialog.vue`，迁移搜索歌词弹窗模板、搜索结果列表和对应 scoped CSS；`LyricsView.vue` 继续持有 `useLyricsSearch` 状态、搜索提交、滚动加载和应用歌词逻辑；`npm run build` 已通过。
+- 2026-07-21：完成第 3 步。新增 `components/lyrics/LyricsActionMenu.vue`，迁移歌词页右下角字号、下载封面、下载歌词、搜索歌词、同步歌词和取消关联菜单模板及 scoped CSS；`LyricsView.vue` 继续持有菜单开关、定位、字号调整和下载/关联处理逻辑；`npm run build` 已通过。
+- 2026-07-21：完成第 4 步。新增 `components/lyrics/LyricsCoverPanel.vue`，迁移歌词页封面展示 DOM、默认封面和封面展示 scoped CSS；`LyricsView.vue` 继续持有 `displayCoverUrl`、封面读取、封面缓存和错误兜底逻辑；`npm run build` 已通过。
+- 2026-07-21：完成第 5 步收尾扫描。`LyricsView.vue` 当前 1251 行；新增 `LyricsSearchDialog.vue`、`LyricsActionMenu.vue`、`LyricsCoverPanel.vue`。扫描确认父组件中没有继续保留搜索弹窗、菜单、封面展示的 CSS 和组件 import；`.lyrics-font-menu` 仅保留在点击外部关闭判断中。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从约 1372 行降到 1251 行。
+- 新增 `src/components/lyrics/LyricsSearchDialog.vue`、`src/components/lyrics/LyricsActionMenu.vue`、`src/components/lyrics/LyricsCoverPanel.vue`。
+- 本轮只拆 UI 模板和 scoped CSS；歌词解析、高亮、滚动、封面读取、歌词搜索状态和关联歌词逻辑仍由 `LyricsView.vue` 持有。
+
+## LyricsView 歌词面板拆分计划
+
+### 目标
+
+继续降低 `src/components/LyricsView.vue` 体积，把歌词列表渲染、空状态、加载提示、滚动条和同步按钮这块面板 UI 拆到 `src/components/lyrics/LyricsPanel.vue`。父组件继续持有歌词行数据、当前行计算、逐字进度、滚动控制和 seek 逻辑，避免改变歌词高亮、滚动定位和播放同步行为。
+
+### 边界
+
+- 不修改 `activeLyricIndex`、`activeLyricWordIndex`、`lyricWordProgress`、`scrollToActiveLyric`、`syncScrollThumb` 等核心逻辑。
+- 不修改歌词加载、搜索歌词、关联歌词和取消关联歌词语义。
+- `LyricsPanel.vue` 只接收 props 和转发事件，不创建新的歌词状态源。
+- 组件私有 CSS 放到 `LyricsPanel.vue` 的 `<style scoped>`。
+- 完成后运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入歌词面板拆分计划 | 已完成 | 文档已更新 | 明确本轮只拆面板 UI，不迁移歌词高亮和滚动算法。 |
+| 2. 拆分 `LyricsPanel.vue` | 已完成 | `npm run build` 已通过 | 迁移歌词列表模板、空状态、加载提示、滚动条、同步按钮和对应 scoped CSS。 |
+| 3. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有遗留已拆面板 CSS 和无用 import。 |
+
+### 执行记录
+
+- 2026-07-21：写入 LyricsView 歌词面板拆分计划。本轮只拆歌词面板 UI，父组件继续持有歌词高亮、滚动和 seek 逻辑。
+- 2026-07-21：完成第 2 步。新增 `components/lyrics/LyricsPanel.vue`，迁移歌词列表渲染、空状态、加载提示、滚动条、同步按钮和对应 scoped CSS；`LyricsView.vue` 继续持有 `activeLyricIndex`、`lyricWordProgress`、滚动定位、浏览恢复、seek 和同步偏移逻辑；`npm run build` 已通过。
+- 2026-07-21：完成第 3 步收尾扫描。`LyricsView.vue` 当前 1004 行；新增 `LyricsPanel.vue` 当前 304 行。扫描确认父组件中没有继续保留歌词面板 CSS 和 `EmptyState` import；`.lyrics-panel .current` 仅保留在滚动定位查询中，`lyricWordProgress` 仅作为子组件 prop 传入。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从 1251 行降到 1004 行。
+- 新增 `src/components/lyrics/LyricsPanel.vue`。
+- 本轮只拆歌词面板 UI 和 scoped CSS；歌词高亮、滚动定位、seek、同步偏移和当前播放状态源仍由 `LyricsView.vue` 持有。
+
+## LyricsView 顶部栏拆分计划
+
+### 目标
+
+继续降低 `src/components/LyricsView.vue` 模板和样式体积，把歌词页顶部关闭按钮、全屏按钮、歌曲标题、歌手和专辑信息拆到 `src/components/lyrics/LyricsHeaderBar.vue`。父组件继续持有窗口全屏状态、关闭逻辑、当前 Track 和国际化文本来源。
+
+### 边界
+
+- 不修改 `closeLyricsView`、`toggleLyricsFullscreen`、`updateFullscreenState` 等窗口行为。
+- 不修改当前播放 Track 状态源，只把展示文本作为 props 传入。
+- 不修改歌词面板、封面、右键菜单、搜索歌词和滚动逻辑。
+- 顶部栏私有 CSS 放到 `LyricsHeaderBar.vue` 的 `<style scoped>`。
+- 完成后运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入顶部栏拆分计划 | 已完成 | 文档已更新 | 明确本轮只拆顶部 UI，不迁移窗口行为。 |
+| 2. 拆分 `LyricsHeaderBar.vue` | 已完成 | `npm run build` 已通过 | 迁移关闭按钮、全屏按钮、标题区模板和对应 scoped CSS。 |
+| 3. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有遗留顶部栏 CSS 和无用 icon import。 |
+
+### 执行记录
+
+- 2026-07-21：写入 LyricsView 顶部栏拆分计划。本轮只拆顶部展示 UI，父组件继续持有关闭、全屏和当前 Track 状态。
+- 2026-07-21：完成第 2 步。新增 `components/lyrics/LyricsHeaderBar.vue`，迁移关闭按钮、全屏按钮、歌曲标题、歌手/专辑展示和对应 scoped CSS；`LyricsView.vue` 继续持有 `closeLyricsView`、`toggleLyricsFullscreen`、`isFullscreen` 和当前 Track 文案来源；`npm run build` 已通过。
+- 2026-07-21：完成第 3 步收尾扫描。`LyricsView.vue` 当前 948 行；新增 `LyricsHeaderBar.vue` 当前 90 行。扫描确认父组件中没有继续保留 `ChevronDown`、`Maximize2`、`Minimize2` import，也没有遗留 `.lyrics-close`、`.lyrics-fullscreen`、`.lyrics-heading` CSS。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从 1004 行降到 948 行。
+- 新增 `src/components/lyrics/LyricsHeaderBar.vue`。
+- 本轮只拆顶部栏 UI 和 scoped CSS；关闭、全屏、当前 Track 和国际化文案来源仍由 `LyricsView.vue` 持有。
+
+## LyricsView 右键菜单逻辑拆分计划
+
+### 目标
+
+继续降低 `src/components/LyricsView.vue` 的状态和函数数量，把歌词页右键菜单的打开/关闭、菜单坐标、字号调整和同步歌词入口拆到 `src/composables/useLyricsActionMenu.ts`。父组件继续负责下载封面/歌词、搜索歌词、取消关联歌词和 Teleport 挂载结构。
+
+### 边界
+
+- 不修改 `LyricsActionMenu.vue` 的模板和 Teleport 位置，避免再次影响右键菜单显示。
+- 不修改下载封面、下载歌词、搜索歌词、取消关联歌词逻辑。
+- 不修改歌词高亮、滚动、封面读取和当前播放状态源。
+- composable 只接收必要依赖：字号 getter/setter、关闭搜索前置逻辑、滚动到当前歌词回调。
+- 完成后运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入右键菜单逻辑拆分计划 | 已完成 | 文档已更新 | 明确本轮只拆菜单状态和局部控制函数。 |
+| 2. 拆分 `useLyricsActionMenu.ts` | 已完成 | `npm run build` 已通过 | 迁移 `isFontMenuOpen`、菜单坐标、字号调整、同步歌词入口和外部点击关闭判断。 |
+| 3. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有保留已迁移菜单状态和函数。 |
+
+### 执行记录
+
+- 2026-07-21：写入 LyricsView 右键菜单逻辑拆分计划。本轮只拆右键菜单状态和局部控制函数，不调整菜单 Teleport 结构。
+- 2026-07-21：完成第 2 步。新增 `composables/useLyricsActionMenu.ts`，迁移右键菜单开关、坐标计算、外部点击关闭、字号增减、同步歌词入口和歌词同步偏移逻辑；`LyricsView.vue` 继续持有 `LyricsActionMenu` Teleport、下载封面/歌词、搜索歌词和取消关联歌词逻辑；`npm run build` 已通过。
+- 2026-07-21：完成第 3 步收尾扫描。`LyricsView.vue` 当前 919 行；新增 `useLyricsActionMenu.ts` 当前 72 行。扫描确认父组件中没有继续保留 `MIN_LYRIC_FONT_SIZE`、`MAX_LYRIC_FONT_SIZE`、菜单坐标 ref 和已迁移的菜单控制函数。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从 948 行降到 919 行。
+- 新增 `src/composables/useLyricsActionMenu.ts`。
+- 本轮只拆右键菜单状态和局部控制逻辑；菜单 Teleport、下载、搜索、取消关联、歌词高亮和滚动逻辑保持原归属。
+
+## LyricsView 全屏窗口逻辑拆分计划
+
+### 目标
+
+继续降低 `src/components/LyricsView.vue` 的窗口控制逻辑，把歌词页全屏状态、进入/退出全屏、关闭歌词页时恢复窗口状态拆到 `src/composables/useLyricsFullscreen.ts`。父组件继续负责渲染顶部栏并在关闭后发出 `close` 事件。
+
+### 边界
+
+- 不修改顶部栏 UI 和按钮事件语义。
+- 不修改歌词播放、歌词滚动、封面读取、右键菜单和搜索歌词逻辑。
+- 不修改 Tauri 窗口 API 调用顺序，只迁移已有逻辑。
+- composable 内部负责 unmount 时退出全屏和恢复最大化状态。
+- 完成后运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入全屏窗口逻辑拆分计划 | 已完成 | 文档已更新 | 明确本轮只迁移已有窗口控制逻辑。 |
+| 2. 拆分 `useLyricsFullscreen.ts` | 已完成 | `npm run build` 已通过 | 迁移 `isFullscreen`、`updateFullscreenState`、`toggleLyricsFullscreen` 和关闭前退出全屏逻辑。 |
+| 3. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有保留已迁移窗口状态和 Tauri 窗口 import。 |
+
+### 执行记录
+
+- 2026-07-21：写入 LyricsView 全屏窗口逻辑拆分计划。本轮只迁移窗口控制逻辑，不调整顶部栏 UI。
+- 2026-07-21：完成第 2 步。新增 `composables/useLyricsFullscreen.ts`，迁移全屏状态、Tauri 窗口全屏切换、最大化恢复、关闭前退出全屏和 unmount 清理逻辑；`LyricsView.vue` 继续负责顶部栏渲染和关闭后 emit `close`；`npm run build` 已通过。
+- 2026-07-21：完成第 3 步收尾扫描。`LyricsView.vue` 当前 878 行；新增 `useLyricsFullscreen.ts` 当前 61 行。扫描确认父组件中没有继续保留 `getCurrentWindow` import、`restoreMaximizedAfterFullscreen`、`setFullscreen`、`maximize`、`unmaximize` 和已迁移的全屏控制函数。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从 919 行降到 878 行。
+- 新增 `src/composables/useLyricsFullscreen.ts`。
+- 本轮只拆全屏窗口控制逻辑；顶部栏 UI、关闭事件、歌词播放、歌词滚动、封面和右键菜单逻辑保持原归属。
+
+## LyricsView 封面逻辑拆分计划
+
+### 目标
+
+继续降低 `src/components/LyricsView.vue` 的方法数量，把歌词页封面状态、封面缓存、封面读取、封面错误兜底和封面背景样式计算拆到 `src/composables/useLyricsCover.ts`。父组件继续负责歌词加载 watch、搜索歌词应用、取消关联歌词和当前 Track 状态来源。
+
+### 边界
+
+- 不修改封面读取顺序：仍然优先使用 `activeTrack.artwork`，再使用播放器原图缓存，再使用歌词页缓存/缩略图/原图。
+- 不修改歌词加载 watch 的触发条件和歌词解析流程，只把封面操作替换成 composable 方法。
+- 不修改 `LyricsCoverPanel.vue` 的展示逻辑和 `LyricsView.vue` 的整体布局。
+- 保留现有 object URL 回收、引用计数、请求版本防旧请求写回逻辑。
+- 完成后运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入封面逻辑拆分计划 | 已完成 | 文档已更新 | 明确本轮只迁移封面状态和缓存方法。 |
+| 2. 拆分 `useLyricsCover.ts` | 已完成 | `npm run build` 已通过 | 迁移封面缓存、读取、展示 URL、背景 URL、错误兜底和清理逻辑。 |
+| 3. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有保留已迁移封面缓存工具和无用 import。 |
+
+### 执行记录
+
+- 2026-07-22：写入 LyricsView 封面逻辑拆分计划。本轮只迁移封面状态和缓存方法，不调整歌词加载 watch 的触发条件。
+- 2026-07-22：完成第 2 步。新增 `composables/useLyricsCover.ts`，迁移歌词页封面状态、展示 URL、背景 URL、播放器原图缓存兜底、歌词页封面缓存、缩略图/原图读取、object URL 回收、封面错误兜底和清理逻辑；`LyricsView.vue` 继续保留歌词加载 watch、搜索歌词应用和取消关联歌词流程，只调用 composable 方法更新封面；`npm run build` 已通过。
+- 2026-07-22：完成第 3 步收尾扫描。`LyricsView.vue` 当前 652 行；新增 `useLyricsCover.ts` 当前 299 行。扫描确认父组件中没有继续保留 `readCover`、`readCoverThumbnail`、`coverImageObjectUrl`、`usableArtworkDisplaySrc`、`getPlayerOriginalCoverCache`、`playerCoverCacheKey` 和封面缓存工具函数；父组件只保留 `displayCoverUrl`、`backgroundCoverUrl`、`handleCoverError` 等 composable 返回值接线。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从 878 行降到 652 行。
+- 新增 `src/composables/useLyricsCover.ts`。
+- 本轮只拆封面状态、缓存和读取逻辑；歌词加载 watch 的触发条件、歌词解析、搜索歌词应用和布局展示保持原归属。
+
+## LyricsView 歌词滚动逻辑拆分计划
+
+### 目标
+
+继续降低 `src/components/LyricsView.vue` 的方法数量，把歌词面板滚动定位、手动浏览、滚动条显示、恢复实时歌词和点击歌词 seek 的局部逻辑拆到 `src/composables/useLyricsScroll.ts`。父组件继续持有歌词行、当前高亮行、歌词同步偏移和外部 seek 事件。
+
+### 边界
+
+- 不修改 `activeLyricIndex`、逐字高亮、播放时间平滑和歌词解析逻辑。
+- 不修改 `LyricsPanel.vue` 的模板和事件名。
+- 不修改点击歌词 seek 的时间计算，只把 emit 包装为回调传入 composable。
+- 保留当前滚动行为：加载后自动滚动、高亮变化时滚动、滚轮浏览后 900ms 恢复。
+- 完成后运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入歌词滚动逻辑拆分计划 | 已完成 | 文档已更新 | 明确本轮只迁移滚动、浏览恢复和 seek 包装逻辑。 |
+| 2. 拆分 `useLyricsScroll.ts` | 已完成 | `npm run build` 已通过 | 迁移 `lyricsPanel`、`isBrowsingLyrics`、`scrollThumbTop`、滚动定位、浏览恢复、滚动条和 seek 包装。 |
+| 3. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有保留已迁移滚动方法和无用 import。 |
+
+### 执行记录
+
+- 2026-07-22：写入 LyricsView 歌词滚动逻辑拆分计划。本轮只迁移滚动、浏览恢复和 seek 包装逻辑，不调整歌词高亮算法。
+- 2026-07-22：完成第 2 步。新增 `composables/useLyricsScroll.ts`，迁移歌词面板 ref、手动浏览状态、滚动条位置、滚动到当前歌词、滚轮浏览、900ms 恢复实时歌词、滚动条同步、点击歌词 seek 和高亮变化 watch；`LyricsView.vue` 继续持有歌词行、当前高亮行、歌词同步偏移和外部 `seek` emit；`npm run build` 已通过。
+- 2026-07-22：完成第 3 步收尾扫描。`LyricsView.vue` 当前 578 行；新增 `useLyricsScroll.ts` 当前 129 行。扫描确认父组件中没有继续保留 `syncLyricsToCurrentTime`、`scrollToActiveLyric`、`beginLyricBrowse`、`handleLyricsWheel`、`restoreRealtimeLyrics`、`syncScrollThumb`、`seekToLyric` 等滚动方法，也没有保留 `nextTick` / `useScrollingState` import。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从 652 行降到 578 行。
+- 新增 `src/composables/useLyricsScroll.ts`。
+- 本轮只拆滚动、浏览恢复和 seek 包装逻辑；歌词解析、逐字高亮、搜索歌词应用和封面逻辑保持原归属。
+
+## LyricsView 歌词高亮逻辑拆分计划
+
+### 目标
+
+继续降低 `src/components/LyricsView.vue` 的方法数量，把歌词当前行计算、逐字高亮进度、播放时间平滑和动画帧循环拆到 `src/composables/useLyricsHighlight.ts`。父组件继续负责加载歌词行、歌词解析、搜索歌词应用和把高亮结果传给 `LyricsPanel.vue`。
+
+### 边界
+
+- 不修改当前行计算规则：仍按 `syncedLyricTime` 找最后一个小于等于当前时间的歌词行。
+- 不修改逐字高亮规则和 `0.45s` 默认边界兜底。
+- 不修改播放时间平滑节奏和 `requestAnimationFrame` 循环方式。
+- 不修改歌词加载 watch、滚动逻辑、封面逻辑和搜索歌词逻辑。
+- 完成后运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入歌词高亮逻辑拆分计划 | 已完成 | 文档已更新 | 明确本轮只迁移高亮计算和动画帧循环。 |
+| 2. 拆分 `useLyricsHighlight.ts` | 已完成 | `npm run build` 已通过 | 迁移 `smoothCurrentTime`、`activeLyricIndex`、逐字进度、播放时间 watch 和动画帧清理。 |
+| 3. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有保留已迁移高亮方法和动画帧变量。 |
+
+### 执行记录
+
+- 2026-07-22：写入 LyricsView 歌词高亮逻辑拆分计划。本轮只迁移高亮计算和动画帧循环，不调整高亮算法。
+- 2026-07-22：完成第 2 步。新增 `composables/useLyricsHighlight.ts`，迁移平滑播放时间、当前高亮行计算、逐字高亮进度、逐字边界计算、播放时间 watch、`requestAnimationFrame` 循环和 unmount 清理；`LyricsView.vue` 继续负责加载歌词行并把 `activeLyricIndex` / `lyricWordProgress` 传给 `LyricsPanel.vue`；`npm run build` 已通过。
+- 2026-07-22：完成第 3 步收尾扫描。`LyricsView.vue` 当前 500 行；新增 `useLyricsHighlight.ts` 当前 111 行。扫描确认父组件中没有继续保留 `activeLyricWordIndex`、`nextLyricBoundary`、`lyricWordProgress`、`tickLyricAnimation`、`smoothCurrentTime`、`syncedLyricTime`、动画帧变量和播放时间 watch。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从 578 行降到 500 行。
+- 新增 `src/composables/useLyricsHighlight.ts`。
+- 本轮只拆高亮计算和动画帧循环；歌词加载、搜索歌词应用、封面逻辑、滚动逻辑和布局展示保持原归属。
+
+## LyricsView 当前歌曲歌词加载逻辑拆分计划
+
+### 目标
+
+继续降低 `src/components/LyricsView.vue` 的方法数量，把当前播放 Track 变化后的歌词加载 watch、歌词解析、加载状态、封面预加载串联逻辑拆到 `src/composables/useLyricsTrackLoader.ts`。父组件继续持有歌词行 ref、封面 composable、滚动 composable 和当前 Track 状态来源。
+
+### 边界
+
+- 不修改 watch 触发条件：仍监听 Track identity、path、title、artist、artwork、lyrics、format 和 coverVersion。
+- 不修改歌词解析策略：Tauri 环境继续走 `resolveLyricsSource`，非 Tauri 继续走 `parseRawLyrics`。
+- 不修改封面预加载顺序和旧请求防写回逻辑。
+- 不修改搜索歌词应用、取消关联歌词和右键菜单逻辑。
+- 完成后运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入当前歌曲歌词加载逻辑拆分计划 | 已完成 | 文档已更新 | 明确本轮只迁移当前 Track 加载 watch 和解析流程。 |
+| 2. 拆分 `useLyricsTrackLoader.ts` | 已完成 | `npm run build` 已通过 | 迁移歌词加载 watch、请求 id、歌词解析、加载状态和封面预加载串联。 |
+| 3. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有保留已迁移加载 watch 和解析 helper。 |
+
+### 执行记录
+
+- 2026-07-22：写入 LyricsView 当前歌曲歌词加载逻辑拆分计划。本轮只迁移当前 Track 加载 watch 和解析流程，不调整触发条件。
+- 2026-07-22：完成第 2 步。新增 `composables/useLyricsTrackLoader.ts`，迁移当前 Track 变化 watch、请求 id、防旧请求写回、歌词解析、加载状态、同步歌词状态重置、封面预加载串联和 `normalizeLyricLines`；`LyricsView.vue` 继续持有歌词行 ref、封面 composable、滚动 composable 和搜索歌词应用流程；`npm run build` 已通过。
+- 2026-07-22：完成第 3 步收尾扫描。`LyricsView.vue` 当前 460 行；新增 `useLyricsTrackLoader.ts` 当前 104 行。扫描确认父组件中没有继续保留 `lyricsLoadRequestId`、当前歌曲加载 `watch`、加载流程里的 `loadLyricsCoverThumbnail` / `loadLyricsCover` 调用和 `normalizeLyricLines` 本地实现。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从 500 行降到 460 行。
+- 新增 `src/composables/useLyricsTrackLoader.ts`。
+- 本轮只拆当前歌曲歌词加载 watch 和解析流程；搜索歌词应用、取消关联歌词、封面 composable、滚动 composable 和布局展示保持原归属。
+
+## LyricsView 歌词关联逻辑拆分计划
+
+### 目标
+
+继续降低 `src/components/LyricsView.vue` 的方法数量，把搜索歌词结果应用、搜索状态错误处理、关联歌词写回事件和取消关联歌词逻辑拆到 `src/composables/useLyricsAssociation.ts`。父组件继续负责提供当前 Track、歌词搜索状态、封面更新方法、滚动方法和 emit 接线。
+
+### 边界
+
+- 不修改搜索歌词弹窗 UI 和 `useLyricsSearch` 的分页/搜索状态。
+- 不修改插件歌词元数据读取方式，继续使用 `getPluginLyricsMetadata`。
+- 不修改歌词解析策略：Tauri 环境继续走 `resolveLyricsSource`，非 Tauri 继续走 `parseRawLyrics`。
+- 不修改 `lyricsFound` / `lyricsCleared` 事件参数结构。
+- 完成后运行 `npm run build`，通过后回写本文档。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入歌词关联逻辑拆分计划 | 已完成 | 文档已更新 | 明确本轮只迁移搜索结果应用和取消关联逻辑。 |
+| 2. 拆分 `useLyricsAssociation.ts` | 已完成 | `npm run build` 已通过 | 迁移搜索默认 query、`applyPluginLyrics`、`clearAssociatedLyrics` 和解析 helper。 |
+| 3. 收尾扫描 | 已完成 | 行数扫描 / 引用扫描 | 已确认 `LyricsView.vue` 没有保留已迁移歌词关联方法和无用 import。 |
+
+### 执行记录
+
+- 2026-07-22：写入 LyricsView 歌词关联逻辑拆分计划。本轮只迁移搜索结果应用和取消关联逻辑，不调整事件结构。
+- 2026-07-22：完成第 2 步。新增 `composables/useLyricsAssociation.ts`，迁移搜索默认 query、插件歌词元数据读取、歌词结果应用、搜索错误状态、关联歌词写回事件、取消关联歌词和解析 helper；`LyricsView.vue` 继续持有搜索弹窗状态、歌词行 ref、封面 composable 和 emit 接线；`npm run build` 已通过。
+- 2026-07-22：完成第 3 步收尾扫描。`LyricsView.vue` 当前 410 行；新增 `useLyricsAssociation.ts` 当前 101 行。扫描确认父组件中没有继续保留 `defaultLyricSearchQuery`、`applyPluginLyrics`、`clearAssociatedLyrics`、`getPluginLyricsMetadata`、`artworkDisplaySrc`、`getErrorMessage`、`parseRawLyrics`、`resolveLyricsSource` 和 `PluginSearchTrack` import。
+
+### 本轮验证结果
+
+- `npm run build` 已通过。
+- `LyricsView.vue` 从 460 行降到 410 行。
+- 新增 `src/composables/useLyricsAssociation.ts`。
+- 本轮只拆搜索歌词结果应用和取消关联逻辑；搜索弹窗状态、当前 Track、封面 composable、滚动 composable 和布局展示保持原归属。
+## LyricsView 全屏入口迁移计划
+
+### 目标
+
+把歌词页右上角的全屏按钮迁移到歌词页右键菜单中，避免顶部按钮继续占用页面视觉空间。全屏状态和 Tauri 全屏逻辑仍然复用 `useLyricsFullscreen.ts`，本轮只调整入口位置。
+
+### 边界
+
+- 不修改全屏实现逻辑，只迁移 UI 入口。
+- 不修改歌词滚动、歌词高亮、歌词加载和封面逻辑。
+- 不新增额外弹窗或快捷键。
+
+### 执行步骤
+
+| 步骤 | 状态 | 验证方式 | 说明 |
+| --- | --- | --- | --- |
+| 1. 写入全屏入口迁移计划 | 已完成 | 文档已更新 | 明确本轮只把全屏入口从顶部按钮移到右键菜单。 |
+| 2. 移除顶部全屏按钮 | 已完成 | 代码扫描 | `LyricsHeaderBar.vue` 已移除全屏按钮、全屏图标 import 和相关样式。 |
+| 3. 右键菜单接入全屏操作 | 已完成 | 代码扫描 | `LyricsActionMenu.vue` 新增 `全屏显示` / `退出全屏` 菜单项，并通过 `toggleFullscreen` 事件回传。 |
+| 4. 父组件接线 | 已完成 | 代码扫描 | `LyricsView.vue` 传入 `isFullscreen`，右键菜单点击后调用 `toggleLyricsFullscreen()` 并关闭菜单。 |
+| 5. 构建验证 | 已完成 | `npm run build` 已通过 | 最新代码构建通过。 |
+
+### 执行记录
+
+- 2026-07-22：完成歌词页全屏入口迁移。顶部右侧不再显示全屏按钮；歌词页右键菜单里新增 `全屏显示` / `退出全屏`，继续复用原来的 `useLyricsFullscreen.ts`。
