@@ -2,28 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { open } from '@tauri-apps/plugin-dialog';
-import AddToPlaylistDialog from './components/AddToPlaylistDialog.vue';
-import ArtistsView from './components/ArtistsView.vue';
-import DownloadManagerView from './components/DownloadManagerView.vue';
-import DiscoverMusicView from './components/DiscoverMusicView.vue';
-import LibraryPanel from './components/LibraryPanel.vue';
+import AppDialogs from './components/AppDialogs.vue';
+import AppMainContent from './components/AppMainContent.vue';
 import PlaylistContextMenu from './components/PlaylistContextMenu.vue';
-import PlaylistDialog from './components/PlaylistDialog.vue';
-import PluginManagerView from './components/PluginManagerView.vue';
-import PluginSearchView from './components/PluginSearchView.vue';
 import LyricsView from './components/LyricsView.vue';
-import LibraryContentLayout from './components/LibraryContentLayout.vue';
 import PlayerDock from './components/PlayerDock.vue';
-import PrimarySidebar from './components/PrimarySidebar.vue';
-import ScanDialog from './components/ScanDialog.vue';
-import SettingsView from './components/SettingsView.vue';
-import ThemeView from './components/ThemeView.vue';
 import TrackContextMenu from './components/TrackContextMenu.vue';
-import TrackMetadataDialog from './components/TrackMetadataDialog.vue';
-import type { TrackMetadataFormValue } from './components/TrackMetadataDialog.vue';
 import WindowControls from './components/WindowControls.vue';
-import WorkspaceView from './components/WorkspaceView.vue';
 import { useActiveTrackState } from './composables/useActiveTrackState';
 import { useDownloadState } from './composables/useDownloadState';
 import { useLibraryNavigation } from './composables/useLibraryNavigation';
@@ -32,11 +17,13 @@ import { useLyricsDockAutoHide } from './composables/useLyricsDockAutoHide';
 import { useLyricsState } from './composables/useLyricsState';
 import { useOnlineSearch } from './composables/useOnlineSearch';
 import { useOnlineQualityRefresh } from './composables/useOnlineQualityRefresh';
+import { useOnlineToast } from './composables/useOnlineToast';
 import { usePlaybackSession } from './composables/usePlaybackSession';
 import { usePlaylistActions } from './composables/usePlaylistActions';
 import { useScanFolders } from './composables/useScanFolders';
 import { useSearchHistory } from './composables/useSearchHistory';
 import { useSidebarCollapse } from './composables/useSidebarCollapse';
+import { useTrackMetadataDialog } from './composables/useTrackMetadataDialog';
 import { useTrayIntegration } from './composables/useTrayIntegration';
 import { resolveLocale, t } from './i18n';
 import {
@@ -47,7 +34,7 @@ import {
   type DesktopLyricsAction,
 } from './services/desktopLyrics';
 import { deleteDownloadedTrackFile, enqueueDownloadOnlineTrack, openDownloadedTrackInFolder, type DownloadOnlineTrackRequest, type DownloadQueueEvent } from './services/downloads';
-import { clearCoverThumbnailCache, exitApp, isTauriRuntime, refreshTrackDuration, resolveLocalTrackLyrics, updateTrackCover, updateTrackMetadata } from './services/music';
+import { exitApp, isTauriRuntime, resolveLocalTrackLyrics } from './services/music';
 import { getPluginLyricsMetadata } from './services/pluginSearch';
 import { changeRustBackendQueueTrackQuality, getRustBackendDefaultCacheDir, listenRustBackendQueue, playRustBackendNext, playRustBackendPrevious, removeRustBackendQueueSource, restoreRustBackendQueue, setRustBackendCacheDir, setRustBackendPlaybackMode, startRustBackendQueue, stopRustBackend, type RustQueueSnapshot } from './services/playerBackend';
 import { clearSystemMedia, listenSystemMediaAction, updateSystemMedia, type SystemMediaAction } from './services/systemMedia';
@@ -77,21 +64,21 @@ const isAudioPlaying = ref(false);
 const playbackSpectrumLevels = ref<number[]>([]);
 const seekRequestId = ref(0);
 const seekTime = ref(0);
-type OnlineToastVariant = 'success' | 'error';
 type SleepTimerAction = 'stop' | 'exit' | 'finishTrack';
 interface McpSleepTimerRequest {
   minutes: number;
   action: SleepTimerAction | null;
 }
-const onlineToastMessage = ref<string | null>(null);
-const onlineToastVariant = ref<OnlineToastVariant>('error');
+const {
+  clearOnlineToastTimer,
+  closeOnlineToast,
+  onlineToastMessage,
+  onlineToastVariant,
+  showOnlineToast,
+} = useOnlineToast();
 const sleepTimerRequestId = ref(0);
 const sleepTimerRequest = ref<McpSleepTimerRequest | null>(null);
-const metadataEditingTrack = ref<Track | null>(null);
-const isSavingTrackMetadata = ref(false);
-const trackMetadataError = ref<string | null>(null);
 const RUST_CROSSFADE_DURATION_MS = 3000;
-let onlineToastTimer: number | null = null;
 let desktopLyricsActionUnlisten: UnlistenFn | null = null;
 let desktopLyricsReadyUnlisten: UnlistenFn | null = null;
 let downloadEventUnlisten: UnlistenFn | null = null;
@@ -439,6 +426,29 @@ const canEditTrackMetadata = computed(() => canUseLocalTrackContextActions.value
 const canChangeTrackCover = computed(() => canUseLocalTrackContextActions.value && player.settings.enableTrackCoverEdit);
 const canRefreshTrackDuration = computed(() => canUseLocalTrackContextActions.value && player.settings.enableTrackDurationRefresh);
 
+const {
+  applyTrackCoverRefresh,
+  changeTrackCover,
+  closeTrackMetadataDialog,
+  isSavingTrackMetadata,
+  metadataEditingTrack,
+  openTrackMetadataDialog,
+  refreshLocalTrackDuration,
+  saveTrackMetadata,
+  trackMetadataError,
+} = useTrackMetadataDialog({
+  canChangeTrackCover,
+  canEditTrackMetadata,
+  canRefreshTrackDuration,
+  closeContextMenus,
+  currentPlaybackTrack,
+  onlineActiveTrack,
+  player,
+  rustPlaybackQueue,
+  selectedTrack,
+  showToast: showOnlineToast,
+});
+
 watch(
   () => player.settings.enablePlugins,
   (enabled) => {
@@ -771,22 +781,6 @@ onBeforeUnmount(() => {
   systemMediaUnlisten = null;
 });
 
-function clearOnlineToastTimer() {
-  if (onlineToastTimer === null) return;
-  window.clearTimeout(onlineToastTimer);
-  onlineToastTimer = null;
-}
-
-function showOnlineToast(message: string, variant: OnlineToastVariant = 'error') {
-  onlineToastMessage.value = message;
-  onlineToastVariant.value = variant;
-  clearOnlineToastTimer();
-  onlineToastTimer = window.setTimeout(() => {
-    onlineToastMessage.value = null;
-    onlineToastTimer = null;
-  }, 3600);
-}
-
 watch(
   () => player.error,
   (message) => {
@@ -796,213 +790,8 @@ watch(
   },
 );
 
-function normalizeMetadataText(value: string) {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function parseOptionalPositiveInteger(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  if (!Number.isInteger(parsed) || parsed <= 0) return null;
-  return parsed;
-}
-
-function parseOptionalYear(value: string) {
-  const parsed = parseOptionalPositiveInteger(value);
-  if (parsed === null) return null;
-  return parsed >= 1000 && parsed <= 9999 ? parsed : null;
-}
-
 function isRemoteTrack(track: Track) {
   return track.path.startsWith('plugin://') || /^https?:\/\//i.test(track.path);
-}
-
-function patchTrackMetadata(
-  track: Track,
-  trackId: number,
-  patch: Pick<Track, 'title' | 'artist' | 'album'> & { year?: number | null; genre?: string | null; trackNumber?: number | null },
-): Track {
-  return track.id === trackId ? { ...track, ...patch } : track;
-}
-
-function patchTrackCoverRefresh(track: Track, trackId: number): Track {
-  return track.id === trackId ? { ...track, artwork: null, coverVersion: Date.now() } : track;
-}
-
-function patchTrackDuration(track: Track, trackId: number, duration: number): Track {
-  return track.id === trackId ? { ...track, duration } : track;
-}
-
-function applyTrackDurationUpdate(trackId: number, duration: number) {
-  const patch = (track: Track) => patchTrackDuration(track, trackId, duration);
-
-  player.tracks = player.tracks.map(patch);
-  player.queue = player.queue.map(patch);
-  rustPlaybackQueue.value = rustPlaybackQueue.value.map(patch);
-  player.settings.playlists = player.settings.playlists.map((playlist) => ({
-    ...playlist,
-    tracks: (playlist.tracks ?? []).map(patch),
-  }));
-
-  if (player.currentTrack?.id === trackId) {
-    player.setCurrentTrack(patch(player.currentTrack));
-  }
-  if (currentPlaybackTrack.value?.id === trackId) {
-    currentPlaybackTrack.value = patch(currentPlaybackTrack.value);
-  }
-  if (selectedTrack.value?.id === trackId) {
-    selectedTrack.value = patch(selectedTrack.value);
-  }
-}
-
-function applyTrackMetadataUpdate(
-  trackId: number,
-  patchValue: Pick<Track, 'title' | 'artist' | 'album'> & { year?: number | null; genre?: string | null; trackNumber?: number | null },
-) {
-  const patch = (track: Track) => patchTrackMetadata(track, trackId, patchValue);
-
-  player.tracks = player.tracks.map(patch);
-  player.queue = player.queue.map(patch);
-  rustPlaybackQueue.value = rustPlaybackQueue.value.map(patch);
-  player.settings.playlists = player.settings.playlists.map((playlist) => ({
-    ...playlist,
-    tracks: (playlist.tracks ?? []).map(patch),
-  }));
-
-  if (player.currentTrack?.id === trackId) {
-    player.setCurrentTrack(patch(player.currentTrack));
-  }
-  if (currentPlaybackTrack.value?.id === trackId) {
-    currentPlaybackTrack.value = patch(currentPlaybackTrack.value);
-  }
-  if (selectedTrack.value?.id === trackId) {
-    selectedTrack.value = patch(selectedTrack.value);
-  }
-  if (onlineActiveTrack.value?.id === trackId) {
-    onlineActiveTrack.value = patch(onlineActiveTrack.value);
-  }
-}
-
-function applyTrackCoverRefresh(trackId: number) {
-  const patch = (track: Track) => patchTrackCoverRefresh(track, trackId);
-
-  player.tracks = player.tracks.map(patch);
-  player.queue = player.queue.map(patch);
-  rustPlaybackQueue.value = rustPlaybackQueue.value.map(patch);
-  player.settings.playlists = player.settings.playlists.map((playlist) => ({
-    ...playlist,
-    tracks: (playlist.tracks ?? []).map(patch),
-  }));
-
-  if (player.currentTrack?.id === trackId) {
-    player.setCurrentTrack(patch(player.currentTrack));
-  }
-  if (currentPlaybackTrack.value?.id === trackId) {
-    currentPlaybackTrack.value = patch(currentPlaybackTrack.value);
-  }
-  if (selectedTrack.value?.id === trackId) {
-    selectedTrack.value = patch(selectedTrack.value);
-  }
-}
-
-function openTrackMetadataDialog(track: Track) {
-  if (!canEditTrackMetadata.value || isRemoteTrack(track)) return;
-  metadataEditingTrack.value = track;
-  trackMetadataError.value = null;
-  closeContextMenus();
-}
-
-function closeTrackMetadataDialog() {
-  if (isSavingTrackMetadata.value) return;
-  metadataEditingTrack.value = null;
-  trackMetadataError.value = null;
-}
-
-async function saveTrackMetadata(value: TrackMetadataFormValue) {
-  const track = metadataEditingTrack.value;
-  if (!track) return;
-
-  const title = value.title.trim();
-  if (!title) {
-    trackMetadataError.value = '歌名不能为空。';
-    return;
-  }
-
-  const artist = normalizeMetadataText(value.artist);
-  const album = normalizeMetadataText(value.album);
-  const year = parseOptionalYear(value.year);
-  const genre = normalizeMetadataText(value.genre);
-  const trackNumber = parseOptionalPositiveInteger(value.trackNumber);
-  isSavingTrackMetadata.value = true;
-  trackMetadataError.value = null;
-
-  try {
-    const result = await updateTrackMetadata({
-      id: track.id,
-      path: track.path,
-      title,
-      artist,
-      album,
-      year,
-      genre,
-      trackNumber,
-    });
-
-    applyTrackMetadataUpdate(track.id, {
-      title: result.title,
-      artist: result.artist,
-      album: result.album,
-      year: result.year,
-      genre: result.genre,
-      trackNumber: result.trackNumber,
-    });
-    metadataEditingTrack.value = null;
-    showOnlineToast('元数据已更新', 'success');
-  } catch (error) {
-    const message = getErrorMessage(error);
-    trackMetadataError.value = null;
-    showOnlineToast(`元数据更新失败：${message}`);
-  } finally {
-    isSavingTrackMetadata.value = false;
-  }
-}
-
-async function changeTrackCover(track: Track) {
-  if (!canChangeTrackCover.value || isRemoteTrack(track)) return;
-  closeContextMenus();
-
-  try {
-    const selected = await open({
-      multiple: false,
-      directory: false,
-      filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tif', 'tiff'] }],
-    });
-    if (typeof selected !== 'string') return;
-
-    await clearCoverThumbnailCache(track.path);
-    await updateTrackCover({ path: track.path, coverPath: selected });
-    applyTrackCoverRefresh(track.id);
-    showOnlineToast('封面已更新', 'success');
-  } catch (error) {
-    const message = getErrorMessage(error);
-    showOnlineToast(`封面更新失败：${message}`);
-  }
-}
-
-async function refreshLocalTrackDuration(track: Track) {
-  if (!canRefreshTrackDuration.value || isRemoteTrack(track)) return;
-  closeContextMenus();
-
-  try {
-    const result = await refreshTrackDuration({ id: track.id, path: track.path });
-    applyTrackDurationUpdate(track.id, result.duration);
-    showOnlineToast('歌曲时长已更新', 'success');
-  } catch (error) {
-    const message = getErrorMessage(error);
-    showOnlineToast(`读取歌曲时长失败：${message}`);
-  }
 }
 
 function normalizeOnlineErrorMessage(error: unknown, fallback: string) {
@@ -1090,11 +879,6 @@ function handleDownloadQueueEvent(event: DownloadQueueEvent) {
   if (result?.status === 'failed') {
     showOnlineToast(`${result.item.title} 下载失败：${result.error}`);
   }
-}
-
-function closeOnlineToast() {
-  clearOnlineToastTimer();
-  onlineToastMessage.value = null;
 }
 
 function selectTrack(track: Track) {
@@ -2217,14 +2001,36 @@ function finishLyricsEnter() {
       @open-folder="openTrackFolder"
     />
 
-    <TrackMetadataDialog
-      v-if="metadataEditingTrack"
-      :error="trackMetadataError"
+    <AppDialogs
+      :add-to-playlist-track="addToPlaylistTrack"
+      :editing-playlist-id="editingPlaylistId"
+      :is-canceling-scan="isCancelingScan"
+      :is-confirming-scan="isConfirmingScan"
+      :is-playlist-dialog-open="isPlaylistDialogOpen"
+      :is-saving-track-metadata="isSavingTrackMetadata"
+      :is-scan-dialog-open="isScanDialogOpen"
       :locale="player.settings.locale"
-      :saving="isSavingTrackMetadata"
-      :track="metadataEditingTrack"
-      @close="closeTrackMetadataDialog"
-      @save="saveTrackMetadata"
+      :metadata-editing-track="metadataEditingTrack"
+      :new-playlist-name="newPlaylistName"
+      :playlists="player.settings.playlists"
+      :scan-folders="scanFolders"
+      :scan-progress-text="scanProgressText"
+      :track-metadata-error="trackMetadataError"
+      :tracks-for-playlist="tracksForPlaylist"
+      @add-scan-folder="addScanFolder"
+      @add-track-to-playlist="addTrackToPlaylist"
+      @cancel-scan-folders="cancelScanFolders"
+      @change-playlist-name="newPlaylistName = $event"
+      @close-add-to-playlist-dialog="closeAddToPlaylistDialog"
+      @close-create-playlist-dialog="closeCreatePlaylistDialog"
+      @close-scan-dialog="closeScanDialog"
+      @close-track-metadata-dialog="closeTrackMetadataDialog"
+      @confirm-create-playlist="confirmCreatePlaylist"
+      @confirm-scan-folders="confirmScanFolders"
+      @open-create-playlist-from-add-dialog="openCreatePlaylistFromAddDialog"
+      @remove-scan-folder="removeScanFolder"
+      @save-track-metadata="saveTrackMetadata"
+      @update-scan-folder-checked="updateScanFolderChecked"
     />
 
     <Transition name="lyrics-slide" @after-enter="finishLyricsEnter" @after-leave="showLibraryAfterLyricsLeave">
@@ -2245,230 +2051,97 @@ function finishLyricsEnter() {
       />
     </Transition>
 
-    <div
-      v-if="isLibraryVisible"
-      class="app-grid"
-      :class="{
-        'is-resizing-library-panel': isResizingLibraryPanel,
-        'settings-grid': activeView === 'settings',
-        'theme-grid': activeView === 'themes',
-        'plugins-grid': activeView === 'plugins',
-        'downloads-grid': activeView === 'downloads',
-        'discover-grid': activeView === 'discover',
-        'artists-grid': activeView === 'artists',
-        'favorites-grid':
-          activeView === 'library' &&
-          (Boolean(activePlaylistId) || activeCollection === 'favorites' || (!isLibraryPanelMode && (activeLibraryFilter === 'recentAdded' || activeLibraryFilter === 'recentPlayed'))),
-      }"
-      :style="appGridStyle"
-    >
-      <PrimarySidebar
-        :active-collection="activeCollection"
-        :active-library-filter="isLibraryPanelMode && activeLibraryFilter === 'recentAdded' ? 'all' : activeLibraryFilter"
-        :active-playlist-id="activePlaylistId"
-        :active-view="activeView"
-        :collapsed="isSidebarCollapsed"
-        :enable-plugins="player.settings.enablePlugins"
-        :playlists="player.settings.playlists ?? []"
-        :show-downloads="shouldShowDownloadsMenu"
-        @create-playlist="openCreatePlaylistDialog"
-        @open-playlist-menu="openPlaylistContextMenu"
-        @open-playlist="openPlaylistView"
-        @open-library="returnToLocalLibrary"
-        @open-discover="openDiscoverMusicView"
-        @open-favorites="openFavoritesView"
-        @open-artists="openArtistsView"
-        @open-recent-added="openRecentAdded"
-        @open-recent-played="openRecentPlayed"
-        @open-downloads="openDownloadsView"
-        @open-plugins="openPluginsView"
-        @open-settings="openSettingsView"
-        @open-theme="openThemeView"
-        @toggle-collapsed="isSidebarCollapsed = !isSidebarCollapsed"
-      />
-      <LibraryContentLayout v-if="activeView === 'library' && activeCollection === 'all' && isLibraryPanelMode">
-        <template #panel>
-          <LibraryPanel
-          :active-collection="activeCollection"
-          :active-folder-path="activeFolderPath"
-          :active-library-filter="activeLibraryFilter"
-          :active-online-search="isOnlineSearchOpen"
-          :local-folders="localFolders"
-          :recent-added-count="recentAddedTrackCount"
-          :visible-track-count="localFolderTrackCount"
-          @choose-folder="chooseFolder"
-          @open-all="returnToLocalLibrary"
-          @open-folder="openLocalFolderFromPanel"
-          @open-recent-added="openRecentAddedFromPanel"
-          @open-scan-dialog="openScanDialog"
-        />
-        </template>
-        <template #detail>
-          <PluginSearchView
-            v-if="activeCollection === 'all' && activeLibraryFilter === 'all' && !activeFolderPath && !activePlaylistId && isOnlineSearchOpen"
-            :active-provider-id="activeOnlineProviderId"
-            :active-playback-track="activeTrack"
-            :active-track-key="onlineActiveTrackKey"
-            :downloaded-track-keys="downloadedTrackKeys"
-            :pending-download-track-keys="pendingDownloadTrackKeys"
-            :error="onlineSearchError"
-            :favorite-track-ids="player.favoriteTrackIds"
-            :has-more="onlineSearchHasMore"
-            :spectrum-levels="playbackSpectrumLevels"
-            :is-playing="isAudioPlaying"
-            :load-more-error="onlineLoadMoreError"
-            :loading-more="isOnlineLoadingMore"
-            :loading="isOnlineSearching"
-            :providers="onlineSearchProviders"
-            :query="onlineSearchQuery"
-            :resolving-track-key="onlinePreparingTrackKey"
-            :results="onlineSearchResults"
-            @back-local="returnToLocalLibrary"
-            @download-track="downloadTrack(createOnlineQueueTrack($event))"
-            @load-more="loadMoreOnlineMusic(false)"
-            @open-track-menu="openOnlineTrackContextMenu"
-            @retry="searchOnlineMusic(onlineSearchQuery)"
-            @retry-load-more="loadMoreOnlineMusic(true)"
-            @search="searchOnlineMusic"
-            @select-provider="selectOnlineProvider"
-            @toggle-favorite="toggleFavoriteForTrack"
-            @play-track="playOnlineTrack"
-          />
-          <WorkspaceView
-            v-else
-            v-model="player.query"
-            :active-collection="activeCollection"
-            :active-track="activeTrack"
-            :error="player.error"
-            :favorite-track-ids="player.favoriteTrackIds"
-            :preparing-track-id="isPreparingActiveTrack ? activeTrack?.id ?? null : null"
-            :spectrum-levels="playbackSpectrumLevels"
-            :is-playing="isAudioPlaying"
-            :is-playlist-view="Boolean(activePlaylistId)"
-            :library-filter="activeLibraryFilter"
-            :library-meta="libraryMeta"
-            :library-title="libraryTitle"
-            :tracks="visibleTracks"
-            :use-track-cover="Boolean(activeFolderPath)"
-            @choose-folder="chooseFolder"
-            @open-artist="openArtistFromTrack"
-            @open-track-menu="openTrackContextMenu"
-            @play-favorite-tracks="playFavoriteTracks"
-            @play-visible-tracks="playFavoriteTracks"
-            @play-track="playTrack"
-            @rescan="player.scanLibrary()"
-            @select-track="selectTrack"
-            @toggle-favorite="toggleFavoriteForTrack"
-          />
-        </template>
-      </LibraryContentLayout>
-      <div
-        v-if="shouldShowLibraryResizeHandle"
-        class="library-resize-handle"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="调整音乐库侧栏宽度"
-        @pointerdown="startLibraryPanelResize"
-      />
-      <PluginSearchView
-        v-if="activeView === 'discover' && activeCollection === 'all' && activeLibraryFilter === 'all' && !activeFolderPath && !activePlaylistId && isOnlineSearchOpen"
-        :active-provider-id="activeOnlineProviderId"
-        :active-playback-track="activeTrack"
-        :active-track-key="onlineActiveTrackKey"
-        :downloaded-track-keys="downloadedTrackKeys"
-        :pending-download-track-keys="pendingDownloadTrackKeys"
-        :error="onlineSearchError"
-        :favorite-track-ids="player.favoriteTrackIds"
-        :has-more="onlineSearchHasMore"
-        :spectrum-levels="playbackSpectrumLevels"
-        :is-playing="isAudioPlaying"
-        :load-more-error="onlineLoadMoreError"
-        :loading-more="isOnlineLoadingMore"
-        :loading="isOnlineSearching"
-        :providers="onlineSearchProviders"
-        :query="onlineSearchQuery"
-        :resolving-track-key="onlinePreparingTrackKey"
-        :results="onlineSearchResults"
-        @back-local="returnToLocalLibrary"
-        @download-track="downloadTrack(createOnlineQueueTrack($event))"
-        @load-more="loadMoreOnlineMusic(false)"
-        @open-track-menu="openOnlineTrackContextMenu"
-        @retry="searchOnlineMusic(onlineSearchQuery)"
-        @retry-load-more="loadMoreOnlineMusic(true)"
-        @search="searchOnlineMusic"
-        @select-provider="selectOnlineProvider"
-        @toggle-favorite="toggleFavoriteForTrack"
-        @play-track="playOnlineTrack"
-      />
-      <DiscoverMusicView
-        v-else-if="activeView === 'discover'"
-        v-model="onlineSearchQuery"
-        :search-history="searchHistory"
-        @search="searchOnlineMusic"
-      />
-      <WorkspaceView
-        v-else-if="activeView === 'library' && !(activeCollection === 'all' && isLibraryPanelMode)"
-        v-model="player.query"
-        :active-collection="activeCollection"
-        :active-track="activeTrack"
-        :error="player.error"
-        :favorite-track-ids="player.favoriteTrackIds"
-        :preparing-track-id="isPreparingActiveTrack ? activeTrack?.id ?? null : null"
-        :spectrum-levels="playbackSpectrumLevels"
-        :is-playing="isAudioPlaying"
-        :is-playlist-view="Boolean(activePlaylistId)"
-        :library-filter="activeLibraryFilter"
-        :library-meta="libraryMeta"
-        :library-title="libraryTitle"
-        :tracks="visibleTracks"
-        :use-track-cover="Boolean(activeFolderPath)"
-        @choose-folder="chooseFolder"
-        @open-artist="openArtistFromTrack"
-        @open-track-menu="openTrackContextMenu"
-        @play-favorite-tracks="playFavoriteTracks"
-        @play-visible-tracks="playFavoriteTracks"
-        @play-track="playTrack"
-        @rescan="player.scanLibrary()"
-        @select-track="selectTrack"
-        @toggle-favorite="toggleFavoriteForTrack"
-      />
-      <ArtistsView
-        v-else-if="activeView === 'artists'"
-        v-model="player.query"
-        :active-artist-name="activeArtistName"
-        :active-track="activeTrack"
-        :artist-groups="artistGroups"
-        :favorite-track-ids="player.favoriteTrackIds"
-        :spectrum-levels="playbackSpectrumLevels"
-        :is-playing="isAudioPlaying"
-        @open-track-menu="openTrackContextMenu"
-        @play-track="playTrack"
-        @select-artist="selectArtist"
-        @select-track="selectTrack"
-        @toggle-favorite="toggleFavoriteForTrack"
-      />
-      <DownloadManagerView
-        v-else-if="activeView === 'downloads'"
-        :active-track="activeTrack"
-        :favorite-track-ids="player.favoriteTrackIds"
-        :is-playing="isAudioPlaying"
-        :items="downloadItems"
-        @queue-next="queueDownloadedTrackNext"
-        @add-to-playlist="addDownloadedTrackToPlaylist"
-        @delete-download="deleteDownloadedItem"
-        @clear-record="clearDownloadedItemRecord"
-        @open-folder="openDownloadedItemFolder"
-        @pause-download="pauseDownloadItem"
-        @retry-download="retryDownloadItem"
-        @resume-download="resumeDownloadItem"
-        @play-track="playDownloadedTrack"
-        @select-track="selectedTrack = $event"
-        @toggle-favorite="toggleFavoriteForTrack"
-      />
-      <ThemeView v-else-if="activeView === 'themes'" />
-      <PluginManagerView v-else-if="activeView === 'plugins'" />
-      <SettingsView v-else-if="activeView === 'settings'" />
-    </div>
+    <AppMainContent
+      :active-artist-name="activeArtistName"
+      :active-collection="activeCollection"
+      :active-folder-path="activeFolderPath"
+      :active-library-filter="activeLibraryFilter"
+      :active-online-provider-id="activeOnlineProviderId"
+      :active-playlist-id="activePlaylistId"
+      :active-track="activeTrack"
+      :active-view="activeView"
+      :app-grid-style="appGridStyle"
+      :artist-groups="artistGroups"
+      :downloaded-track-keys="downloadedTrackKeys"
+      :download-items="downloadItems"
+      :enable-plugins="player.settings.enablePlugins"
+      :favorite-track-ids="player.favoriteTrackIds"
+      :is-audio-playing="isAudioPlaying"
+      :is-library-panel-mode="isLibraryPanelMode"
+      :is-library-visible="isLibraryVisible"
+      :is-online-loading-more="isOnlineLoadingMore"
+      :is-online-search-open="isOnlineSearchOpen"
+      :is-online-searching="isOnlineSearching"
+      :is-preparing-active-track="isPreparingActiveTrack"
+      :is-resizing-library-panel="isResizingLibraryPanel"
+      :is-sidebar-collapsed="isSidebarCollapsed"
+      :library-meta="libraryMeta"
+      :library-title="libraryTitle"
+      :local-folder-track-count="localFolderTrackCount"
+      :local-folders="localFolders"
+      :online-load-more-error="onlineLoadMoreError"
+      :online-preparing-track-key="onlinePreparingTrackKey"
+      :online-search-error="onlineSearchError"
+      :online-search-has-more="onlineSearchHasMore"
+      :online-search-providers="onlineSearchProviders"
+      :online-search-query="onlineSearchQuery"
+      :online-search-results="onlineSearchResults"
+      :online-active-track-key="onlineActiveTrackKey"
+      :pending-download-track-keys="pendingDownloadTrackKeys"
+      :playback-spectrum-levels="playbackSpectrumLevels"
+      :player-error="player.error"
+      :player-query="player.query"
+      :playlists="player.settings.playlists ?? []"
+      :recent-added-track-count="recentAddedTrackCount"
+      :search-history="searchHistory"
+      :should-show-downloads-menu="shouldShowDownloadsMenu"
+      :should-show-library-resize-handle="shouldShowLibraryResizeHandle"
+      :visible-tracks="visibleTracks"
+      @add-downloaded-track-to-playlist="addDownloadedTrackToPlaylist"
+      @choose-folder="chooseFolder"
+      @clear-downloaded-item-record="clearDownloadedItemRecord"
+      @create-playlist="openCreatePlaylistDialog"
+      @delete-downloaded-item="deleteDownloadedItem"
+      @download-track="downloadTrack"
+      @load-more-online-music="loadMoreOnlineMusic"
+      @open-artist-from-track="openArtistFromTrack"
+      @open-artists-view="openArtistsView"
+      @open-discover-music-view="openDiscoverMusicView"
+      @open-downloaded-item-folder="openDownloadedItemFolder"
+      @open-downloads-view="openDownloadsView"
+      @open-favorites-view="openFavoritesView"
+      @open-local-folder-from-panel="openLocalFolderFromPanel"
+      @open-online-track-context-menu="openOnlineTrackContextMenu"
+      @open-playlist-context-menu="openPlaylistContextMenu"
+      @open-playlist-view="openPlaylistView"
+      @open-plugins-view="openPluginsView"
+      @open-recent-added="openRecentAdded"
+      @open-recent-added-from-panel="openRecentAddedFromPanel"
+      @open-recent-played="openRecentPlayed"
+      @open-scan-dialog="openScanDialog"
+      @open-settings-view="openSettingsView"
+      @open-theme-view="openThemeView"
+      @open-track-context-menu="openTrackContextMenu"
+      @pause-download-item="pauseDownloadItem"
+      @play-downloaded-track="playDownloadedTrack"
+      @play-favorite-tracks="playFavoriteTracks"
+      @play-online-track="playOnlineTrack"
+      @play-track="playTrack"
+      @queue-downloaded-track-next="queueDownloadedTrackNext"
+      @rescan-library="player.scanLibrary()"
+      @retry-download-item="retryDownloadItem"
+      @resume-download-item="resumeDownloadItem"
+      @return-to-local-library="returnToLocalLibrary"
+      @search-online-music="searchOnlineMusic"
+      @select-artist="selectArtist"
+      @select-online-provider="selectOnlineProvider"
+      @select-track="selectTrack"
+      @start-library-panel-resize="startLibraryPanelResize"
+      @toggle-favorite-for-track="toggleFavoriteForTrack"
+      @toggle-sidebar-collapsed="isSidebarCollapsed = !isSidebarCollapsed"
+      @update-online-search-query="onlineSearchQuery = $event"
+      @update-player-query="player.query = $event"
+    />
 
     <div
       v-if="shouldAutoHideLyricsDock"
@@ -2531,85 +2204,10 @@ function finishLyricsEnter() {
       @toggle-playback-mode="togglePlaybackMode"
     />
 
-    <AddToPlaylistDialog
-      v-if="addToPlaylistTrack"
-      :locale="player.settings.locale"
-      :playlists="player.settings.playlists"
-      :track="addToPlaylistTrack"
-      :tracks-for-playlist="tracksForPlaylist"
-      @close="closeAddToPlaylistDialog"
-      @create-playlist="openCreatePlaylistFromAddDialog"
-      @add-track="addTrackToPlaylist"
-    />
-
-    <PlaylistDialog
-      v-if="isPlaylistDialogOpen"
-      v-model:name="newPlaylistName"
-      :editing="Boolean(editingPlaylistId)"
-      :locale="player.settings.locale"
-      @close="closeCreatePlaylistDialog"
-      @confirm="confirmCreatePlaylist"
-    />
-
-    <ScanDialog
-      v-if="isScanDialogOpen"
-      :canceling="isCancelingScan"
-      :confirming="isConfirmingScan"
-      :folders="scanFolders"
-      :locale="player.settings.locale"
-      :progress-text="scanProgressText"
-      @close="closeScanDialog"
-      @add-folder="addScanFolder"
-      @cancel="cancelScanFolders"
-      @remove-folder="removeScanFolder"
-      @confirm="confirmScanFolders"
-      @update-folder-checked="updateScanFolderChecked"
-    />
   </main>
 </template>
 
 <style scoped>
-.library-resize-handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--sidebar-width) + var(--library-width) - 4px);
-  z-index: 12;
-  width: 8px;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.sidebar-collapsed .library-resize-handle {
-  left: calc(var(--sidebar-collapsed-width) + var(--library-width) - 4px);
-}
-
-.library-resize-handle::after {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 3px;
-  width: 1px;
-  background: transparent;
-  content: '';
-  transition: background 140ms ease, box-shadow 140ms ease;
-}
-
-.library-resize-handle:hover::after,
-.app-grid.is-resizing-library-panel .library-resize-handle::after {
-  background: var(--smw-accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--smw-accent) 18%, transparent);
-}
-
-.app-grid.is-resizing-library-panel {
-  transition: none;
-}
-
-:global(body.is-resizing-library-panel) {
-  cursor: col-resize;
-  user-select: none;
-}
-
 .online-toast {
   position: fixed;
   top: 72px;

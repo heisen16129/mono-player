@@ -1,4 +1,6 @@
-import { computed, ref, type Ref } from 'vue';
+import { computed, type Ref } from 'vue';
+import { useContextMenus } from './useContextMenus';
+import { usePlaylistDialogs } from './usePlaylistDialogs';
 import { appendRustBackendQueue, insertRustBackendQueueNext, type RustQueueSnapshot } from '../services/playerBackend';
 import { isTauriRuntime, openTrackInFolder } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
@@ -16,12 +18,27 @@ interface PlaylistActionsOptions {
 }
 
 export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibraryView, player }: PlaylistActionsOptions) {
-  const isPlaylistDialogOpen = ref(false);
-  const addToPlaylistTrack = ref<Track | null>(null);
-  const newPlaylistName = ref('');
-  const editingPlaylistId = ref<string | null>(null);
-  const playlistContextMenu = ref<{ playlist: UserPlaylist; x: number; y: number } | null>(null);
-  const trackContextMenu = ref<{ track: Track; x: number; y: number } | null>(null);
+  const {
+    addToPlaylistTrack,
+    closeAddToPlaylistDialog,
+    closeCreatePlaylistDialog,
+    editingPlaylistId,
+    isPlaylistDialogOpen,
+    newPlaylistName,
+    openAddToPlaylistDialog: openAddToPlaylistDialogState,
+    openCreatePlaylistDialog: openCreatePlaylistDialogState,
+    openCreatePlaylistFromAddDialog,
+    openRenamePlaylistDialog,
+  } = usePlaylistDialogs();
+  const {
+    closeContextMenus,
+    closePlaylistContextMenu,
+    closeTrackContextMenu,
+    openPlaylistContextMenu,
+    openTrackContextMenu,
+    playlistContextMenu,
+    trackContextMenu,
+  } = useContextMenus();
 
   const trackById = computed(() => {
     return new Map(player.tracks.map((track) => [track.id, track]));
@@ -36,21 +53,7 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
 
   function openCreatePlaylistDialog() {
     closePlaylistContextMenu();
-    editingPlaylistId.value = null;
-    newPlaylistName.value = '';
-    isPlaylistDialogOpen.value = true;
-  }
-
-  function openCreatePlaylistFromAddDialog() {
-    editingPlaylistId.value = null;
-    newPlaylistName.value = '';
-    isPlaylistDialogOpen.value = true;
-  }
-
-  function closeCreatePlaylistDialog() {
-    isPlaylistDialogOpen.value = false;
-    newPlaylistName.value = '';
-    editingPlaylistId.value = null;
+    openCreatePlaylistDialogState();
   }
 
   function confirmCreatePlaylist() {
@@ -75,42 +78,14 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
     closeAddToPlaylistDialog();
   }
 
-  function openPlaylistContextMenu(playlist: UserPlaylist, x: number, y: number) {
-    playlistContextMenu.value = { playlist, x, y };
-  }
-
-  function closePlaylistContextMenu() {
-    playlistContextMenu.value = null;
-  }
-
-  function openTrackContextMenu(track: Track, x: number, y: number) {
-    closePlaylistContextMenu();
-    trackContextMenu.value = { track, x, y };
-  }
-
-  function closeTrackContextMenu() {
-    trackContextMenu.value = null;
-  }
-
-  function closeContextMenus() {
-    closePlaylistContextMenu();
-    closeTrackContextMenu();
-  }
-
   function openAddToPlaylistDialog(track: Track) {
-    addToPlaylistTrack.value = track;
+    openAddToPlaylistDialogState(track);
     closeTrackContextMenu();
-  }
-
-  function closeAddToPlaylistDialog() {
-    addToPlaylistTrack.value = null;
   }
 
   function startRenamePlaylist(playlist: UserPlaylist) {
     closePlaylistContextMenu();
-    editingPlaylistId.value = playlist.id;
-    newPlaylistName.value = playlist.name;
-    isPlaylistDialogOpen.value = true;
+    openRenamePlaylistDialog(playlist);
   }
 
   function deletePlaylist(playlist: UserPlaylist) {

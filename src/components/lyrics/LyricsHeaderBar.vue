@@ -14,11 +14,9 @@ defineEmits<{
 </script>
 
 <template>
-  <Teleport to="body">
-    <button class="lyrics-close icon-button" type="button" :aria-label="closeLabel" @click="$emit('close')">
-      <ChevronDown :size="22" />
-    </button>
-  </Teleport>
+  <button class="lyrics-close icon-button" type="button" :aria-label="closeLabel" @click="$emit('close')">
+    <ChevronDown :size="22" />
+  </button>
 
   <header class="lyrics-heading">
     <h1>{{ title }}</h1>
