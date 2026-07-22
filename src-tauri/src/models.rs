@@ -24,24 +24,6 @@ pub(crate) struct Track {
     pub(crate) lyrics: Option<TrackLyrics>,
     #[serde(rename = "associatedLyrics", skip_serializing_if = "Option::is_none")]
     pub(crate) associated_lyrics: Option<TrackLyrics>,
-    #[serde(rename = "rawLyrics")]
-    pub(crate) raw_lyrics: Option<String>,
-    #[serde(rename = "lyricsSourceName")]
-    pub(crate) lyrics_source_name: Option<String>,
-    #[serde(rename = "lyricsSourceUrl")]
-    pub(crate) lyrics_source_url: Option<String>,
-    #[serde(rename = "lyricsFormats", default)]
-    pub(crate) lyrics_formats: Vec<String>,
-    #[serde(rename = "lyricsDefaultFormat")]
-    pub(crate) lyrics_default_format: Option<String>,
-    #[serde(rename = "lyricsFormat")]
-    pub(crate) lyrics_format: Option<String>,
-    #[serde(rename = "lyricsProviderId")]
-    pub(crate) lyrics_provider_id: Option<String>,
-    #[serde(rename = "lyricsTrackId")]
-    pub(crate) lyrics_track_id: Option<String>,
-    #[serde(rename = "lyricsTrackRaw")]
-    pub(crate) lyrics_track_raw: Option<serde_json::Value>,
     #[serde(rename = "sourceId")]
     pub(crate) source_id: Option<String>,
     #[serde(rename = "sourceName")]
@@ -55,15 +37,23 @@ pub(crate) struct Track {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TrackLyrics {
-    pub(crate) raw_lyrics: Option<String>,
-    pub(crate) lyrics_url: Option<String>,
-    pub(crate) formats: Vec<String>,
-    pub(crate) default_format: Option<String>,
-    pub(crate) format: Option<String>,
     pub(crate) provider_id: Option<String>,
     pub(crate) provider_name: Option<String>,
     pub(crate) track_id: Option<String>,
+    pub(crate) default_format: Option<String>,
+    pub(crate) lyrics: Vec<TrackLyricVariant>,
     pub(crate) track_raw: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TrackLyricVariant {
+    pub(crate) format: String,
+    pub(crate) content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) source_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) quality: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

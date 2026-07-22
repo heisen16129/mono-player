@@ -1,7 +1,6 @@
 ﻿import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import type { CoverImage, CustomTheme, LyricLine, SystemThemeState, Track, TrackLyrics } from '../types/music';
 import { invokeApi } from './api';
-import { normalizeTrackLyrics } from '../utils/trackLyrics';
 
 export interface WorkerDiagnostic {
   worker: string;
@@ -150,12 +149,8 @@ export function cancelScanMusicDir(): Promise<boolean> {
 }
 
 export interface LyricsSourceInput {
-  path?: string | null;
-  title?: string | null;
-  artist?: string | null;
-  rawLyrics?: string | null;
-  lyricsSourceUrl?: string | null;
-  lyricsFormat?: string | null;
+  content?: string | null;
+  format?: string | null;
 }
 
 export function resolveLyricsSource(track?: LyricsSourceInput | null): Promise<LyricLine[]> {
@@ -163,28 +158,20 @@ export function resolveLyricsSource(track?: LyricsSourceInput | null): Promise<L
     return Promise.resolve([]);
   }
 
-  const lyrics = normalizeTrackLyrics(track as Track);
-  const rawLyrics = track.rawLyrics ?? lyrics?.rawLyrics ?? null;
-  const sourceUrl = track.lyricsSourceUrl ?? lyrics?.lyricsUrl ?? null;
-  const format = track.lyricsFormat ?? lyrics?.format ?? null;
   return invokeApi<LyricLine[]>('resolve_lyrics_source', {
     lyrics: {
-      rawLyrics,
-      sourceUrl,
-      localPath: track.path ?? null,
-      title: track.title ?? null,
-      artist: track.artist ?? null,
-      format,
+      content: track.content ?? null,
+      format: track.format ?? null,
     },
   });
 }
 
-export function resolveLocalTrackLyrics(track?: Track | null, format?: string | null): Promise<TrackLyrics | null> {
+export function resolveLocalTrackLyrics(track?: Track | null): Promise<TrackLyrics | null> {
   if (!isTauriRuntime() || !track?.path) {
     return Promise.resolve(null);
   }
 
-  return invokeApi<TrackLyrics | null>('resolve_local_track_lyrics', { track, format: format?.trim() || null });
+  return invokeApi<TrackLyrics | null>('resolve_local_track_lyrics', { track });
 }
 
 export function readCover(path: string): Promise<CoverImage | null> {

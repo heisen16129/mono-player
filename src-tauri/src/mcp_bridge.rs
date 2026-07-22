@@ -713,18 +713,9 @@ fn online_track_from_params(params: Value) -> Result<Track, String> {
     let album = string_arg(track, "album");
     let duration = number_arg(track, "duration").map(|duration| duration.max(0.0) as u64);
     let artwork = string_arg(track, "artwork");
-    let raw_lyrics = string_arg(track, "rawLyrics").or_else(|| string_arg(track, "lyrics"));
-    let lyrics = raw_lyrics.map(|raw_lyrics| TrackLyrics {
-        raw_lyrics: Some(raw_lyrics),
-        lyrics_url: None,
-        formats: Vec::new(),
-        default_format: None,
-        format: None,
-        provider_id: Some(source_provider_id.clone()),
-        provider_name: source_name.clone(),
-        track_id: Some(source_id.clone()),
-        track_raw: track.get("raw").cloned().or_else(|| Some(track.clone())),
-    });
+    let lyrics = track
+        .get("lyrics")
+        .and_then(|value| serde_json::from_value::<TrackLyrics>(value.clone()).ok());
     let path = format!("plugin://{source_provider_id}/{source_id}");
 
     Ok(Track {
@@ -746,15 +737,6 @@ fn online_track_from_params(params: Value) -> Result<Track, String> {
         track_number: None,
         associated_artwork: None,
         associated_lyrics: None,
-        raw_lyrics: None,
-        lyrics_source_name: None,
-        lyrics_source_url: None,
-        lyrics_formats: Vec::new(),
-        lyrics_default_format: None,
-        lyrics_format: None,
-        lyrics_provider_id: None,
-        lyrics_track_id: None,
-        lyrics_track_raw: track.get("raw").cloned(),
         source_raw: track.get("raw").cloned().or_else(|| Some(track.clone())),
     })
 }
@@ -767,12 +749,14 @@ fn online_track_hash_id(provider_id: &str, source_id: &str) -> i64 {
 }
 
 fn get_lyrics(app: &AppHandle, params: Value) -> Result<Value, String> {
-    if let Some(raw_lyrics) =
-        string_arg(&params, "rawLyrics").or_else(|| string_arg(&params, "lyrics"))
-    {
+    if let Some(content) = string_arg(&params, "content") {
+        let lines = crate::lyrics::resolve_lyrics_source_backend(&crate::lyrics::LyricsResolveInfo {
+            content: Some(content),
+            format: string_arg(&params, "format"),
+        })?;
         return Ok(json!({
             "source": "provided",
-            "rawLyrics": raw_lyrics
+            "lines": lines
         }));
     }
 
@@ -780,11 +764,11 @@ fn get_lyrics(app: &AppHandle, params: Value) -> Result<Value, String> {
     let title = string_arg(&params, "title");
     let artist = string_arg(&params, "artist");
     let lines = crate::lyrics::resolve_lyrics_source_backend(&crate::lyrics::LyricsResolveInfo {
-        raw_lyrics: None,
-        source_url: None,
-        local_path: Some(path),
-        title,
-        artist,
+        content: crate::lyrics::read_local_lyrics_bundle_for_track(&path, title.as_deref(), artist.as_deref())
+            .ok()
+            .flatten()
+            .and_then(|lyrics| lyrics.lyrics.into_iter().next())
+            .map(|variant| variant.content),
         format: None,
     })?;
     Ok(json!({

@@ -307,17 +307,16 @@ fn paged_tracks(request: &Value, tracks: Vec<Value>, total: u64) -> Value {
         .clamp(1, 100);
     json!({"tracks":tracks,"isEnd":total<=page*page_size || tracks.len()<page_size as usize})
 }
-fn lyrics_response(raw_lyrics: Option<String>, request: &Value) -> Value {
-    let format = request
-        .get("format")
-        .and_then(Value::as_str)
-        .unwrap_or("lrc");
-    json!({"rawLyrics":raw_lyrics.map(Value::String).unwrap_or(Value::Null),"formats":["lrc"],"defaultFormat":"lrc","format":format})
+fn lyrics_response(raw_lyrics: Option<String>, _request: &Value) -> Value {
+    let lyrics = raw_lyrics
+        .map(|content| vec![json!({"format":"lrc","content":content})])
+        .unwrap_or_default();
+    json!({"defaultFormat":"lrc","lyrics":lyrics})
 }
 fn play_lyrics_metadata(track: &Value) -> Value {
     match pick_raw_lyrics(track) {
         Some(raw) => {
-            json!({"rawLyrics":raw,"formats":["lrc"],"defaultFormat":"lrc","format":"lrc"})
+            json!({"defaultFormat":"lrc","lyrics":[{"format":"lrc","content":raw}]})
         }
         None => Value::Null,
     }

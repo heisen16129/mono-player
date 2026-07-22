@@ -15,12 +15,14 @@ import { isTauriRuntime, resolveLyricsSource } from '../services/music';
 import { writePersistentValue } from '../services/persistentStore';
 import type { LyricLine, Track } from '../types/music';
 import { parseRawLyrics } from '../utils/lyrics';
-import { normalizeTrackLyrics, trackRawLyrics } from '../utils/trackLyrics';
+import { normalizeTrackLyrics } from '../utils/trackLyrics';
 
 const activeTrack = ref<Track | null>(null);
 const currentTime = ref(0);
 const isPlaying = ref(false);
 const lyricLines = ref<LyricLine[]>([]);
+const lyricContent = ref<string | null>(null);
+const lyricFormat = ref<string | null>(null);
 const isLoading = ref(false);
 const isLocked = ref(false);
 const lyricColor = ref('#ff2c69');
@@ -63,13 +65,15 @@ function normalizeLyricLines(lines: LyricLine[]) {
 
 function trackLyricsKey(track: Track | null) {
   const lyrics = normalizeTrackLyrics(track);
-  return `${track?.path ?? ''}\n${lyrics?.rawLyrics ?? ''}\n${lyrics?.lyricsUrl ?? ''}\n${lyrics?.format ?? ''}`;
+  return `${track?.path ?? ''}\n${lyricContent.value ?? ''}\n${lyricFormat.value ?? ''}\n${lyrics?.defaultFormat ?? ''}`;
 }
 
 function applyDesktopLyricsState(state: DesktopLyricsState) {
   currentTime.value = state.currentTime;
   isPlaying.value = state.isPlaying;
   lyricColor.value = state.lyricColor || lyricColor.value;
+  lyricContent.value = state.lyricContent;
+  lyricFormat.value = state.lyricFormat;
 
   if (trackLyricsKey(activeTrack.value) !== trackLyricsKey(state.track)) {
     activeTrack.value = state.track;
@@ -77,11 +81,11 @@ function applyDesktopLyricsState(state: DesktopLyricsState) {
 }
 
 watch(
-  () => [activeTrack.value?.path, normalizeTrackLyrics(activeTrack.value)?.rawLyrics, normalizeTrackLyrics(activeTrack.value)?.lyricsUrl, normalizeTrackLyrics(activeTrack.value)?.format] as const,
-  async ([path, rawLyrics]) => {
+  () => [activeTrack.value?.path, lyricContent.value, lyricFormat.value] as const,
+  async ([path, content, format]) => {
     const requestId = (lyricsLoadRequestId += 1);
     lyricLines.value = [];
-    if (!path && !rawLyrics) {
+    if (!path && !content) {
       isLoading.value = false;
       return;
     }
@@ -89,8 +93,8 @@ watch(
     isLoading.value = true;
     try {
       const lines = isTauriRuntime()
-        ? await resolveLyricsSource(activeTrack.value)
-        : parseRawLyrics(trackRawLyrics(activeTrack.value) ?? '');
+        ? await resolveLyricsSource({ content, format })
+        : parseRawLyrics(content ?? '');
       if (requestId !== lyricsLoadRequestId) return;
       lyricLines.value = normalizeLyricLines(lines);
     } finally {

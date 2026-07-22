@@ -777,18 +777,6 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
             };
 
             state_ticks = state_ticks.wrapping_add(1);
-            if snapshot.is_playing && state_ticks % 4 == 0 {
-                let peak = snapshot
-                    .spectrum_levels
-                    .iter()
-                    .copied()
-                    .fold(0.0_f32, f32::max);
-                eprintln!(
-                    "[player-spectrum] tick={} position={:.2} peak={:.3} levels={:?}",
-                    state_ticks, snapshot.position, peak, snapshot.spectrum_levels
-                );
-            }
-
             let _ = app.emit("player://state", &snapshot);
 
             if snapshot.current_path.is_some() {

@@ -27,6 +27,7 @@ export function useLyricsTrackLoader(options: {
   isActiveCoverDisplayed: (key: string) => boolean;
   isLoadingLyrics: Ref<boolean>;
   isLyricSyncOpen: Ref<boolean>;
+  lyricFormat: ComputedRef<string | null>;
   lines: Ref<LyricLine[]>;
   loadLyricsCover: (path: string, artwork: string | null | undefined, coverVersion: number | undefined, cacheSource?: string) => Promise<{ key: string; cover: LyricsCoverValue | null }>;
   loadLyricsCoverThumbnail: (path: string, artwork: string | null | undefined, coverVersion: number | undefined, cacheSource?: string) => Promise<{ key: string; cover: LyricsCoverValue | null }>;
@@ -47,12 +48,11 @@ export function useLyricsTrackLoader(options: {
       options.activeTrack.value?.title,
       options.activeTrack.value?.artist,
       options.activeArtwork.value,
-      options.activeLyrics.value?.rawLyrics,
-      options.activeLyrics.value?.lyricsUrl,
-      options.activeLyrics.value?.format,
+      options.activeLyrics.value?.lyrics,
+      options.lyricFormat.value,
       options.activeTrack.value?.coverVersion,
     ] as const,
-    async ([identityKey, path, _title, _artist, artwork, rawLyrics, _lyricsUrl, _format, coverVersion]) => {
+    async ([identityKey, path, _title, _artist, artwork, _lyrics, lyricFormat, coverVersion]) => {
       const requestId = ++lyricsLoadRequestId;
       options.lyricTimeOffset.value = 0;
       options.isLyricSyncOpen.value = false;
@@ -66,14 +66,15 @@ export function useLyricsTrackLoader(options: {
 
       options.isLoadingLyrics.value = true;
       try {
+        const variant = options.activeLyrics.value?.lyrics.find((item) => item.format === lyricFormat)
+          ?? options.activeLyrics.value?.lyrics[0]
+          ?? null;
         const lyrics = isTauriRuntime()
           ? await resolveLyricsSource({
-            ...(options.activeTrack.value ?? {}),
-            rawLyrics: options.activeLyrics.value?.rawLyrics ?? rawLyrics ?? null,
-            lyricsSourceUrl: options.activeLyrics.value?.lyricsUrl ?? null,
-            lyricsFormat: options.activeLyrics.value?.format ?? null,
+            content: variant?.content ?? null,
+            format: variant?.format ?? null,
           })
-          : parseRawLyrics(options.activeLyrics.value?.rawLyrics ?? rawLyrics ?? '');
+          : parseRawLyrics(variant?.content ?? '');
         if (requestId !== lyricsLoadRequestId) return;
         options.lines.value = normalizeLyricLines(lyrics);
 

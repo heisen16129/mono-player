@@ -1,6 +1,6 @@
 import { computed, ref, type ComputedRef } from 'vue';
 import type { Track } from '../types/music';
-import { normalizeTrackLyrics } from '../utils/trackLyrics';
+import { normalizeTrackLyrics, trackLyricFormats } from '../utils/trackLyrics';
 
 type LyricsViewStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
@@ -18,13 +18,13 @@ export function useLyricsState(activeTrack: ComputedRef<Track | null>) {
   const activeLyricsViewStatus = computed(() => lyricsViewState.value.status);
 
   const activeLyricFormats = computed(() => {
-    const formats = normalizeTrackLyrics(activeTrack.value)?.formats ?? [];
+    const formats = trackLyricFormats(activeTrack.value);
     return formats.filter((format, index) => format && formats.indexOf(format) === index);
   });
 
   const activeLyricFormat = computed(() => {
     const lyrics = normalizeTrackLyrics(activeTrack.value);
-    return lyrics?.format ?? lyrics?.defaultFormat ?? activeLyricFormats.value[0] ?? null;
+    return lyrics?.defaultFormat ?? activeLyricFormats.value[0] ?? null;
   });
 
   function lyricsTrackKey(track: Track | null) {
@@ -36,7 +36,7 @@ export function useLyricsState(activeTrack: ComputedRef<Track | null>) {
   }
 
   function hasTrackSourceLyrics(track: Track | null) {
-    return Boolean(track?.lyrics?.rawLyrics?.trim() || track?.rawLyrics?.trim());
+    return Boolean(track?.lyrics?.lyrics.length);
   }
 
   function setLyricsViewState(track: Track | null, status: LyricsViewStatus, error: string | null = null) {
@@ -52,7 +52,7 @@ export function useLyricsState(activeTrack: ComputedRef<Track | null>) {
       setLyricsViewState(null, 'idle');
       return;
     }
-    if (normalizeTrackLyrics(track)?.rawLyrics?.trim()) {
+    if (normalizeTrackLyrics(track)?.lyrics.length) {
       setLyricsViewState(track, 'ready');
       return;
     }

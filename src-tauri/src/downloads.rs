@@ -1,5 +1,5 @@
 use crate::api_response::ApiResponse;
-use crate::models::{Track, TrackLyrics};
+use crate::models::{Track, TrackLyricVariant, TrackLyrics};
 use crate::state::AppState;
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
@@ -462,9 +462,6 @@ fn resolve_download_track_request(
 ) -> Result<ResolvedDownloadTrackRequest, String> {
     let mut track = request.track;
     let mut url = track.path.trim().to_string();
-    if track.lyrics.is_none() {
-        track.lyrics = legacy_track_lyrics(&track);
-    }
     let quality_fallback = request
         .quality_fallback
         .as_deref()
@@ -540,11 +537,9 @@ fn resolve_download_track_request(
         }
     }
 
-    let lyrics = track_lyrics_raw(&track.lyrics);
-    let lyrics_format = track
-        .lyrics
-        .as_ref()
-        .and_then(|lyrics| lyrics.format.clone().or_else(|| lyrics.default_format.clone()));
+    let lyric_variant = track_lyrics_variant(&track.lyrics);
+    let lyrics = lyric_variant.as_ref().map(|variant| variant.content.clone());
+    let lyrics_format = lyric_variant.map(|variant| variant.format);
 
     Ok(ResolvedDownloadTrackRequest {
         task_id: request.task_id,
@@ -568,43 +563,19 @@ fn is_http_url(value: &str) -> bool {
 }
 
 fn track_lyrics_raw(lyrics: &Option<TrackLyrics>) -> Option<String> {
-    lyrics
-        .as_ref()
-        .and_then(|lyrics| lyrics.raw_lyrics.as_deref())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    track_lyrics_variant(lyrics).map(|variant| variant.content)
 }
 
-fn legacy_track_lyrics(track: &Track) -> Option<TrackLyrics> {
-    if track
-        .raw_lyrics
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .is_none()
-        && track.lyrics_source_url.is_none()
-        && track.lyrics_formats.is_empty()
-        && track.lyrics_provider_id.is_none()
-        && track.lyrics_track_id.is_none()
-    {
-        return None;
-    }
-
-    Some(TrackLyrics {
-        raw_lyrics: track.raw_lyrics.clone(),
-        lyrics_url: track.lyrics_source_url.clone(),
-        formats: track.lyrics_formats.clone(),
-        default_format: track.lyrics_default_format.clone(),
-        format: track
-            .lyrics_format
-            .clone()
-            .or_else(|| track.lyrics_default_format.clone()),
-        provider_id: track.lyrics_provider_id.clone(),
-        provider_name: track.lyrics_source_name.clone(),
-        track_id: track.lyrics_track_id.clone(),
-        track_raw: track.lyrics_track_raw.clone(),
-    })
+fn track_lyrics_variant(lyrics: &Option<TrackLyrics>) -> Option<TrackLyricVariant> {
+    let lyrics = lyrics.as_ref()?;
+    let default_format = lyrics.default_format.as_deref();
+    lyrics
+        .lyrics
+        .iter()
+        .find(|variant| Some(variant.format.as_str()) == default_format)
+        .or_else(|| lyrics.lyrics.first())
+        .filter(|variant| !variant.content.trim().is_empty())
+        .cloned()
 }
 
 fn plugin_track_value(track: &Track) -> serde_json::Value {
@@ -641,10 +612,6 @@ fn resolve_missing_track_lyrics(
         &worker,
         provider_id,
         plugin_track_value(track),
-        track
-            .lyrics
-            .as_ref()
-            .and_then(|lyrics| lyrics.format.clone().or_else(|| lyrics.default_format.clone())),
         plugins.to_vec(),
     )
     .ok()
@@ -656,15 +623,17 @@ fn plugin_lyrics_to_track_lyrics(
     lyrics: crate::plugins::PluginLyricsMetadata,
 ) -> TrackLyrics {
     TrackLyrics {
-        raw_lyrics: lyrics.raw_lyrics,
-        lyrics_url: lyrics.lyrics_url,
-        formats: lyrics.formats,
+        provider_id: lyrics.provider_id.or_else(|| track.source_provider_id.clone()),
+        provider_name: lyrics.provider_name.or_else(|| track.source_name.clone()),
+        track_id: lyrics.track_id.or_else(|| track.source_id.clone()),
         default_format: lyrics.default_format,
-        format: lyrics.format,
-        provider_id: track.source_provider_id.clone(),
-        provider_name: track.source_name.clone(),
-        track_id: track.source_id.clone(),
-        track_raw: track.source_raw.clone(),
+        lyrics: lyrics.lyrics.into_iter().map(|variant| TrackLyricVariant {
+            format: variant.format,
+            content: variant.content,
+            source_url: variant.source_url,
+            quality: variant.quality,
+        }).collect(),
+        track_raw: lyrics.track_raw.or_else(|| track.source_raw.clone()),
     }
 }
 

@@ -13,7 +13,7 @@ interface OnlinePlaybackSource {
   year?: number | null;
   genre?: string | null;
   trackNumber?: number | null;
-  lyrics?: Pick<TrackLyrics, 'rawLyrics' | 'lyricsUrl' | 'formats' | 'defaultFormat' | 'format'> | null;
+  lyrics?: TrackLyrics | null;
   sourceId?: string;
   sourceName?: string;
   sourceProviderId?: string;
@@ -34,16 +34,12 @@ interface BuildOnlinePlaybackQueueOptions {
 }
 
 export function createOnlineQueueTrack(track: PluginSearchTrack, source?: OnlinePlaybackSource): Track {
-  const rawLyrics = source?.lyrics?.rawLyrics?.trim() || null;
-  const lyrics = rawLyrics ? {
-    rawLyrics,
-    lyricsUrl: source?.lyrics?.lyricsUrl ?? `${track.providerName}@${track.providerId}`,
-    formats: source?.lyrics?.formats ?? [],
-    defaultFormat: source?.lyrics?.defaultFormat ?? null,
-    format: source?.lyrics?.format ?? source?.lyrics?.defaultFormat ?? null,
+  const lyrics = source?.lyrics?.lyrics.length ? {
     providerId: track.providerId,
     providerName: track.providerName,
     trackId: track.id,
+    defaultFormat: source.lyrics.defaultFormat ?? source.lyrics.lyrics[0]?.format ?? null,
+    lyrics: source.lyrics.lyrics,
     trackRaw: track.raw ?? track,
   } : null;
 

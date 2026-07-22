@@ -100,11 +100,23 @@ pub struct PluginPlaybackSource {
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginLyricsMetadata {
-    pub(crate) raw_lyrics: Option<String>,
-    pub(crate) lyrics_url: Option<String>,
-    pub(crate) formats: Vec<String>,
+    pub(crate) provider_id: Option<String>,
+    pub(crate) provider_name: Option<String>,
+    pub(crate) track_id: Option<String>,
     pub(crate) default_format: Option<String>,
-    pub(crate) format: Option<String>,
+    pub(crate) lyrics: Vec<PluginLyricVariant>,
+    pub(crate) track_raw: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginLyricVariant {
+    pub(crate) format: String,
+    pub(crate) content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) source_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) quality: Option<String>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -676,12 +688,11 @@ pub async fn resolve_plugin_lyrics_metadata(
     app: AppHandle,
     provider_id: String,
     track: serde_json::Value,
-    format: Option<String>,
     plugins: Vec<PluginPlaybackPlanPlugin>,
 ) -> Result<ApiResponse<PluginLyricsMetadata>, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        resolve_plugin_lyrics_metadata_backend(&worker, provider_id, track, format, plugins)
+        resolve_plugin_lyrics_metadata_backend(&worker, provider_id, track, plugins)
     })
     .await
     .map_err(|err| err.to_string())?;
@@ -692,7 +703,6 @@ pub(crate) fn resolve_plugin_lyrics_metadata_backend(
     worker: &crate::workers::plugin::PluginWorkerState,
     provider_id: String,
     track: serde_json::Value,
-    format: Option<String>,
     plugins: Vec<PluginPlaybackPlanPlugin>,
 ) -> Result<PluginLyricsMetadata, String> {
     let plugin = plugins
@@ -716,10 +726,8 @@ pub(crate) fn resolve_plugin_lyrics_metadata_backend(
         .entry
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
     let plugin_track = track.get("raw").cloned().unwrap_or(track);
-    let format = normalize_lyrics_format(format.as_deref());
     let request = json!({
         "action": "lyrics",
-        "format": format,
         "track": plugin_track,
     });
 
@@ -757,6 +765,7 @@ fn normalize_plugin_playback_source(
         .map(|value| value.to_string());
     let lyrics = response
         .get("lyrics")
+        .filter(|value| value.is_object())
         .cloned()
         .map(normalize_plugin_lyrics_metadata)
         .transpose()?
@@ -801,28 +810,12 @@ fn playback_source_needs_lyrics(source: &PluginPlaybackSource) -> bool {
     source
         .lyrics
         .as_ref()
-        .and_then(|lyrics| lyrics.raw_lyrics.as_deref())
-        .map(str::trim)
-        .filter(|lyrics| !lyrics.is_empty())
-        .is_none()
+        .map(|lyrics| lyrics.lyrics.is_empty())
+        .unwrap_or(true)
 }
 
 fn lyrics_metadata_has_content(lyrics: &PluginLyricsMetadata) -> bool {
-    lyrics
-        .raw_lyrics
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .is_some()
-        || lyrics
-            .lyrics_url
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some()
-        || !lyrics.formats.is_empty()
-        || lyrics.default_format.is_some()
-        || lyrics.format.is_some()
+    !lyrics.lyrics.is_empty()
 }
 
 fn resolve_playback_lyrics_metadata(
@@ -1438,22 +1431,18 @@ fn normalize_plugin_lyrics_metadata(
         }
     }
 
-    let lyrics_url = json_string_field(&response, &["lyricsUrl", "lyricUrl", "lrcUrl"])
-        .map(|value| value.to_string());
-    let raw_lyrics = resolve_raw_lyrics(&response)?;
-    let formats = normalize_lyrics_formats(response.get("formats"));
+    let lyrics = normalize_plugin_lyric_variants(response.get("lyrics"))?;
     let default_format = json_string_field(&response, &["defaultFormat"])
         .and_then(|value| normalize_lyrics_format(Some(value)));
-    let format = json_string_field(&response, &["format"])
-        .and_then(|value| normalize_lyrics_format(Some(value)))
-        .or_else(|| default_format.clone());
+    let default_format = default_format.or_else(|| lyrics.first().map(|item| item.format.clone()));
 
     Ok(PluginLyricsMetadata {
-        raw_lyrics,
-        lyrics_url,
-        formats,
+        provider_id: json_string_field(&response, &["providerId"]).map(str::to_string),
+        provider_name: json_string_field(&response, &["providerName"]).map(str::to_string),
+        track_id: json_string_field(&response, &["trackId"]).map(str::to_string),
         default_format,
-        format,
+        lyrics,
+        track_raw: response.get("raw").cloned(),
     })
 }
 
@@ -1465,49 +1454,47 @@ fn normalize_lyrics_format(value: Option<&str>) -> Option<String> {
     }
 }
 
-fn normalize_lyrics_formats(value: Option<&Value>) -> Vec<String> {
+fn normalize_plugin_lyric_variants(value: Option<&Value>) -> Result<Vec<PluginLyricVariant>, String> {
     let Some(items) = value.and_then(Value::as_array) else {
-        return Vec::new();
+        return Err("Plugin lyrics response must include lyrics[].".to_string());
     };
-    let mut formats = Vec::new();
+    let mut lyrics = Vec::new();
     for item in items {
         let Some(format) = item
-            .as_str()
+            .get("format")
+            .and_then(Value::as_str)
             .and_then(|value| normalize_lyrics_format(Some(value)))
-        else {
+        else { continue; };
+        if lyrics.iter().any(|variant: &PluginLyricVariant| variant.format == format) {
             continue;
-        };
-        if !formats.contains(&format) {
-            formats.push(format);
         }
+        let Some(content) = item
+            .get("content")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|content| !content.is_empty())
+        else { continue; };
+        lyrics.push(PluginLyricVariant {
+            format,
+            content: content.to_string(),
+            source_url: item
+                .get("sourceUrl")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+            quality: item
+                .get("quality")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+        });
     }
-    formats
-}
-
-fn resolve_raw_lyrics(response: &Value) -> Result<Option<String>, String> {
-    let raw_lyrics = json_string_field(
-        response,
-        &["rawLyrics", "rawLrc", "rawLrcTxt", "lyric", "lyrics", "lrc"],
-    )
-    .map(str::trim)
-    .filter(|value| !value.is_empty())
-    .map(|value| value.to_string());
-    if raw_lyrics.is_some() {
-        return Ok(raw_lyrics);
+    if lyrics.is_empty() {
+        return Err("Plugin lyrics response did not include usable lyrics[].".to_string());
     }
-
-    let Some(lyrics_url) = json_string_field(response, &["lyricsUrl", "lyricUrl", "lrcUrl"])
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(None);
-    };
-
-    fetch_raw_lyrics_from_url(lyrics_url).map(Some)
-}
-
-fn fetch_raw_lyrics_from_url(url: &str) -> Result<String, String> {
-    crate::lyrics::fetch_lyrics_url_text(url)
+    Ok(lyrics)
 }
 
 fn invoke_playback_plugin<F>(

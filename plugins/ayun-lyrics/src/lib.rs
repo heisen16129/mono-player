@@ -175,7 +175,7 @@ fn parse_search_response(request: &Value, body: &str) -> Value {
     json!({ "isEnd": tracks.len() < page_size, "tracks": tracks })
 }
 
-fn parse_lyrics_response(request: &Value, body: &str) -> Value {
+fn parse_lyrics_response(_request: &Value, body: &str) -> Value {
     let Ok(payload) = serde_json::from_str::<Value>(body) else {
         return json!({ "error": "lyrics response is not JSON" });
     };
@@ -193,16 +193,6 @@ fn parse_lyrics_response(request: &Value, body: &str) -> Value {
     if lrc.is_none() && trans.is_none() && yrc.is_none() {
         return json!({ "error": "lyrics response has no lyrics" });
     }
-    let mut formats = Vec::new();
-    if lrc.is_some() {
-        formats.push("lrc");
-    }
-    if trans.is_some() {
-        formats.push("trans");
-    }
-    if yrc.is_some() {
-        formats.push("yrc");
-    }
     let default_format = if yrc.is_some() {
         "yrc"
     } else if lrc.is_some() {
@@ -210,22 +200,17 @@ fn parse_lyrics_response(request: &Value, body: &str) -> Value {
     } else {
         "trans"
     };
-    let requested_format = request
-        .get("format")
-        .and_then(Value::as_str)
-        .filter(|value| matches!(*value, "lrc" | "trans" | "yrc"))
-        .unwrap_or(default_format);
-    let (format, raw_lyrics) = match requested_format {
-        "trans" if trans.is_some() => ("trans", trans),
-        "yrc" if yrc.is_some() => ("yrc", yrc),
-        "lrc" if lrc.is_some() => ("lrc", lrc),
-        _ => match default_format {
-            "yrc" => ("yrc", yrc),
-            "lrc" => ("lrc", lrc),
-            _ => ("trans", trans),
-        },
-    };
-    json!({ "rawLyrics": raw_lyrics, "formats": formats, "defaultFormat": default_format, "format": format })
+    let mut lyrics = Vec::new();
+    if let Some(content) = lrc {
+        lyrics.push(json!({"format":"lrc","content":content}));
+    }
+    if let Some(content) = trans {
+        lyrics.push(json!({"format":"trans","content":content}));
+    }
+    if let Some(content) = yrc {
+        lyrics.push(json!({"format":"yrc","content":content}));
+    }
+    json!({ "defaultFormat": default_format, "lyrics": lyrics })
 }
 
 fn normalize_search_track(item: &Value) -> Value {

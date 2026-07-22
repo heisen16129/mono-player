@@ -49,7 +49,7 @@ import {
   isSameOnlineTrackIdentity,
 } from './utils/onlineTrack';
 import { folderTitle, normalizePath } from './utils/path';
-import { normalizeTrackLyrics } from './utils/trackLyrics';
+import { normalizeTrackLyrics, selectTrackLyricsVariant } from './utils/trackLyrics';
 import { pluginSearchTrackKey, positiveStableStringHash } from './utils/trackKey';
 import { shouldSkipWindowDrag } from './utils/windowDrag';
 
@@ -89,6 +89,7 @@ let lastSystemMediaSyncKey = '';
 let lastSystemMediaSyncAt = 0;
 const localLyricsRequests = new Map<string, Promise<TrackLyrics | null>>();
 const onlineLyricsRequests = new Map<string, Promise<void>>();
+const selectedLyricFormatByTrackKey = ref(new Map<string, string>());
 
 const searchHistoryLimit = computed(() => Math.max(1, Math.round(player.settings.searchHistoryLimit)));
 const localLyricsMetadataByKey = ref(new Map<string, TrackLyrics>());
@@ -178,8 +179,30 @@ function mergeQueueRuntimeMetadata(tracks: Track[]) {
   return tracks.map((track) => mergeTrackRuntimeMetadata(track, candidates));
 }
 
-function localLyricsRequestKey(track: Track, format?: string | null) {
-  return `${normalizePath(track.path)}::${format?.trim() ?? ''}`;
+function localLyricsRequestKey(track: Track) {
+  return normalizePath(track.path);
+}
+
+function selectedLyricTrackKey(track: Track | null) {
+  return lyricsTrackKey(track) ?? '';
+}
+
+function setSelectedLyricFormat(track: Track | null, format: string | null) {
+  const key = selectedLyricTrackKey(track);
+  if (!key || !format) return;
+  const nextFormats = new Map(selectedLyricFormatByTrackKey.value);
+  nextFormats.set(key, format);
+  selectedLyricFormatByTrackKey.value = nextFormats;
+}
+
+function selectedLyricFormatForTrack(track: Track | null, lyrics: TrackLyrics | null | undefined) {
+  const formats = lyrics?.lyrics.map((variant) => variant.format) ?? [];
+  const key = selectedLyricTrackKey(track);
+  const selectedFormat = key ? selectedLyricFormatByTrackKey.value.get(key) : null;
+  if (selectedFormat && formats.includes(selectedFormat)) return selectedFormat;
+  const defaultFormat = lyrics?.defaultFormat?.trim().toLowerCase() ?? null;
+  if (defaultFormat && formats.includes(defaultFormat)) return defaultFormat;
+  return formats[0] ?? null;
 }
 
 function cacheLocalTrackLyrics(track: Track, lyrics: TrackLyrics) {
@@ -198,7 +221,7 @@ function findKnownTrackLyrics(track: Track) {
   ].filter((item): item is Track => Boolean(item));
   const existing = candidates.find((item) => item.id === track.id || normalizePath(item.path) === normalizePath(track.path));
   const lyrics = normalizeTrackLyrics(existing);
-  return lyrics?.rawLyrics?.trim() ? lyrics : null;
+  return lyrics?.lyrics.length ? lyrics : null;
 }
 
 const allVisibleTracks = computed(() => {
@@ -393,13 +416,13 @@ const playbackLyricMetadata = computed(() => {
   return localLyricsMetadataByKey.value.get(localLyricsRequestKey(active)) ?? null;
 });
 const playbackLyricFormats = computed(() => {
-  const formats = playbackLyricMetadata.value?.formats ?? [];
+  const formats = playbackLyricMetadata.value?.lyrics.map((variant) => variant.format) ?? [];
   return formats.filter((format, index) => format && formats.indexOf(format) === index);
 });
 const playbackLyricFormat = computed(() => {
-  const lyrics = playbackLyricMetadata.value;
-  return lyrics?.format ?? lyrics?.defaultFormat ?? playbackLyricFormats.value[0] ?? null;
+  return selectedLyricFormatForTrack(activeTrack.value, playbackLyricMetadata.value);
 });
+const playbackLyricVariant = computed(() => selectTrackLyricsVariant(playbackLyricMetadata.value, playbackLyricFormat.value));
 const shouldShowLyricFormat = computed(() => {
   const active = activeTrack.value;
   return Boolean(
@@ -493,14 +516,14 @@ watch(
 );
 
 watch(
-  () => [lyricsTrackKey(activeTrack.value), normalizeTrackLyrics(activeTrack.value)?.rawLyrics ?? ''] as const,
-  ([trackKey, rawLyrics], previousValue) => {
+  () => [lyricsTrackKey(activeTrack.value), normalizeTrackLyrics(activeTrack.value)?.lyrics.length ?? 0] as const,
+  ([trackKey, lyricsCount], previousValue) => {
     const previousTrackKey = previousValue?.[0] ?? null;
     if (trackKey !== previousTrackKey) {
       syncLyricsViewStateForTrack(activeTrack.value);
       return;
     }
-    if (rawLyrics.trim()) {
+    if (lyricsCount > 0) {
       setLyricsViewState(activeTrack.value, 'ready');
     }
   },
@@ -530,6 +553,8 @@ function resolveDesktopLyricColor() {
 async function broadcastCurrentDesktopLyricsState() {
   await broadcastDesktopLyricsState({
     track: activeTrack.value,
+    lyricContent: playbackLyricVariant.value?.content ?? null,
+    lyricFormat: playbackLyricVariant.value?.format ?? null,
     currentTime: playbackTime.value,
     isPlaying: isAudioPlaying.value,
     lyricColor: resolveDesktopLyricColor(),
@@ -819,6 +844,12 @@ function normalizePlaybackErrorMessage(error: unknown, fallback = '播放失败'
   return message || fallback;
 }
 
+function isPluginLyricsEmptyError(error: unknown) {
+  const message = getErrorMessage(error, '').toLowerCase();
+  return message.includes('plugin lyrics response must include lyrics[]')
+    || message.includes('plugin lyrics response did not include usable lyrics[]');
+}
+
 async function startDownloadEventListener() {
   if (!isTauriRuntime() || downloadEventUnlisten) return;
   downloadEventUnlisten = await listen<DownloadQueueEvent>('download://event', (event) => {
@@ -933,20 +964,26 @@ function openDiscoverMusicView() {
 
 async function playOnlineTrack(track: PluginSearchTrack, startTime = 0, queueTracks?: Track[]) {
   const playbackTrack = withDownloadedPlaybackSource(createOnlineQueueTrack(track));
+  const trackKey = getOnlineTrackKey(track);
 
   playbackTime.value = startTime;
   onlineSearchError.value = null;
+  onlineResolvingTrackKey.value = trackKey;
   rustPlaybackQueue.value = buildOnlinePlaybackQueue(track, playbackTrack, queueTracks);
 
   try {
     player.error = null;
     if (await startRustPlaybackQueue(rustPlaybackQueue.value, playbackTrack, startTime)) {
-      void loadOnlineTrackLyricsInBackground(track, playbackTrack);
+      void loadPlaybackTrackLyricsInBackground(track, playbackTrack);
     }
   } catch (error) {
     const message = normalizeOnlineErrorMessage(error, resolveLocale(player.settings.locale) === 'en-US' ? 'Could not get playback URL.' : '无法获取播放地址');
     onlineSearchError.value = message;
     await handleOnlinePlaybackFailure(track, message);
+  } finally {
+    if (onlineResolvingTrackKey.value === trackKey) {
+      onlineResolvingTrackKey.value = null;
+    }
   }
 }
 
@@ -1042,35 +1079,12 @@ async function changeOnlinePlaybackQuality(quality: PluginPlaybackQuality) {
 async function changeLyricFormat(format: string) {
   const active = activeTrack.value;
   if (!active || format === playbackLyricFormat.value) return;
-
-  try {
-    const pluginTrack = findPluginTrackForQueueTrack(active);
-    const source = pluginTrack
-      ? await getPluginLyricsMetadata(pluginTrack, format)
-      : !isRemoteTrack(active)
-        ? await requestLocalTrackLyrics(active, format)
-        : null;
-    const rawLyrics = source?.rawLyrics?.trim();
-    if (!source || !rawLyrics) {
-      showOnlineToast('这个歌词格式没有可用内容', 'error');
-      return;
-    }
-
-    updateActiveTrackLyrics(
-      rawLyrics,
-      active.associatedArtwork ?? null,
-      pluginTrack?.providerName ?? null,
-      source.lyricsUrl ?? (pluginTrack ? `${pluginTrack.providerName}@${pluginTrack.providerId}` : null),
-      source.formats ?? playbackLyricFormats.value,
-      source.defaultFormat ?? normalizeTrackLyrics(active)?.defaultFormat ?? null,
-      source.format ?? format,
-      pluginTrack?.providerId ?? null,
-      pluginTrack?.id ?? null,
-      pluginTrack?.raw ?? pluginTrack ?? null,
-    );
-  } catch (error) {
-    showOnlineToast(getErrorMessage(error), 'error');
+  const lyrics = playbackLyricMetadata.value;
+  if (!lyrics?.lyrics.some((variant) => variant.format === format)) {
+    showOnlineToast('这个歌词格式没有可用内容', 'error');
+    return;
   }
+  setSelectedLyricFormat(active, format);
 }
 
 async function loadOnlineTrackLyricsInBackground(track: PluginSearchTrack, playbackTrack: Track) {
@@ -1085,27 +1099,26 @@ async function loadOnlineTrackLyricsInBackground(track: PluginSearchTrack, playb
   const request = (async () => {
     try {
       const lyrics = await getPluginLyricsMetadata(track);
-      const rawLyrics = lyrics.rawLyrics?.trim();
-      if (!rawLyrics || onlineActiveTrackKey.value !== trackKey || activeTrack.value?.id !== playbackTrack.id) {
+      if (!lyrics.lyrics.length || onlineActiveTrackKey.value !== trackKey || activeTrack.value?.id !== playbackTrack.id) {
         if (onlineActiveTrackKey.value === trackKey && activeTrack.value?.id === playbackTrack.id) {
           updateLyricsViewStateForRequest(playbackTrack, 'empty');
         }
         return;
       }
       updateActiveTrackSourceLyrics(
-        rawLyrics,
+        lyrics,
         playbackTrack.artwork ?? track.artwork ?? null,
         track.providerName,
-        lyrics.lyricsUrl ?? `${track.providerName}@${track.providerId}`,
-        lyrics.formats ?? [],
-        lyrics.defaultFormat ?? null,
-        lyrics.format ?? lyrics.defaultFormat ?? null,
         track.providerId,
         track.id,
         track.raw ?? track,
       );
       updateLyricsViewStateForRequest(playbackTrack, 'ready');
     } catch (error) {
+      if (isPluginLyricsEmptyError(error)) {
+        updateLyricsViewStateForRequest(playbackTrack, 'empty');
+        return;
+      }
       updateLyricsViewStateForRequest(playbackTrack, 'error', getErrorMessage(error));
       console.warn('[plugin-lyrics] background lyrics load failed', {
         providerId: track.providerId,
@@ -1123,12 +1136,20 @@ async function loadOnlineTrackLyricsInBackground(track: PluginSearchTrack, playb
   return request;
 }
 
-function requestLocalTrackLyrics(track: Track, format?: string | null) {
-  const key = localLyricsRequestKey(track, format);
+function loadPlaybackTrackLyricsInBackground(track: PluginSearchTrack, playbackTrack: Track) {
+  if (!isRemoteTrack(playbackTrack)) {
+    void loadLocalTrackLyricsInBackground(playbackTrack);
+    return;
+  }
+  void loadOnlineTrackLyricsInBackground(track, playbackTrack);
+}
+
+function requestLocalTrackLyrics(track: Track) {
+  const key = localLyricsRequestKey(track);
   const existing = localLyricsRequests.get(key);
   if (existing) return existing;
 
-  const request = resolveLocalTrackLyrics(track, format)
+  const request = resolveLocalTrackLyrics(track)
     .finally(() => {
       localLyricsRequests.delete(key);
     });
@@ -1147,8 +1168,7 @@ async function loadLocalTrackLyricsInBackground(track: Track) {
 
   try {
     const lyrics = await requestLocalTrackLyrics(track);
-    const rawLyrics = lyrics?.rawLyrics?.trim();
-    if (!lyrics || !rawLyrics) {
+    if (!lyrics?.lyrics.length) {
       updateLyricsViewStateForRequest(track, 'empty');
       return;
     }
@@ -1166,7 +1186,7 @@ async function loadLocalTrackLyricsInBackground(track: Track) {
 }
 
 function updateCurrentLocalTrackLyrics(track: Track, lyrics: TrackLyrics) {
-  if (onlineActiveTrack.value) return;
+  if (onlineActiveTrack.value && isRemoteTrack(onlineActiveTrack.value)) return;
   const current = player.currentTrack ?? selectedTrack.value;
   if (!current) return;
   const sameTrack = current.id === track.id || normalizePath(current.path) === normalizePath(track.path);
@@ -1556,7 +1576,7 @@ function handleSeamlessAdvance(track: Track) {
     onlinePlaybackSource.value = nextTrack.path;
     onlineActiveTrackKey.value = getOnlineTrackKey(pluginTrack);
     if (!nextTrack.path.startsWith('plugin://')) {
-      void loadOnlineTrackLyricsInBackground(pluginTrack, nextTrack);
+      void loadPlaybackTrackLyricsInBackground(pluginTrack, nextTrack);
     }
   } else {
     onlineActiveTrack.value = null;
@@ -1596,13 +1616,9 @@ function handleRustQueueSnapshot(snapshot: RustQueueSnapshot) {
 function withTrackLyrics(
   track: Track,
   target: 'lyrics' | 'associatedLyrics',
-  rawLyrics: string,
+  lyrics: TrackLyrics,
   artwork?: string | null,
   sourceName?: string | null,
-  sourceUrl?: string | null,
-  formats?: string[],
-  defaultFormat?: string | null,
-  format?: string | null,
   lyricsProviderId?: string | null,
   lyricsTrackId?: string | null,
   lyricsTrackRaw?: unknown,
@@ -1611,20 +1627,17 @@ function withTrackLyrics(
   const previousLyrics = target === 'lyrics'
     ? track.lyrics ?? null
     : track.associatedLyrics ?? track.lyrics ?? null;
-  const lyrics: TrackLyrics = {
-    rawLyrics,
-    lyricsUrl: sourceUrl ?? previousLyrics?.lyricsUrl ?? null,
-    formats: formats ?? previousLyrics?.formats ?? [],
-    defaultFormat: defaultFormat ?? previousLyrics?.defaultFormat ?? null,
-    format: format ?? previousLyrics?.format ?? defaultFormat ?? null,
+  const nextLyrics: TrackLyrics = {
     providerId: lyricsProviderId ?? previousLyrics?.providerId ?? null,
     providerName: sourceName ?? previousLyrics?.providerName ?? null,
     trackId: lyricsTrackId ?? previousLyrics?.trackId ?? null,
+    defaultFormat: lyrics.defaultFormat ?? previousLyrics?.defaultFormat ?? lyrics.lyrics[0]?.format ?? null,
+    lyrics: lyrics.lyrics,
     trackRaw: lyricsTrackRaw ?? previousLyrics?.trackRaw,
   };
   return {
     ...track,
-    [target]: lyrics,
+    [target]: nextLyrics,
     ...(target === 'associatedLyrics'
       ? { associatedArtwork: nextArtwork ?? track.associatedArtwork ?? null }
       : { artwork: nextArtwork ?? track.artwork ?? null }),
@@ -1633,13 +1646,9 @@ function withTrackLyrics(
 
 function updateTrackLyricsState(
   target: 'lyrics' | 'associatedLyrics',
-  rawLyrics: string,
+  lyrics: TrackLyrics,
   artwork?: string | null,
   sourceName?: string | null,
-  sourceUrl?: string | null,
-  formats?: string[],
-  defaultFormat?: string | null,
-  format?: string | null,
   lyricsProviderId?: string | null,
   lyricsTrackId?: string | null,
   lyricsTrackRaw?: unknown,
@@ -1647,7 +1656,7 @@ function updateTrackLyricsState(
   const active = activeTrack.value;
   if (!active) return;
 
-  const nextTrack = withTrackLyrics(active, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
+  const nextTrack = withTrackLyrics(active, target, lyrics, artwork, sourceName, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
   if (isSameTrackForMetadata(onlineActiveTrack.value, active)) {
     onlineActiveTrack.value = nextTrack;
   }
@@ -1662,39 +1671,31 @@ function updateTrackLyricsState(
   }
   updateLyricsViewStateForRequest(nextTrack, 'ready');
 
-  player.tracks = player.tracks.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
-  player.queue = player.queue.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
-  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
+  player.tracks = player.tracks.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, lyrics, artwork, sourceName, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
+  player.queue = player.queue.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, lyrics, artwork, sourceName, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
+  rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, lyrics, artwork, sourceName, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
 }
 
 function updateActiveTrackSourceLyrics(
-  rawLyrics: string,
+  lyrics: TrackLyrics,
   artwork?: string | null,
   sourceName?: string | null,
-  sourceUrl?: string | null,
-  formats?: string[],
-  defaultFormat?: string | null,
-  format?: string | null,
   lyricsProviderId?: string | null,
   lyricsTrackId?: string | null,
   lyricsTrackRaw?: unknown,
 ) {
-  updateTrackLyricsState('lyrics', rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
+  updateTrackLyricsState('lyrics', lyrics, artwork, sourceName, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
 }
 
 function updateActiveTrackLyrics(
-  rawLyrics: string,
+  lyrics: TrackLyrics,
   artwork?: string | null,
   sourceName?: string | null,
-  sourceUrl?: string | null,
-  formats?: string[],
-  defaultFormat?: string | null,
-  format?: string | null,
   lyricsProviderId?: string | null,
   lyricsTrackId?: string | null,
   lyricsTrackRaw?: unknown,
 ) {
-  updateTrackLyricsState('associatedLyrics', rawLyrics, artwork, sourceName, sourceUrl, formats, defaultFormat, format, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
+  updateTrackLyricsState('associatedLyrics', lyrics, artwork, sourceName, lyricsProviderId, lyricsTrackId, lyricsTrackRaw);
 }
 
 function withoutAssociatedTrackLyrics(track: Track): Track {
@@ -2040,6 +2041,8 @@ function finishLyricsEnter() {
         :active-track="activeTrack"
         :current-time="playbackTime"
         :is-playing="isAudioPlaying"
+        :lyric-format="playbackLyricFormat"
+        :lyrics-metadata="playbackLyricMetadata"
         :lyrics-error="lyricsViewState.error"
         :lyrics-status="activeLyricsViewStatus"
         @close="closeLyricsView"

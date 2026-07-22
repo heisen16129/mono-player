@@ -20,6 +20,8 @@ export interface DesktopLyricsPosition {
 
 export interface DesktopLyricsState {
   track: Track | null;
+  lyricContent: string | null;
+  lyricFormat: string | null;
   currentTime: number;
   isPlaying: boolean;
   lyricColor: string;

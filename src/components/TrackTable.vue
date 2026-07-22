@@ -30,6 +30,7 @@ const props = defineProps<{
   tracks: Track[];
   wide?: boolean;
   rowClass?: (track: Track) => string | Record<string, boolean> | null | undefined;
+  trackKey?: (track: Track) => string | number;
 }>();
 
 defineSlots<{
@@ -61,6 +62,7 @@ const trackTableStyle = computed(() => ({
   '--track-extra-columns': props.extraColumns ?? '0px',
   '--track-actions-column': props.hideActionsColumn ? '0px' : '54px',
 }));
+const activeTrackKey = computed(() => (props.activeTrack ? trackKey(props.activeTrack) : null));
 
 watch(
   () => [props.tracks, props.disableInternalPaging] as const,
@@ -77,6 +79,14 @@ function setTrackRowRef(trackId: number, element: Element | ComponentPublicInsta
   }
 
   trackRowRefs.value.delete(trackId);
+}
+
+function trackKey(track: Track) {
+  return props.trackKey?.(track) ?? track.id;
+}
+
+function isActiveRow(track: Track) {
+  return activeTrackKey.value === trackKey(track);
 }
 
 function isFavoriteTrack(track: Track) {
@@ -185,7 +195,7 @@ defineExpose({
       :ref="(element) => setTrackRowRef(track.id, element)"
       class="track-row"
       :class="[
-        { selected: activeTrack?.id === track.id, preparing: preparingTrackId === track.id },
+        { selected: isActiveRow(track), preparing: preparingTrackId === track.id },
         rowClass?.(track),
       ]"
       type="button"
@@ -197,10 +207,10 @@ defineExpose({
         <TrackCoverThumb
           v-if="player.settings.showTrackCovers"
           :track="track"
-          :active="activeTrack?.id === track.id"
-          :loading="preparingTrackId === track.id"
-          :playing="isPlaying && activeTrack?.id === track.id"
-          :spectrum-levels="activeTrack?.id === track.id ? spectrumLevels ?? [] : []"
+          :active="isActiveRow(track)"
+          :loading="preparingTrackId === track.id && isActiveRow(track)"
+          :playing="isPlaying && isActiveRow(track)"
+          :spectrum-levels="isActiveRow(track) ? spectrumLevels ?? [] : []"
         />
         <span class="track-title-text">{{ track.title }}</span>
       </span>

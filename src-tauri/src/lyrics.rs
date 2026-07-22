@@ -1,20 +1,15 @@
 use crate::{
     api_response::ApiResponse,
-    models::{LyricLine, LyricWord, Track, TrackLyrics},
+    models::{LyricLine, LyricWord, Track, TrackLyricVariant, TrackLyrics},
 };
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LyricsResolveInfo {
-    pub(crate) raw_lyrics: Option<String>,
-    pub(crate) source_url: Option<String>,
-    pub(crate) local_path: Option<String>,
-    pub(crate) title: Option<String>,
-    pub(crate) artist: Option<String>,
+    pub(crate) content: Option<String>,
     pub(crate) format: Option<String>,
 }
 
@@ -26,29 +21,24 @@ pub(crate) fn resolve_lyrics_source(lyrics: LyricsResolveInfo) -> ApiResponse<Ve
 #[tauri::command]
 pub(crate) fn resolve_local_track_lyrics(
     track: Track,
-    format: Option<String>,
 ) -> ApiResponse<Option<TrackLyrics>> {
     eprintln!(
-        "[local-lyrics] request path={} title={} artist={} format={}",
+        "[local-lyrics] request path={} title={} artist={}",
         track.path,
         track.title,
-        track.artist.as_deref().unwrap_or(""),
-        format.as_deref().unwrap_or("")
+        track.artist.as_deref().unwrap_or("")
     );
     let result = read_local_lyrics_bundle_for_track(
         &track.path,
         Some(&track.title),
         track.artist.as_deref(),
-        format.as_deref(),
     );
     match &result {
         Ok(Some(lyrics)) => eprintln!(
-            "[local-lyrics] response hasLyrics=true url={} formats={:?} format={} defaultFormat={} rawLength={}",
-            lyrics.lyrics_url.as_deref().unwrap_or(""),
-            lyrics.formats,
-            lyrics.format.as_deref().unwrap_or(""),
+            "[local-lyrics] response hasLyrics=true formats={:?} defaultFormat={} variants={}",
+            lyrics.lyrics.iter().map(|item| item.format.as_str()).collect::<Vec<_>>(),
             lyrics.default_format.as_deref().unwrap_or(""),
-            lyrics.raw_lyrics.as_deref().map(str::len).unwrap_or(0)
+            lyrics.lyrics.len()
         ),
         Ok(None) => eprintln!("[local-lyrics] response hasLyrics=false"),
         Err(error) => eprintln!("[local-lyrics] response error={error}"),
@@ -66,101 +56,19 @@ pub(crate) fn parse_lyrics_content_with_format(
     )
 }
 
-pub(crate) fn extract_raw_lyrics_text(content: &str) -> Option<String> {
-    let normalized = normalize_lyrics_content(content);
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
-    }
-}
-
 pub(crate) fn resolve_lyrics_source_backend(
     lyrics: &LyricsResolveInfo,
 ) -> Result<Vec<LyricLine>, String> {
-    if let Some(raw_lyrics) = lyrics
-        .raw_lyrics
+    if let Some(content) = lyrics
+        .content
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
         return Ok(parse_lyrics_content_with_format(
-            raw_lyrics,
+            content,
             lyrics.format.as_deref(),
         ));
-    }
-
-    if let Some(source_url) = lyrics
-        .source_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| is_http_url(value))
-    {
-        return fetch_lyrics_url_text(source_url)
-            .map(|content| parse_lyrics_content_with_format(&content, lyrics.format.as_deref()));
-    }
-
-    let Some(local_path) = lyrics
-        .local_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && !is_http_url(value))
-    else {
-        return Ok(Vec::new());
-    };
-
-    read_local_lyrics_for_track(
-        local_path.to_string(),
-        lyrics.title.as_deref(),
-        lyrics.artist.as_deref(),
-        lyrics.format.as_deref(),
-    )
-}
-
-pub(crate) fn fetch_lyrics_url_text(url: &str) -> Result<String, String> {
-    if !is_http_url(url) {
-        return Err("lyrics url must start with http:// or https://".to_string());
-    }
-
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36")
-        .build()
-        .map_err(|err| err.to_string())?;
-    let response = client.get(url).send().map_err(|err| err.to_string())?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("lyrics url returned HTTP {}", status.as_u16()));
-    }
-
-    let body = response.text().map_err(|err| err.to_string())?;
-    extract_raw_lyrics_text(&body)
-        .filter(|lyrics| !lyrics.trim().is_empty())
-        .ok_or_else(|| "lyrics url did not contain readable lyrics.".to_string())
-}
-
-fn is_http_url(value: &str) -> bool {
-    value.starts_with("https://") || value.starts_with("http://")
-}
-
-fn read_local_lyrics_for_track(
-    path: String,
-    title: Option<&str>,
-    artist: Option<&str>,
-    format: Option<&str>,
-) -> Result<Vec<LyricLine>, String> {
-    let audio_path = PathBuf::from(path);
-    let Some(stem) = audio_path.file_stem().and_then(|value| value.to_str()) else {
-        return Ok(Vec::new());
-    };
-
-    let Some(parent) = audio_path.parent() else {
-        return Ok(Vec::new());
-    };
-
-    if let Some(lyric_path) = find_lyric_file(parent, stem, title, artist) {
-        let content = fs::read_to_string(&lyric_path).map_err(|err| err.to_string())?;
-        return Ok(parse_lyrics_content_with_format(&content, format));
     }
 
     Ok(Vec::new())
@@ -170,7 +78,6 @@ pub(crate) fn read_local_lyrics_bundle_for_track(
     path: &str,
     title: Option<&str>,
     artist: Option<&str>,
-    preferred_format: Option<&str>,
 ) -> Result<Option<TrackLyrics>, String> {
     let audio_path = PathBuf::from(path);
     let Some(stem) = audio_path.file_stem().and_then(|value| value.to_str()) else {
@@ -186,85 +93,32 @@ pub(crate) fn read_local_lyrics_bundle_for_track(
         return Ok(None);
     }
 
-    let formats = lyric_files
-        .iter()
-        .map(|(format, _path)| format.clone())
-        .collect::<Vec<_>>();
-    let preferred_format = normalize_lyrics_format(preferred_format);
-    let format = preferred_format
-        .filter(|format| formats.iter().any(|item| item == format))
-        .unwrap_or_else(|| formats[0].as_str())
-        .to_string();
-    let lyrics_path = lyric_files
-        .iter()
-        .find(|(item_format, _path)| item_format == &format)
-        .map(|(_format, path)| path)
-        .unwrap_or(&lyric_files[0].1);
-    let raw_lyrics = fs::read_to_string(lyrics_path).map_err(|err| err.to_string())?;
+    let mut lyrics = Vec::new();
+    for (format, lyrics_path) in lyric_files.iter() {
+        let content = fs::read_to_string(lyrics_path).map_err(|err| err.to_string())?;
+        if content.trim().is_empty() {
+            continue;
+        }
+        lyrics.push(TrackLyricVariant {
+            format: format.clone(),
+            content,
+            source_url: Some(lyrics_path.to_string_lossy().to_string()),
+            quality: Some("original".to_string()),
+        });
+    }
+
+    if lyrics.is_empty() {
+        return Ok(None);
+    }
 
     Ok(Some(TrackLyrics {
-        raw_lyrics: Some(raw_lyrics),
-        lyrics_url: Some(lyrics_path.to_string_lossy().to_string()),
-        formats,
-        default_format: Some(lyric_files[0].0.clone()),
-        format: Some(format),
         provider_id: None,
         provider_name: None,
         track_id: None,
+        default_format: Some(lyrics[0].format.clone()),
+        lyrics,
         track_raw: None,
     }))
-}
-
-fn find_lyric_file(
-    parent: &Path,
-    stem: &str,
-    title: Option<&str>,
-    artist: Option<&str>,
-) -> Option<PathBuf> {
-    let exact_stems = lyric_exact_stems(stem, title, artist);
-    for exact_stem in &exact_stems {
-        if let Some(path) = find_exact_lyric_file(parent, exact_stem) {
-            return Some(path);
-        }
-    }
-
-    let targets = exact_stems
-        .iter()
-        .map(|value| normalize_lyric_name(value))
-        .filter(|value| !value.is_empty())
-        .collect::<Vec<_>>();
-
-    fs::read_dir(parent)
-        .ok()?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .find(|path| {
-            let extension_matches = path
-                .extension()
-                .and_then(|extension| extension.to_str())
-                .map(|extension| {
-                    matches!(
-                        extension.to_ascii_lowercase().as_str(),
-                        "lrc" | "txt" | "yrc" | "qrc" | "krc"
-                    )
-                })
-                .unwrap_or(false);
-
-            if !path.is_file() || !extension_matches {
-                return false;
-            }
-
-            let candidate = path
-                .file_stem()
-                .and_then(|value| value.to_str())
-                .map(normalize_lyric_name)
-                .unwrap_or_default();
-
-            !candidate.is_empty()
-                && targets
-                    .iter()
-                    .any(|target| candidate.contains(target) || target.contains(&candidate))
-        })
 }
 
 fn find_lyric_files(
@@ -318,16 +172,6 @@ fn find_lyric_files(
     }
     sort_lyric_files(&mut files);
     files
-}
-
-fn find_exact_lyric_file(parent: &Path, stem: &str) -> Option<PathBuf> {
-    for extension in ["yrc", "qrc", "krc", "lrc", "txt"] {
-        let lyric_path = parent.join(format!("{stem}.{extension}"));
-        if lyric_path.is_file() {
-            return Some(lyric_path);
-        }
-    }
-    None
 }
 
 fn push_exact_lyric_files(parent: &Path, stem: &str, files: &mut Vec<(String, PathBuf)>) {

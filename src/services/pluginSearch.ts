@@ -1,15 +1,10 @@
 import type { PluginManifest, PluginPlaybackQualities, PluginSearchProvider, PluginSearchTrack } from '../types/plugin';
+import type { TrackLyrics } from '../types/music';
 import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
 import { listInstalledPlugins } from './plugins';
 
-export interface PluginLyricsMetadata {
-  rawLyrics?: string | null;
-  lyricsUrl?: string | null;
-  formats?: string[];
-  defaultFormat?: 'lrc' | 'trans' | 'yrc' | 'qrc' | 'krc' | 'a2' | string | null;
-  format?: 'lrc' | 'trans' | 'yrc' | 'qrc' | 'krc' | 'a2' | string | null;
-}
+export type PluginLyricsMetadata = TrackLyrics;
 
 export interface PluginSearchPage {
   tracks: PluginSearchTrack[];
@@ -126,14 +121,13 @@ export async function searchPluginLyrics(keyword: string, providerId?: string | 
   return { tracks: [], isEnd: true };
 }
 
-export async function getPluginLyricsMetadata(track: PluginSearchTrack, format?: string | null): Promise<PluginLyricsMetadata> {
+export async function getPluginLyricsMetadata(track: PluginSearchTrack): Promise<PluginLyricsMetadata> {
   const plugins = await listInstalledPlugins();
   if (!isTauriRuntime()) throw new Error('Plugin lyrics are only available in the desktop runtime.');
 
   return invokeApi<PluginLyricsMetadata>('resolve_plugin_lyrics_metadata', {
     providerId: track.providerId,
     track,
-    format: format?.trim() || null,
     plugins,
   });
 }

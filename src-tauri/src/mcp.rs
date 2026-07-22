@@ -395,7 +395,7 @@ fn tools_list_result() -> Value {
             },
             {
                 "name": "mono_get_lyrics",
-                "description": "获取歌词。支持传入 rawLyrics/lyrics，或按本地曲库 id/path 读取本地歌词文件。",
+                "description": "获取歌词。支持传入 content/format 解析，或按本地曲库 id/path 读取本地歌词文件。",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -407,7 +407,7 @@ fn tools_list_result() -> Value {
                             "type": "string",
                             "description": "本地音频路径。"
                         },
-                        "rawLyrics": {
+                        "content": {
                             "type": "string",
                             "description": "已获得的原始歌词。"
                         },
@@ -423,7 +423,7 @@ fn tools_list_result() -> Value {
                             "type": "integer",
                             "description": "可选音轨号。"
                         },
-                        "lyrics": {
+                        "format": {
                             "type": "string",
                             "description": "已获得的歌词。"
                         }

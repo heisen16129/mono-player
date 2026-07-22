@@ -1,13 +1,17 @@
 export interface TrackLyrics {
-  rawLyrics?: string | null;
-  lyricsUrl?: string | null;
-  formats?: string[];
-  defaultFormat?: string | null;
-  format?: string | null;
   providerId?: string | null;
   providerName?: string | null;
   trackId?: string | null;
+  defaultFormat?: string | null;
+  lyrics: TrackLyricVariant[];
   trackRaw?: unknown;
+}
+
+export interface TrackLyricVariant {
+  format: string;
+  content: string;
+  sourceUrl?: string | null;
+  quality?: 'original' | 'converted' | 'fallback' | string | null;
 }
 
 export interface Track {
@@ -27,15 +31,6 @@ export interface Track {
   associatedArtwork?: string | null;
   lyrics?: TrackLyrics | null;
   associatedLyrics?: TrackLyrics | null;
-  rawLyrics?: string | null;
-  lyricsSourceName?: string | null;
-  lyricsSourceUrl?: string | null;
-  lyricsFormats?: string[];
-  lyricsDefaultFormat?: string | null;
-  lyricsFormat?: string | null;
-  lyricsProviderId?: string | null;
-  lyricsTrackId?: string | null;
-  lyricsTrackRaw?: unknown;
   sourceId?: string | null;
   sourceName?: string | null;
   sourceProviderId?: string | null;

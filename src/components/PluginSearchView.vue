@@ -103,26 +103,16 @@ function isActivePluginTrack(track: PluginSearchTrack) {
     if (active.sourceName && active.sourceName === track.providerName) return true;
   }
 
-  return isDownloadedPluginTrack(track) && isSameTrackInfo(active, track);
+  return false;
 }
 
 function getPluginTrackId(track: PluginSearchTrack) {
   return pluginSearchTrackId(track);
 }
 
-function isDownloadedPluginTrack(track: PluginSearchTrack) {
-  return props.downloadedTrackKeys.includes(`${track.providerName}:${track.id}`);
-}
-
-function isSameTrackInfo(active: Track, track: PluginSearchTrack) {
-  if (normalizeTrackText(active.title) !== normalizeTrackText(track.title)) return false;
-  if (normalizeTrackText(active.artist) !== normalizeTrackText(track.artist)) return false;
-  if (active.duration == null || track.duration == null) return true;
-  return Math.abs(active.duration - track.duration) <= 1;
-}
-
-function normalizeTrackText(value: string | null | undefined) {
-  return (value ?? '').trim().toLocaleLowerCase();
+function getTrackIdentityKey(track: Track) {
+  if (track.sourceProviderId && track.sourceId) return `${track.sourceProviderId}:${track.sourceId}`;
+  return track.id;
 }
 
 function submitSearch() {
@@ -195,6 +185,7 @@ function openTableTrackMenu(track: Track, x: number, y: number) {
           :pending-download-track-keys="pendingDownloadTrackKeys"
           :preparing-track-id="preparingTrackId"
           :spectrum-levels="spectrumLevels"
+          :track-key="getTrackIdentityKey"
           enable-download-action
           :favorite-track-ids="favoriteTrackIds"
           hide-action-header

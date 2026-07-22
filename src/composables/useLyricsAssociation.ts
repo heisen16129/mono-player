@@ -1,7 +1,7 @@
 import type { ComputedRef, Ref } from 'vue';
 import { isTauriRuntime, resolveLyricsSource } from '../services/music';
 import { getPluginLyricsMetadata } from '../services/pluginSearch';
-import type { LyricLine, Track } from '../types/music';
+import type { LyricLine, Track, TrackLyrics } from '../types/music';
 import type { PluginSearchTrack } from '../types/plugin';
 import { artworkDisplaySrc } from '../utils/artwork';
 import { getErrorMessage } from '../utils/error';
@@ -18,13 +18,9 @@ export function useLyricsAssociation(options: {
   lyricTrackKey: (track: PluginSearchTrack) => string;
   onLyricsCleared: () => void;
   onLyricsFound: (
-    rawLyrics: string,
+    lyrics: TrackLyrics,
     artwork?: string | null,
     sourceName?: string | null,
-    sourceUrl?: string | null,
-    formats?: string[],
-    defaultFormat?: string | null,
-    format?: string | null,
     providerId?: string | null,
     trackId?: string | null,
     trackRaw?: unknown,
@@ -37,10 +33,10 @@ export function useLyricsAssociation(options: {
     return [options.activeTrack.value?.title, options.activeTrack.value?.artist].filter(Boolean).join(' ').trim();
   }
 
-  async function resolveRawLyrics(rawLyrics: string, format?: string | null) {
+  async function resolveRawLyrics(content: string, format?: string | null) {
     return resolveLyricsSource({
-      rawLyrics,
-      lyricsFormat: format ?? null,
+      content,
+      format: format ?? null,
     });
   }
 
@@ -51,8 +47,8 @@ export function useLyricsAssociation(options: {
 
     try {
       const source = await getPluginLyricsMetadata(track);
-      const rawLyrics = source.rawLyrics?.trim();
-      if (!rawLyrics) {
+      const variant = source.lyrics.find((item) => item.format === source.defaultFormat) ?? source.lyrics[0] ?? null;
+      if (!variant?.content.trim()) {
         options.lyricSearchStatus.value = '这个结果没有可用歌词';
         return;
       }
@@ -61,16 +57,12 @@ export function useLyricsAssociation(options: {
       if (artwork) {
         options.setArtworkCover(artwork);
       }
-      const lyrics = isTauriRuntime() ? await resolveRawLyrics(rawLyrics, source.format ?? source.defaultFormat ?? null) : parseRawLyrics(rawLyrics);
+      const lyrics = isTauriRuntime() ? await resolveRawLyrics(variant.content, variant.format) : parseRawLyrics(variant.content);
       options.lines.value = normalizeLyricLines(lyrics);
       options.onLyricsFound(
-        rawLyrics,
+        source,
         artwork,
         track.providerName,
-        source.lyricsUrl ?? `${track.providerName}@${track.providerId}`,
-        source.formats ?? [],
-        source.defaultFormat ?? null,
-        source.format ?? source.defaultFormat ?? null,
         track.providerId,
         track.id,
         track.raw ?? track,

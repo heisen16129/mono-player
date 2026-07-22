@@ -9,7 +9,7 @@ import { useLyricsHighlight } from '../composables/useLyricsHighlight';
 import { useLyricsSearch } from '../composables/useLyricsSearch';
 import { useLyricsScroll } from '../composables/useLyricsScroll';
 import { useLyricsTrackLoader } from '../composables/useLyricsTrackLoader';
-import type { LyricLine, Track } from '../types/music';
+import type { LyricLine, Track, TrackLyrics } from '../types/music';
 import { t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import LyricsActionMenu from './lyrics/LyricsActionMenu.vue';
@@ -24,6 +24,8 @@ const props = defineProps<{
   activeTrack: Track | null;
   currentTime: number;
   isPlaying: boolean;
+  lyricFormat?: string | null;
+  lyricsMetadata?: TrackLyrics | null;
   lyricsStatus?: 'idle' | 'loading' | 'ready' | 'empty' | 'error';
   lyricsError?: string | null;
 }>();
@@ -33,13 +35,9 @@ const emit = defineEmits<{
   coverChanged: [];
   lyricsCleared: [];
   lyricsFound: [
-    rawLyrics: string,
+    lyrics: TrackLyrics,
     artwork?: string | null,
     sourceName?: string | null,
-    sourceUrl?: string | null,
-    formats?: string[],
-    defaultFormat?: string | null,
-    format?: string | null,
     providerId?: string | null,
     trackId?: string | null,
     trackRaw?: unknown,
@@ -98,7 +96,7 @@ const {
   defaultQuery: () => [props.activeTrack?.title, props.activeTrack?.artist].filter(Boolean).join(' ').trim(),
   beforeOpen: closeFontMenu,
 });
-const activeLyrics = computed(() => normalizeTrackLyrics(props.activeTrack));
+const activeLyrics = computed(() => props.lyricsMetadata ?? normalizeTrackLyrics(props.activeTrack));
 const activeTrackRef = computed(() => props.activeTrack);
 const isLyricsPending = computed(() => (
   !loadedLyricLines.value.length && (props.lyricsStatus === 'loading' || isLoadingLyrics.value)
@@ -106,17 +104,17 @@ const isLyricsPending = computed(() => (
 const emptyLyricsMessage = computed(() => (
   props.lyricsStatus === 'error' ? props.lyricsError || '歌词加载失败' : t(player.settings.locale, 'noLyrics')
 ));
-const hasAssociatedLyrics = computed(() => Boolean(props.activeTrack?.associatedLyrics?.rawLyrics?.trim()));
+const hasAssociatedLyrics = computed(() => Boolean(props.activeTrack?.associatedLyrics?.lyrics.length));
 const activeArtwork = computed(() => props.activeTrack?.associatedArtwork ?? props.activeTrack?.artwork ?? null);
 const availableLyricFormats = computed(() => {
-  const formats = activeLyrics.value?.formats ?? [];
+  const formats = activeLyrics.value?.lyrics.map((variant) => variant.format) ?? [];
   return formats.filter((format, index) => format && formats.indexOf(format) === index);
 });
 const downloadableLyricFormats = computed(() => {
   if (!hasAssociatedLyrics.value) return [];
   const formats = availableLyricFormats.value.length > 0
     ? availableLyricFormats.value
-    : (activeLyrics.value?.rawLyrics ? [activeLyrics.value.format ?? 'lrc'] : []);
+    : (activeLyrics.value?.lyrics[0] ? [activeLyrics.value.lyrics[0].format] : []);
   const items = formats.filter((format, index) => format && formats.indexOf(format) === index);
   if (items.includes('lrc') && !items.includes('txt')) {
     items.push('txt');
@@ -220,6 +218,7 @@ useLyricsTrackLoader({
   isActiveCoverDisplayed,
   isLoadingLyrics,
   isLyricSyncOpen,
+  lyricFormat: computed(() => props.lyricFormat ?? null),
   lines: loadedLyricLines,
   loadLyricsCover,
   loadLyricsCoverThumbnail,
@@ -299,7 +298,7 @@ onBeforeUnmount(() => {
         :font-size="lyricFontSize"
         :has-associated-lyrics="hasAssociatedLyrics"
         :has-downloadable-cover="hasDownloadableCover()"
-        :has-linked-lyrics="Boolean(activeLyrics?.rawLyrics && activeTrack)"
+        :has-linked-lyrics="Boolean(activeLyrics?.lyrics.length && activeTrack)"
         :is-fullscreen="isFullscreen"
         :left="fontMenuLeft"
         :linked-lyrics-label="activeTrack ? linkedLyricsLabel(activeTrack) : ''"

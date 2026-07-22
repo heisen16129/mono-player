@@ -1,12 +1,10 @@
 import type { ComputedRef } from 'vue';
 import { downloadCoverFile, downloadLyricsFile } from '../services/downloads';
-import { clearCoverThumbnailCache, resolveLocalTrackLyrics } from '../services/music';
-import { getPluginLyricsMetadata } from '../services/pluginSearch';
+import { clearCoverThumbnailCache } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
 import type { Track, TrackLyrics } from '../types/music';
-import type { PluginSearchTrack } from '../types/plugin';
 import { getErrorMessage } from '../utils/error';
-import { normalizeTrackLyrics } from '../utils/trackLyrics';
+import { normalizeTrackLyrics, selectTrackLyricVariant } from '../utils/trackLyrics';
 
 type PlayerStore = ReturnType<typeof usePlayerStore>;
 
@@ -22,11 +20,6 @@ interface LyricsDownloadOptions {
 
 function isOnlineTrackPath(path: string) {
   return /^https?:\/\//i.test(path) || path.startsWith('plugin://');
-}
-
-function isLocalTrackPath(path?: string | null) {
-  if (!path) return false;
-  return !path.startsWith('http://') && !path.startsWith('https://') && !path.startsWith('plugin://');
 }
 
 function localTrackFolder(path: string) {
@@ -46,63 +39,26 @@ function lyricsDownloadTitle(track: Track) {
   return `${title} - ${artist}`;
 }
 
-export function useLyricsDownload({ activeLyricFormats, activeLyrics, activeTrack, closeMenu, onCoverChanged, onNotify, player }: LyricsDownloadOptions) {
+export function useLyricsDownload({ activeLyricFormats, activeTrack, closeMenu, onCoverChanged, onNotify, player }: LyricsDownloadOptions) {
   function lyricsDownloadDir(track: Track) {
     return localTrackFolder(track.path) || player.settings.downloadDir;
   }
 
   function linkedLyricsLabel(track: Track) {
     const lyrics = normalizeTrackLyrics(track);
-    if (lyrics?.lyricsUrl) return lyrics.lyricsUrl;
+    const variant = selectTrackLyricVariant(track);
+    if (variant?.sourceUrl) return variant.sourceUrl;
     if (lyrics?.providerName) return lyrics.providerName;
     if (isOnlineTrackPath(track.path)) return track.sourceName || '在线歌词';
     return '本地歌词';
   }
 
-  function activeTrackAsPluginTrack(): PluginSearchTrack | null {
-    const track = activeTrack.value;
-    const lyrics = activeLyrics.value;
-    const providerId = lyrics?.providerId ?? track?.sourceProviderId;
-    const trackId = lyrics?.trackId ?? track?.sourceId;
-    if (!track || !providerId || !trackId) return null;
-    return {
-      id: trackId,
-      providerId,
-      providerName: lyrics?.providerName ?? track.sourceName ?? providerId,
-      title: track.title,
-      artist: track.artist ?? '',
-      album: track.album ?? '',
-      duration: track.duration ?? null,
-      artwork: track.artwork ?? null,
-      raw: lyrics?.trackRaw ?? track.sourceRaw ?? {
-        id: trackId,
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        duration: track.duration,
-      },
-    };
-  }
-
   async function rawLyricsForDownload(format: string) {
     const track = activeTrack.value;
-    const associatedLyrics = track?.associatedLyrics ?? null;
-    if (!track || !associatedLyrics?.rawLyrics?.trim()) return '';
+    if (!track) return '';
 
     const sourceFormat = format === 'txt' && activeLyricFormats.value.includes('lrc') ? 'lrc' : format;
-    const associatedFormat = associatedLyrics.format ?? associatedLyrics.defaultFormat ?? null;
-    if (sourceFormat === associatedFormat) {
-      return associatedLyrics.rawLyrics.trim();
-    }
-
-    const pluginTrack = activeTrackAsPluginTrack();
-    const source = pluginTrack
-      ? await getPluginLyricsMetadata(pluginTrack, sourceFormat)
-      : isLocalTrackPath(track.path)
-        ? await resolveLocalTrackLyrics(track, sourceFormat)
-        : null;
-
-    return source?.rawLyrics?.trim() || '';
+    return selectTrackLyricVariant(track, sourceFormat)?.content.trim() || '';
   }
 
   function hasDownloadableCover() {
