@@ -168,7 +168,6 @@ defineExpose({ panel });
   transition:
     opacity 240ms ease,
     color 240ms ease,
-    font-size 240ms ease,
     transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -184,11 +183,10 @@ defineExpose({ panel });
 
 .lyrics-panel .current {
   color: var(--smw-lyrics-current);
-  font-size: calc(var(--lyrics-font-size, 22px) + 10px);
   font-weight: 680;
   opacity: 1;
   text-shadow: 0 8px 24px color-mix(in srgb, var(--smw-lyrics-current) 18%, transparent);
-  transform: scale(1);
+  transform: scale(1.18);
 }
 
 .lyrics-panel .current .lyric-word {

@@ -38,20 +38,6 @@ export function useLyricsHighlight(options: {
     return activeIndex;
   }
 
-  function nextLyricBoundary(lineIndex: number, wordIndex: number) {
-    const line = options.lines.value[lineIndex];
-    const nextWordTime = line?.words?.[wordIndex + 1]?.time;
-    if (typeof nextWordTime === 'number') return nextWordTime;
-
-    for (let index = lineIndex + 1; index < options.lines.value.length; index += 1) {
-      const nextLineTime = options.lines.value[index].time;
-      if (nextLineTime !== null) return nextLineTime;
-    }
-
-    const wordTime = line?.words?.[wordIndex]?.time ?? line?.time ?? syncedLyricTime.value;
-    return wordTime + 0.45;
-  }
-
   function lyricWordProgress(line: LyricLine, lineIndex: number, wordIndex: number) {
     if (!line.words?.length || lineIndex !== activeLyricIndex.value) return '0%';
 
@@ -63,8 +49,13 @@ export function useLyricsHighlight(options: {
     if (wordIndex < activeWordIndex) return '100%';
     if (wordIndex > activeWordIndex) return '0%';
 
-    const duration = Math.max(0.08, nextLyricBoundary(lineIndex, wordIndex) - word.time);
+    if (typeof word.duration !== 'number' || !Number.isFinite(word.duration) || word.duration <= 0) {
+      return '100%';
+    }
+
+    const duration = Math.max(0.08, word.duration);
     const progress = Math.min(1, Math.max(0, (currentTime - word.time) / duration));
+    if (progress >= 0.96) return '100%';
     return `${Math.round(progress * 1000) / 10}%`;
   }
 

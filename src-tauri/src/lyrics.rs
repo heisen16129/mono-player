@@ -487,6 +487,7 @@ fn parse_a2_lyric_line(line: &str) -> Option<LyricLine> {
         if !word_text.trim().is_empty() {
             words.push(LyricWord {
                 time,
+                duration: None,
                 text: word_text.to_string(),
             });
         }
@@ -511,10 +512,11 @@ fn parse_qrc_lyric_line(line: &str) -> Option<LyricLine> {
             break;
         };
         let tag = &after_open[..close_index];
-        if let Some((offset, _duration)) = parse_millisecond_pair(tag) {
+        if let Some((offset, duration)) = parse_millisecond_pair(tag) {
             if !word_text.trim().is_empty() {
                 words.push(LyricWord {
                     time: line_start + offset / 1000.0,
+                    duration: Some(duration / 1000.0),
                     text: word_text.to_string(),
                 });
             }
@@ -536,10 +538,11 @@ fn parse_yrc_prefix_word_lyric_line(line: &str) -> Option<LyricLine> {
             break;
         };
         let tag = &after_open[..close_index];
-        if let Some((start, _duration)) = parse_millisecond_pair(tag) {
+        if let Some((start, duration)) = parse_millisecond_pair(tag) {
             if !word_text.trim().is_empty() {
                 words.push(LyricWord {
                     time: start / 1000.0,
+                    duration: Some(duration / 1000.0),
                     text: word_text.to_string(),
                 });
             }
@@ -591,7 +594,7 @@ fn parse_yrc_lyric_line(line: &str) -> Option<LyricLine> {
             break;
         };
         let tag = &after_open[..close_index];
-        let Some((start, _duration)) = parse_millisecond_pair(tag) else {
+        let Some((start, duration)) = parse_millisecond_pair(tag) else {
             rest = after_open;
             continue;
         };
@@ -601,6 +604,7 @@ fn parse_yrc_lyric_line(line: &str) -> Option<LyricLine> {
         if !word_text.trim().is_empty() {
             words.push(LyricWord {
                 time: start / 1000.0,
+                duration: Some(duration / 1000.0),
                 text: word_text.to_string(),
             });
         }
@@ -620,7 +624,7 @@ fn parse_krc_lyric_line(line: &str) -> Option<LyricLine> {
             break;
         };
         let tag = &after_open[..close_index];
-        let Some((offset, _duration)) = parse_millisecond_pair(tag) else {
+        let Some((offset, duration)) = parse_millisecond_pair(tag) else {
             rest = after_open;
             continue;
         };
@@ -630,6 +634,7 @@ fn parse_krc_lyric_line(line: &str) -> Option<LyricLine> {
         if !word_text.trim().is_empty() {
             words.push(LyricWord {
                 time: line_start + offset / 1000.0,
+                duration: Some(duration / 1000.0),
                 text: word_text.to_string(),
             });
         }
@@ -689,6 +694,7 @@ fn parse_timed_words(text: &str, first_time: Option<f64>) -> Option<Vec<LyricWor
                 if !leading_text.trim().is_empty() {
                     words.push(LyricWord {
                         time,
+                        duration: None,
                         text: leading_text.to_string(),
                     });
                 }
@@ -713,6 +719,7 @@ fn parse_timed_words(text: &str, first_time: Option<f64>) -> Option<Vec<LyricWor
         if !word_text.trim().is_empty() {
             words.push(LyricWord {
                 time,
+                duration: None,
                 text: word_text.to_string(),
             });
         }

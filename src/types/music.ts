@@ -68,6 +68,7 @@ export interface LyricLine {
 
 export interface LyricWord {
   time: number;
+  duration?: number | null;
   text: string;
 }
 
