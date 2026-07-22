@@ -2178,7 +2178,7 @@ function finishLyricsEnter() {
       :show-active-track-download="shouldShowActiveTrackDownload"
       :is-active-track-downloaded="isActiveOnlineTrackDownloaded"
       :is-active-track-downloading="isActiveOnlineTrackDownloading"
-      :show-lyric-format="shouldShowLyricFormat"
+      :show-lyric-format="shouldShowLyricFormat && isLyricsOpen"
       :show-online-quality="shouldShowOnlineQuality"
       :sleep-timer-request="sleepTimerRequest"
       :sleep-timer-request-id="sleepTimerRequestId"

@@ -495,8 +495,8 @@ function handleRustPlaybackState(state: RustPlayerState) {
 
   if (isPlaying.value !== state.isPlaying) {
     isPlaying.value = state.isPlaying;
-    emit('playbackStateChange', state.isPlaying);
   }
+  emit('playbackStateChange', state.isPlaying);
 }
 
 useRustPlaybackListeners({
@@ -665,7 +665,7 @@ onBeforeUnmount(() => {
   gap: 14px;
   align-items: center;
   min-height: var(--player-height);
-  padding: 10px 20px;
+  padding: 10px var(--player-dock-padding-x);
   border-top: 1px solid var(--smw-window-border);
   background: var(--smw-player-bg);
   transition:

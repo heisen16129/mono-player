@@ -342,9 +342,10 @@ onBeforeUnmount(() => {
 .lyrics-view {
   position: relative;
   grid-row: 1;
+  --lyrics-view-padding-x: clamp(28px, 5vw, 72px);
   min-height: 0;
   overflow: hidden;
-  padding: 24px clamp(28px, 5vw, 72px) 16px;
+  padding: 24px var(--lyrics-view-padding-x) 16px;
   background: var(--lyrics-surface, var(--smw-bg-canvas));
 }
 

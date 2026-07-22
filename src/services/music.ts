@@ -164,14 +164,17 @@ export function resolveLyricsSource(track?: LyricsSourceInput | null): Promise<L
   }
 
   const lyrics = normalizeTrackLyrics(track as Track);
+  const rawLyrics = track.rawLyrics ?? lyrics?.rawLyrics ?? null;
+  const sourceUrl = track.lyricsSourceUrl ?? lyrics?.lyricsUrl ?? null;
+  const format = track.lyricsFormat ?? lyrics?.format ?? null;
   return invokeApi<LyricLine[]>('resolve_lyrics_source', {
     lyrics: {
-      rawLyrics: lyrics?.rawLyrics ?? track.rawLyrics ?? null,
-      sourceUrl: lyrics?.lyricsUrl ?? track.lyricsSourceUrl ?? null,
+      rawLyrics,
+      sourceUrl,
       localPath: track.path ?? null,
       title: track.title ?? null,
       artist: track.artist ?? null,
-      format: lyrics?.format ?? track.lyricsFormat ?? null,
+      format,
     },
   });
 }

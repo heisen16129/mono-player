@@ -55,7 +55,7 @@ function changeVolume(event: Event) {
       :title="isMuted ? restoreLabel : muteLabel"
       @click="emit('toggleMute')"
     >
-      <Volume2 :size="19" />
+      <Volume2 :size="18" />
     </button>
   </div>
 </template>
@@ -83,6 +83,19 @@ function changeVolume(event: Event) {
 
 .volume-button {
   color: var(--smw-text-body);
+}
+
+.volume-button:hover,
+.volume-button:focus-visible {
+  color: var(--smw-text-primary);
+  background: var(--smw-bg-hover);
+  outline: none;
+}
+
+.volume-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
 }
 
 .volume-popover {

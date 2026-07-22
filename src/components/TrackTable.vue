@@ -199,8 +199,8 @@ defineExpose({
           :track="track"
           :active="activeTrack?.id === track.id"
           :loading="preparingTrackId === track.id"
-          :playing="isPlaying"
-          :spectrum-levels="spectrumLevels ?? []"
+          :playing="isPlaying && activeTrack?.id === track.id"
+          :spectrum-levels="activeTrack?.id === track.id ? spectrumLevels ?? [] : []"
         />
         <span class="track-title-text">{{ track.title }}</span>
       </span>

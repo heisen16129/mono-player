@@ -756,6 +756,7 @@ pub(crate) fn mcp_set_volume(app: &AppHandle, volume: f32) -> Result<(), String>
 fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
     thread::spawn(move || {
         let mut inactive_ticks = 0_u8;
+        let mut state_ticks = 0_u64;
         let mut had_active_source = false;
         loop {
             if let Some(expected_generation) = generation {
@@ -774,6 +775,19 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
                     Err(_) => break,
                 }
             };
+
+            state_ticks = state_ticks.wrapping_add(1);
+            if snapshot.is_playing && state_ticks % 4 == 0 {
+                let peak = snapshot
+                    .spectrum_levels
+                    .iter()
+                    .copied()
+                    .fold(0.0_f32, f32::max);
+                eprintln!(
+                    "[player-spectrum] tick={} position={:.2} peak={:.3} levels={:?}",
+                    state_ticks, snapshot.position, peak, snapshot.spectrum_levels
+                );
+            }
 
             let _ = app.emit("player://state", &snapshot);
 

@@ -17,6 +17,7 @@ export function useLyricsScroll(options: {
 
   async function scrollToActiveLyric(behavior: ScrollBehavior = 'smooth') {
     await nextTick();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const panel = lyricsPanel.value?.panel ?? null;
     const currentLine = panel?.querySelector<HTMLElement>('.lyrics-panel .current');
     if (!panel || !currentLine) return;
@@ -96,6 +97,10 @@ export function useLyricsScroll(options: {
     lyricsPanel.value = instance && typeof instance === 'object' && 'panel' in instance
       ? instance as { panel: HTMLElement | null }
       : null;
+
+    if (lyricsPanel.value) {
+      void syncLyricsToCurrentTime();
+    }
   }
 
   watch(options.activeLyricIndex, async () => {
@@ -105,6 +110,11 @@ export function useLyricsScroll(options: {
 
     await scrollToActiveLyric();
   });
+
+  watch(options.isLoadingLyrics, (loading) => {
+    if (loading) return;
+    void syncLyricsToCurrentTime();
+  }, { flush: 'post' });
 
   onBeforeUnmount(() => {
     if (browseRestoreTimer) {

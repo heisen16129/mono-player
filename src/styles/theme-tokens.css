@@ -68,6 +68,8 @@
   --sidebar-collapsed-width: 76px;
   --library-width: 260px;
   --player-height: 78px;
+  --player-dock-padding-x: 20px;
+  --lyrics-control-center-x: calc(var(--player-dock-padding-x) + 26px);
   color: var(--smw-text-primary);
   background: var(--smw-shell-bg);
   font-family: var(--smw-font-sans);

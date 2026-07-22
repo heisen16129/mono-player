@@ -586,6 +586,11 @@ fn parse_timed_lyric_line(line: &str, format: Option<&str>) -> Option<LyricLine>
         Some("a2") => parse_a2_lyric_line(line),
         _ => parse_a2_lyric_line(line)
             .or_else(|| parse_yrc_lyric_line(line))
+            .or_else(|| {
+                has_yrc_absolute_prefix_word_timing(line)
+                    .then(|| parse_yrc_prefix_word_lyric_line(line))
+                    .flatten()
+            })
             .or_else(|| parse_qrc_lyric_line(line))
             .or_else(|| parse_krc_lyric_line(line)),
     }
@@ -699,6 +704,33 @@ fn parse_yrc_prefix_word_lyric_line(line: &str) -> Option<LyricLine> {
     }
 
     build_timed_line(Some(line_start), words)
+}
+
+fn has_yrc_absolute_prefix_word_timing(line: &str) -> bool {
+    let Some((line_start, text)) = parse_millisecond_line_prefix(line) else {
+        return false;
+    };
+    let line_start_ms = line_start * 1000.0;
+    if line_start_ms <= 0.0 {
+        return false;
+    }
+
+    let Some(open_index) = text.find('(') else {
+        return false;
+    };
+    if text[..open_index].trim().is_empty() {
+        return false;
+    }
+
+    let after_open = &text[open_index + 1..];
+    let Some(close_index) = after_open.find(')') else {
+        return false;
+    };
+    let Some((word_start, _duration)) = parse_millisecond_pair(&after_open[..close_index]) else {
+        return false;
+    };
+
+    word_start >= line_start_ms
 }
 
 fn parse_yrc_lyric_line(line: &str) -> Option<LyricLine> {
@@ -935,6 +967,19 @@ mod tests {
 
         let words = lines[0].words.as_ref().expect("expected timed words");
         assert_eq!(lines[0].time, Some(45.0));
+        assert_eq!(lines[0].text, "AB");
+        assert_eq!(words[0].time, 45.0);
+        assert_eq!(words[0].text, "A");
+        assert_eq!(words[1].time, 45.3);
+        assert_eq!(words[1].text, "B");
+    }
+
+    #[test]
+    fn auto_detects_yrc_prefix_words() {
+        let lines =
+            parse_lyrics_content_with_format("[45000,2000]A(45000,300,0)B(45300,300,0)", None);
+
+        let words = lines[0].words.as_ref().expect("expected timed words");
         assert_eq!(lines[0].text, "AB");
         assert_eq!(words[0].time, 45.0);
         assert_eq!(words[0].text, "A");

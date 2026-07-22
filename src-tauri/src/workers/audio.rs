@@ -830,6 +830,7 @@ struct SpectrumSource<S> {
     levels: Arc<[AtomicU32; SPECTRUM_BANDS]>,
     samples: Vec<f32>,
     sample_rate: f32,
+    update_count: u64,
 }
 
 impl<S> SpectrumSource<S>
@@ -844,6 +845,7 @@ where
             levels,
             samples: Vec::with_capacity(SPECTRUM_WINDOW_SAMPLES),
             sample_rate,
+            update_count: 0,
         }
     }
 }
@@ -859,6 +861,15 @@ where
         self.samples.push(sample);
         if self.samples.len() >= SPECTRUM_WINDOW_SAMPLES {
             update_spectrum_levels(&self.levels, &self.samples, self.sample_rate);
+            self.update_count = self.update_count.wrapping_add(1);
+            if self.update_count % 40 == 0 {
+                let levels = spectrum_levels_snapshot(&self.levels);
+                let peak = levels.iter().copied().fold(0.0_f32, f32::max);
+                eprintln!(
+                    "[audio-spectrum] updates={} sample_rate={:.0} peak={:.3} levels={:?}",
+                    self.update_count, self.sample_rate, peak, levels
+                );
+            }
             self.samples.clear();
         }
         Some(sample)

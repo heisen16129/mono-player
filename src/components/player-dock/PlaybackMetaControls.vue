@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Captions, CheckCircle2, Download } from '@lucide/vue';
+import { CheckCircle2, Download, MonitorUp } from '@lucide/vue';
 import type { Locale, PlayerSettings, Track } from '../../types/music';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption } from '../../types/plugin';
 import { t } from '../../i18n';
@@ -110,7 +110,7 @@ const emit = defineEmits<{
       title="打开桌面歌词"
       @click="emit('openDesktopLyrics')"
     >
-      <Captions class="desktop-lyrics-entry-icon" :size="19" :stroke-width="2.25" />
+      <MonitorUp class="desktop-lyrics-entry-icon" :size="18" />
     </button>
     <SleepTimerControl
       :action="sleepTimerAction"
@@ -169,10 +169,10 @@ const emit = defineEmits<{
 .playback-meta {
   display: flex;
   grid-column: 3;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   justify-content: end;
-  color: var(--smw-text-secondary);
+  color: var(--smw-text-body);
   font-size: 12px;
 }
 
@@ -181,16 +181,18 @@ const emit = defineEmits<{
   min-width: 28px;
   height: 28px;
   border-radius: 8px;
+  color: var(--smw-text-body);
 }
 
 .playback-meta svg {
   width: 18px;
   height: 18px;
+  stroke-width: 2;
 }
 
 .playback-meta .desktop-lyrics-entry-icon {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
 }
 
 .dock-download-button.is-downloaded {

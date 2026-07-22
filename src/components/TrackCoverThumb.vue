@@ -26,6 +26,7 @@ const coverRoot = ref<HTMLElement | null>(null);
 const isVisible = ref(false);
 let loadId = 0;
 let observer: IntersectionObserver | null = null;
+let lastSpectrumDebugAt = 0;
 const PLAYING_BAR_HEIGHTS = [8, 12, 17, 12, 8];
 const PAUSED_BAR_HEIGHT = 12;
 const PAUSED_BAR_SCALE = 0.16;
@@ -144,6 +145,24 @@ watch(isVisible, (visible) => {
   if (!visible || coverUrl.value) return;
   void loadCover(props.track.id, props.track.path, props.track.artwork, props.track.coverVersion);
 });
+
+watch(
+  () => [props.active, props.playing, props.spectrumLevels] as const,
+  ([active, playing, levels]) => {
+    if (!active || !playing) return;
+    const now = window.performance.now();
+    if (now - lastSpectrumDebugAt < 1000) return;
+    lastSpectrumDebugAt = now;
+    const peak = (levels ?? []).reduce((max, value) => Math.max(max, value), 0);
+    console.debug('[cover-spectrum]', {
+      trackId: props.track.id,
+      title: props.track.title,
+      peak,
+      levels: levels ?? [],
+      bars: spectrumBars.value,
+    });
+  },
+);
 
 onMounted(() => {
   if (!('IntersectionObserver' in window)) {
