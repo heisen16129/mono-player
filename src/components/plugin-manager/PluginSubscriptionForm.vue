@@ -29,6 +29,7 @@ const emit = defineEmits<{
       <Settings2 :size="16" />
       <span>{{ adding ? '添加中...' : '添加订阅' }}</span>
     </button>
+    <slot name="actions"></slot>
   </section>
 </template>
 
@@ -44,7 +45,7 @@ const emit = defineEmits<{
 
 .subscription-row {
   display: grid;
-  grid-template-columns: minmax(320px, 560px) 150px;
+  grid-template-columns: minmax(320px, 560px) 150px max-content;
   gap: 12px;
   align-items: end;
   justify-content: start;

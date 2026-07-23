@@ -77,6 +77,7 @@ export function useLyricsTrackLoader(options: {
           : parseRawLyrics(variant?.content ?? '');
         if (requestId !== lyricsLoadRequestId) return;
         options.lines.value = normalizeLyricLines(lyrics);
+        await options.syncLyricsToCurrentTime();
 
         if (!usableArtworkUrl && !options.hasLyricsCoverCache(nextCoverCacheKey) && !options.hasLyricsCoverCache(nextThumbCacheKey)) {
           const { key, cover } = await options.loadLyricsCoverThumbnail(path, artwork, coverVersion, identityKey);

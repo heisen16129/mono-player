@@ -66,10 +66,13 @@ fn metadata_response() -> Value {
     json!({
         "id": PROVIDER_ID,
         "name": PROVIDER_NAME,
-        "version": "0.0.0",
+        "version": "1.0.0",
         "kind": "music",
         "author": "Mono",
+        "description": "搜索并播放 QQ 音乐，支持多音质和多格式歌词。",
+        "updatedAt": "2026-07-23",
         "capabilities": ["search", "play", "lyrics"],
+        "highlights": ["支持多音质播放", "返回多格式歌词", "可用于在线歌曲下载"],
         "permissions": ["network"]
     })
 }

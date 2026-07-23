@@ -9,6 +9,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
 
 const PLUGIN_HTTP_TIMEOUT: Duration = Duration::from_secs(8);
+const OFFICIAL_PLUGIN_CATALOG_URL: &str = "https://raw.githubusercontent.com/heisen16129/mono-plugin-store/refs/heads/master/catalog.json";
+const OFFICIAL_PLUGIN_ENTRY_PREFIX: &str = "https://raw.githubusercontent.com/heisen16129/mono-plugin-store/";
 static PLAYBACK_QUALITIES_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 fn log_plugin_playback(method: &str, args: serde_json::Value) {
@@ -135,11 +137,20 @@ pub struct PluginCatalogItem {
     kind: String,
     runtime: String,
     entry: String,
-    author: Option<String>,
-    description: Option<String>,
+    author: String,
+    description: String,
+    icon: Option<String>,
+    updated_at: String,
     capabilities: Vec<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    highlights: Vec<String>,
+    #[serde(default)]
+    screenshots: Vec<String>,
     permissions: Vec<String>,
     source_url: String,
+    source_kind: String,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -151,11 +162,20 @@ pub struct PluginManifest {
     kind: String,
     runtime: String,
     entry: String,
-    author: Option<String>,
-    description: Option<String>,
+    author: String,
+    description: String,
+    icon: Option<String>,
+    updated_at: String,
     capabilities: Vec<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    highlights: Vec<String>,
+    #[serde(default)]
+    screenshots: Vec<String>,
     permissions: Vec<String>,
     source_url: Option<String>,
+    source_kind: String,
     installed_at: String,
     enabled: bool,
 }
@@ -169,7 +189,11 @@ pub struct PluginMetadata {
     kind: Option<String>,
     author: Option<String>,
     description: Option<String>,
+    icon: Option<String>,
+    updated_at: Option<String>,
     capabilities: Option<Vec<String>>,
+    highlights: Option<Vec<String>>,
+    screenshots: Option<Vec<String>>,
     permissions: Option<Vec<String>>,
 }
 
@@ -210,31 +234,30 @@ pub fn normalize_plugin_catalog_text(catalog_text: String) -> ApiResponse<Vec<Pl
 }
 
 #[tauri::command]
-pub fn fetch_plugin_catalog_items(
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+pub async fn fetch_plugin_catalog_items(
+    app: AppHandle,
     url: String,
-) -> ApiResponse<Vec<PluginCatalogItem>> {
-    ApiResponse::from_result(fetch_plugin_catalog_items_inner(worker, url))
+) -> Result<ApiResponse<Vec<PluginCatalogItem>>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
+        fetch_plugin_catalog_items_inner(&worker, url)
+    })
+    .await
+    .map_err(|err| err.to_string())?;
+    Ok(ApiResponse::from_result(result))
 }
 
 fn fetch_plugin_catalog_items_inner(
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    worker: &crate::workers::plugin::PluginWorkerState,
     url: String,
 ) -> Result<Vec<PluginCatalogItem>, String> {
     if is_direct_plugin_url(&url) {
-        return build_plugin_catalog_item_from_entry(&worker, url.clone(), url).map(|item| vec![item]);
+        return build_plugin_catalog_item_from_entry(worker, url.clone(), url).map(|item| vec![item]);
     }
 
     let catalog_text = fetch_plugin_catalog_backend(url)?;
     let catalog = serde_json::from_str::<Value>(&catalog_text).map_err(|err| err.to_string())?;
-    catalog_values(catalog)
-        .into_iter()
-        .map(|value| {
-            let source_url = catalog_item_source_url(&value)?;
-            let entry = string_field(&value, &["entry"]).unwrap_or_else(|| source_url.clone());
-            build_plugin_catalog_item_from_entry(&worker, entry, source_url)
-        })
-        .collect()
+    Ok(normalize_catalog_values(catalog_values(catalog)))
 }
 
 #[tauri::command]
@@ -268,6 +291,7 @@ fn build_plugin_manifest_from_catalog_inner(
         Some(item.permissions.clone()),
     )?;
 
+    let capabilities = required_metadata_list(metadata.capabilities, "capabilities")?;
     Ok(PluginManifest {
         id: required_metadata_field(metadata.id, "id")?,
         name: required_metadata_field(metadata.name, "name")?,
@@ -275,11 +299,17 @@ fn build_plugin_manifest_from_catalog_inner(
         kind: required_metadata_field(metadata.kind, "kind")?,
         runtime: "wasm".to_string(),
         entry: item.entry,
-        author: metadata.author,
-        description: metadata.description,
-        capabilities: required_metadata_list(metadata.capabilities, "capabilities")?,
+        author: required_metadata_field(metadata.author, "author")?,
+        description: required_metadata_field(metadata.description, "description")?,
+        icon: metadata.icon,
+        updated_at: required_metadata_field(metadata.updated_at, "updatedAt")?,
+        tags: plugin_capability_tags(&capabilities),
+        highlights: metadata.highlights.unwrap_or_default(),
+        screenshots: metadata.screenshots.unwrap_or_default(),
+        capabilities,
         permissions: metadata.permissions.unwrap_or_default(),
         source_url: Some(item.source_url),
+        source_kind: item.source_kind,
         installed_at,
         enabled,
     })
@@ -307,6 +337,7 @@ fn build_local_plugin_manifest_inner(
 
     let metadata = read_plugin_metadata_backend(&worker, file_path.clone(), None)?;
 
+    let capabilities = required_metadata_list(metadata.capabilities, "capabilities")?;
     Ok(PluginManifest {
         id: required_metadata_field(metadata.id, "id")?,
         name: required_metadata_field(metadata.name, "name")?,
@@ -314,11 +345,17 @@ fn build_local_plugin_manifest_inner(
         kind: required_metadata_field(metadata.kind, "kind")?,
         runtime: "wasm".to_string(),
         entry: file_path.clone(),
-        author: metadata.author,
-        description: metadata.description,
-        capabilities: required_metadata_list(metadata.capabilities, "capabilities")?,
+        author: required_metadata_field(metadata.author, "author")?,
+        description: required_metadata_field(metadata.description, "description")?,
+        icon: metadata.icon,
+        updated_at: required_metadata_field(metadata.updated_at, "updatedAt")?,
+        tags: plugin_capability_tags(&capabilities),
+        highlights: metadata.highlights.unwrap_or_default(),
+        screenshots: metadata.screenshots.unwrap_or_default(),
+        capabilities,
         permissions: metadata.permissions.unwrap_or_default(),
         source_url: Some(file_path),
+        source_kind: "local".to_string(),
         installed_at,
         enabled,
     })
@@ -1070,10 +1107,35 @@ fn catalog_item_source_url(value: &Value) -> Result<String, String> {
     Ok(source_url)
 }
 
+fn is_official_plugin_source(source: &str) -> bool {
+    source == OFFICIAL_PLUGIN_CATALOG_URL || source.starts_with(OFFICIAL_PLUGIN_ENTRY_PREFIX)
+}
+
+fn infer_plugin_source_kind(entry: &str, source_url: Option<&str>) -> String {
+    if is_official_plugin_source(entry) || source_url.map(is_official_plugin_source).unwrap_or(false) {
+        return "official".to_string();
+    }
+    if entry.starts_with("http://") || entry.starts_with("https://") || source_url.map(|url| url.starts_with("http://") || url.starts_with("https://")).unwrap_or(false) {
+        return "subscription".to_string();
+    }
+    "local".to_string()
+}
+
+fn normalized_source_kind(value: Option<String>, entry: &str, source_url: Option<&str>) -> String {
+    match value.as_deref() {
+        Some("official") => "official".to_string(),
+        Some("subscription") => "subscription".to_string(),
+        Some("local") => "local".to_string(),
+        _ => infer_plugin_source_kind(entry, source_url),
+    }
+}
+
 fn normalize_catalog_item_value(value: Value) -> Option<PluginCatalogItem> {
     let source_url = catalog_item_source_url(&value).ok()?;
     let name = string_field(&value, &["name"])?;
     let capabilities = normalize_capabilities(array_string_field(&value, "capabilities")?)?;
+    let entry = string_field(&value, &["entry"]).unwrap_or_else(|| source_url.clone());
+    let source_kind = normalized_source_kind(string_field(&value, &["sourceKind", "source_kind"]), &entry, Some(&source_url));
 
     Some(PluginCatalogItem {
         id: string_field(&value, &["id"] )?,
@@ -1081,12 +1143,18 @@ fn normalize_catalog_item_value(value: Value) -> Option<PluginCatalogItem> {
         version: string_field(&value, &["version"] )?,
         kind: normalize_kind(string_field(&value, &["kind"] )?)?,
         runtime: normalize_runtime(string_field(&value, &["runtime"])).unwrap_or_else(|| "wasm".to_string()),
-        entry: string_field(&value, &["entry"]).unwrap_or_else(|| source_url.clone()),
-        author: string_field(&value, &["author"]),
-        description: string_field(&value, &["description"]),
+        entry,
+        author: string_field(&value, &["author"] )?,
+        description: string_field(&value, &["description"] )?,
+        icon: string_field(&value, &["icon"]),
+        updated_at: string_field(&value, &["updatedAt", "updated_at"] )?,
+        tags: plugin_capability_tags(&capabilities),
+        highlights: normalize_text_list(array_string_field(&value, "highlights").unwrap_or_default()),
+        screenshots: normalize_screenshot_list(array_string_field(&value, "screenshots").unwrap_or_default()),
         capabilities,
         permissions: normalize_permissions(array_string_field(&value, "permissions").unwrap_or_default()).ok()?,
         source_url,
+        source_kind,
     })
 }
 
@@ -1098,6 +1166,7 @@ fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
     let name = string_field(&value, &["name"])?;
     let source_url = string_field(&value, &["sourceUrl", "source_url"]);
     let capabilities = normalize_capabilities(array_string_field(&value, "capabilities")?)?;
+    let source_kind = normalized_source_kind(string_field(&value, &["sourceKind", "source_kind"]), &entry, source_url.as_deref());
 
     Some(PluginManifest {
         id: string_field(&value, &["id"] )?,
@@ -1106,11 +1175,17 @@ fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
         kind: normalize_kind(string_field(&value, &["kind"] )?)?,
         runtime: normalize_runtime(string_field(&value, &["runtime"])).unwrap_or_else(|| "wasm".to_string()),
         entry,
-        author: string_field(&value, &["author"]),
-        description: string_field(&value, &["description"]),
+        author: string_field(&value, &["author"] )?,
+        description: string_field(&value, &["description"] )?,
+        icon: string_field(&value, &["icon"]),
+        updated_at: string_field(&value, &["updatedAt", "updated_at"] )?,
+        tags: plugin_capability_tags(&capabilities),
+        highlights: normalize_text_list(array_string_field(&value, "highlights").unwrap_or_default()),
+        screenshots: normalize_screenshot_list(array_string_field(&value, "screenshots").unwrap_or_default()),
         capabilities,
         permissions: normalize_permissions(array_string_field(&value, "permissions").unwrap_or_default()).ok()?,
         source_url,
+        source_kind,
         installed_at: string_field(&value, &["installedAt", "installed_at"]).unwrap_or_default(),
         enabled: value.get("enabled").and_then(Value::as_bool).unwrap_or(true),
     })
@@ -1122,6 +1197,8 @@ fn build_plugin_catalog_item_from_entry(
     source_url: String,
 ) -> Result<PluginCatalogItem, String> {
     let metadata = read_plugin_metadata_backend(worker, entry.clone(), None)?;
+    let capabilities = required_metadata_list(metadata.capabilities, "capabilities")?;
+    let source_kind = infer_plugin_source_kind(&entry, Some(&source_url));
     Ok(PluginCatalogItem {
         id: required_metadata_field(metadata.id, "id")?,
         name: required_metadata_field(metadata.name, "name")?,
@@ -1129,10 +1206,16 @@ fn build_plugin_catalog_item_from_entry(
         kind: required_metadata_field(metadata.kind, "kind")?,
         runtime: "wasm".to_string(),
         entry,
-        author: metadata.author,
-        description: metadata.description,
-        capabilities: required_metadata_list(metadata.capabilities, "capabilities")?,
+        author: required_metadata_field(metadata.author, "author")?,
+        description: required_metadata_field(metadata.description, "description")?,
+        icon: metadata.icon,
+        updated_at: required_metadata_field(metadata.updated_at, "updatedAt")?,
+        tags: plugin_capability_tags(&capabilities),
+        highlights: metadata.highlights.unwrap_or_default(),
+        screenshots: metadata.screenshots.unwrap_or_default(),
+        capabilities,
         permissions: metadata.permissions.unwrap_or_default(),
+        source_kind,
         source_url,
     })
 }
@@ -1183,9 +1266,13 @@ fn normalize_plugin_metadata(metadata: PluginMetadata) -> Result<PluginMetadata,
         name: Some(required_metadata_field(metadata.name, "name")?),
         version: Some(required_metadata_field(metadata.version, "version")?),
         kind: Some(normalize_kind(required_metadata_field(metadata.kind, "kind")?)
-            .ok_or_else(|| "plugin metadata kind must be music or lyrics".to_string())?),
-        author: metadata.author.and_then(non_empty_string),
-        description: metadata.description.and_then(non_empty_string),
+            .ok_or_else(|| "plugin metadata kind is not supported".to_string())?),
+        author: Some(required_metadata_field(metadata.author, "author")?),
+        description: Some(required_metadata_field(metadata.description, "description")?),
+        icon: metadata.icon.and_then(non_empty_string),
+        updated_at: Some(required_metadata_field(metadata.updated_at, "updatedAt")?),
+        highlights: Some(normalize_text_list(metadata.highlights.unwrap_or_default())),
+        screenshots: Some(normalize_screenshot_list(metadata.screenshots.unwrap_or_default())),
         capabilities: Some(normalize_capabilities(required_metadata_list(metadata.capabilities, "capabilities")?)
             .ok_or_else(|| "plugin metadata capabilities cannot be empty".to_string())?),
         permissions: Some(normalize_permissions(metadata.permissions.unwrap_or_default())?),
@@ -1207,6 +1294,22 @@ fn required_metadata_list(value: Option<Vec<String>>, field: &str) -> Result<Vec
     }
 }
 
+fn normalize_text_list(values: Vec<String>) -> Vec<String> {
+    values
+        .into_iter()
+        .filter_map(non_empty_string)
+        .fold(Vec::<String>::new(), |mut items, value| {
+            if !items.contains(&value) {
+                items.push(value);
+            }
+            items
+        })
+}
+
+fn normalize_screenshot_list(values: Vec<String>) -> Vec<String> {
+    normalize_text_list(values).into_iter().take(5).collect()
+}
+
 fn normalize_runtime(runtime: Option<String>) -> Option<String> {
     match runtime.as_deref().map(str::trim) {
         Some("wasm") => Some("wasm".to_string()),
@@ -1216,7 +1319,7 @@ fn normalize_runtime(runtime: Option<String>) -> Option<String> {
 
 fn normalize_kind(kind: String) -> Option<String> {
     match kind.trim() {
-        "music" | "lyrics" => Some(kind.trim().to_string()),
+        "music" | "lyrics" | "metadata" | "playlist" | "theme" | "integration" | "tool" => Some(kind.trim().to_string()),
         _ => None,
     }
 }
@@ -1236,9 +1339,27 @@ fn normalize_capabilities(capabilities: Vec<String>) -> Option<Vec<String>> {
 
 fn normalize_capability(capability: &str) -> Option<String> {
     match capability.trim() {
-        "search" | "play" | "lyrics" => Some(capability.trim().to_string()),
+        "search" | "play" | "lyrics" | "metadata" | "cover" | "album" | "playlist-import" | "playlist-export" | "theme" | "scrobble" | "history-sync" | "batch-rename" | "lyric-convert" | "lyric-translate" => Some(capability.trim().to_string()),
         _ => None,
     }
+}
+
+fn plugin_capability_tags(capabilities: &[String]) -> Vec<String> {
+    capabilities
+        .iter()
+        .map(|capability| match capability.as_str() {
+            "search" => "搜索歌曲",
+            "play" => "在线播放",
+            "lyrics" => "歌词获取",
+            _ => capability.as_str(),
+        })
+        .map(str::to_string)
+        .fold(Vec::<String>::new(), |mut items, tag| {
+            if !items.contains(&tag) {
+                items.push(tag);
+            }
+            items
+        })
 }
 
 fn normalize_permissions(permissions: Vec<String>) -> Result<Vec<String>, String> {
@@ -1575,11 +1696,17 @@ where
 }
 
 #[tauri::command]
-pub fn fetch_plugin_catalog(
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+pub async fn fetch_plugin_catalog(
+    app: AppHandle,
     url: String,
-) -> ApiResponse<String> {
-    ApiResponse::from_result(worker.fetch_plugin_catalog(url))
+) -> Result<ApiResponse<String>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
+        worker.fetch_plugin_catalog(url)
+    })
+    .await
+    .map_err(|err| err.to_string())?;
+    Ok(ApiResponse::from_result(result))
 }
 
 pub(crate) fn fetch_plugin_catalog_backend(url: String) -> Result<String, String> {

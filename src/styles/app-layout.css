@@ -127,7 +127,6 @@
   background: rgba(18, 32, 58, 0.08);
   border-right-color: rgba(255, 255, 255, 0.16);
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(2px);
 }
 
 .mono-window.has-theme-background .library-panel,
@@ -136,7 +135,6 @@
   background: rgba(18, 32, 58, 0.08);
   border-right-color: rgba(255, 255, 255, 0.16);
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(2px);
 }
 
 .mono-window.has-theme-background .workspace,
@@ -149,21 +147,35 @@
 .mono-window.has-theme-background .theme-view {
   background: rgba(18, 32, 58, 0.08);
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(2px);
+}
+
+.mono-window.has-theme-background .library-content-layout,
+.mono-window.has-theme-background .artists-view {
+  background: rgba(18, 32, 58, 0.08);
+}
+
+.mono-window.has-theme-background .library-content-layout .library-panel,
+.mono-window.has-theme-background .library-content-layout .workspace,
+.mono-window.has-theme-background .artists-view .library-panel,
+.mono-window.has-theme-background .artists-view .artist-detail {
+  background: transparent;
+}
+
+.mono-window.has-theme-background .track-head {
+  background: rgba(246, 252, 239, 0.22);
+  box-shadow: 0 -16px 0 0 rgba(246, 252, 239, 0.22);
 }
 
 .mono-window.has-theme-background .player-dock {
   color: rgba(255, 255, 255, 0.94);
   border-top-color: rgba(255, 255, 255, 0.34);
-  background: transparent;
+  background: rgba(18, 32, 58, 0.08);
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
-  backdrop-filter: none;
 }
 
 .mono-window.has-theme-background.lyrics-open .player-dock {
   border-top-color: rgba(255, 255, 255, 0.34);
-  background: transparent;
-  backdrop-filter: none;
+  background: rgba(18, 32, 58, 0.08);
 }
 
 .mono-window.has-theme-background .main-nav a:hover,

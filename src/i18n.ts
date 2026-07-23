@@ -74,10 +74,8 @@ type MessageKey =
   | 'standardQuality'
   | 'toggleFavorite'
   | 'themes'
-  | 'localThemes'
   | 'searchThemes'
   | 'themeStyle'
-  | 'themeStore'
   | 'unknownArtist'
   | 'unknownTrack'
   | 'useMainWindowPreview'
@@ -161,10 +159,8 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     standardQuality: '标准音质',
     toggleFavorite: '切换收藏',
     themes: '主题',
-    localThemes: '本地主题',
     searchThemes: '在这里输入搜索内容',
     themeStyle: '主题样式',
-    themeStore: '主题市场',
     unknownArtist: '未知艺术家',
     unknownTrack: '未选择歌曲',
     useMainWindowPreview: '主窗口界面',
@@ -247,10 +243,8 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     standardQuality: 'Standard quality',
     toggleFavorite: 'Toggle favorite',
     themes: 'Themes',
-    localThemes: 'Local Themes',
     searchThemes: 'Search themes',
     themeStyle: 'Theme Style',
-    themeStore: 'Theme Store',
     unknownArtist: 'Unknown Artist',
     unknownTrack: 'No song selected',
     useMainWindowPreview: 'Main window view',

@@ -844,12 +844,6 @@ function normalizePlaybackErrorMessage(error: unknown, fallback = '播放失败'
   return message || fallback;
 }
 
-function isPluginLyricsEmptyError(error: unknown) {
-  const message = getErrorMessage(error, '').toLowerCase();
-  return message.includes('plugin lyrics response must include lyrics[]')
-    || message.includes('plugin lyrics response did not include usable lyrics[]');
-}
-
 async function startDownloadEventListener() {
   if (!isTauriRuntime() || downloadEventUnlisten) return;
   downloadEventUnlisten = await listen<DownloadQueueEvent>('download://event', (event) => {
@@ -1115,11 +1109,7 @@ async function loadOnlineTrackLyricsInBackground(track: PluginSearchTrack, playb
       );
       updateLyricsViewStateForRequest(playbackTrack, 'ready');
     } catch (error) {
-      if (isPluginLyricsEmptyError(error)) {
-        updateLyricsViewStateForRequest(playbackTrack, 'empty');
-        return;
-      }
-      updateLyricsViewStateForRequest(playbackTrack, 'error', getErrorMessage(error));
+      updateLyricsViewStateForRequest(playbackTrack, 'empty');
       console.warn('[plugin-lyrics] background lyrics load failed', {
         providerId: track.providerId,
         providerName: track.providerName,
@@ -1176,7 +1166,7 @@ async function loadLocalTrackLyricsInBackground(track: Track) {
     updateCurrentLocalTrackLyrics(track, lyrics);
     updateLyricsViewStateForRequest(track, 'ready');
   } catch (error) {
-    updateLyricsViewStateForRequest(track, 'error', getErrorMessage(error));
+    updateLyricsViewStateForRequest(track, 'empty');
     console.warn('[local-lyrics] background lyrics load failed', {
       path: track.path,
       title: track.title,
@@ -2125,6 +2115,7 @@ function finishLyricsEnter() {
       @open-settings-view="openSettingsView"
       @open-theme-view="openThemeView"
       @open-track-context-menu="openTrackContextMenu"
+      @notify="showOnlineToast"
       @pause-download-item="pauseDownloadItem"
       @play-downloaded-track="playDownloadedTrack"
       @play-favorite-tracks="playFavoriteTracks"

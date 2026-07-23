@@ -66,10 +66,13 @@ fn metadata_response() -> Value {
     json!({
         "id": PROVIDER_ID,
         "name": PROVIDER_NAME,
-        "version": "0.0.0",
+        "version": "1.0.0",
         "kind": "music",
         "author": "Mono",
+        "description": "搜索并播放小秋音乐来源，支持在线播放和歌词 metadata。",
+        "updatedAt": "2026-07-23",
         "capabilities": ["search", "play", "lyrics"],
+        "highlights": ["支持在线搜索", "支持播放解析", "支持歌词 metadata"],
         "permissions": ["network"]
     })
 }

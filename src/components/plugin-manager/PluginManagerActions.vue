@@ -1,13 +1,8 @@
 <script setup lang="ts">
-import { FolderInput, RefreshCw } from '@lucide/vue';
-
-defineProps<{
-  refreshing: boolean;
-}>();
+import { FolderInput } from '@lucide/vue';
 
 const emit = defineEmits<{
   importLocal: [];
-  refresh: [];
 }>();
 </script>
 
@@ -16,9 +11,6 @@ const emit = defineEmits<{
     <button class="secondary-button" type="button" @click="emit('importLocal')">
       <FolderInput :size="16" />
       从本地文件安装
-    </button>
-    <button class="secondary-button" type="button" :disabled="refreshing" @click="emit('refresh')">
-      <RefreshCw :size="16" :class="{ spinning: refreshing }" />
       更新订阅
     </button>
   </div>

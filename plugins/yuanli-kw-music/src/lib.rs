@@ -66,10 +66,13 @@ fn metadata_response() -> Value {
     json!({
         "id": PROVIDER_ID,
         "name": PROVIDER_NAME,
-        "version": "0.0.0",
+        "version": "1.0.0",
         "kind": "music",
         "author": "Mono",
+        "description": "搜索并播放酷我音乐，支持在线歌曲解析和歌词获取。",
+        "updatedAt": "2026-07-23",
         "capabilities": ["search", "play", "lyrics"],
+        "highlights": ["支持在线播放", "返回多格式歌词", "可作为备用音源"],
         "permissions": ["network"]
     })
 }

@@ -101,6 +101,7 @@ defineEmits<{
   openScanDialog: [];
   openSettingsView: [];
   openThemeView: [];
+  notify: [message: string, variant?: 'success' | 'error'];
   openTrackContextMenu: [track: Track, x: number, y: number];
   openOnlineTrackContextMenu: [track: PluginSearchTrack, x: number, y: number];
   pauseDownloadItem: [item: DownloadItem];
@@ -354,7 +355,7 @@ defineEmits<{
       @toggle-favorite="$emit('toggleFavoriteForTrack', $event)"
     />
     <ThemeView v-else-if="activeView === 'themes'" />
-    <PluginManagerView v-else-if="activeView === 'plugins'" />
+    <PluginManagerView v-else-if="activeView === 'plugins'" @notify="(message, variant) => $emit('notify', message, variant)" />
     <SettingsView v-else-if="activeView === 'settings'" />
   </div>
 </template>

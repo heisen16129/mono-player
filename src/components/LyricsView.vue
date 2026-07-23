@@ -191,13 +191,11 @@ const {
   clearCoverState,
   closeFontMenu,
   closeLyricSearchDialog,
-  lines: loadedLyricLines,
   lyricSearchStatus,
   lyricTrackKey,
   onLyricsCleared: () => emit('lyricsCleared'),
   onLyricsFound: (...args) => emit('lyricsFound', ...args),
   resolvingLyricTrackKey,
-  scrollToActiveLyric,
   setArtworkCover,
 });
 

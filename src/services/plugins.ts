@@ -2,6 +2,7 @@ import type {
   PluginCatalogItem,
   PluginManifest,
   PluginSubscription,
+  PluginThemePayload,
 } from '../types/plugin';
 import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
@@ -121,6 +122,50 @@ export async function installLocalPlugin(filePath: string): Promise<PluginManife
   await restoreDeletedPlugin(manifest.id);
   await saveInstalledPlugins(nextInstalled);
   return nextInstalled;
+}
+
+function isAbsolutePluginAsset(value: string) {
+  return /^(https?:|data:|blob:|\/|[a-zA-Z]:[\\/]|\\\\)/.test(value);
+}
+
+function resolvePluginAsset(value: string | null | undefined, entry: string): string | null | undefined {
+  const asset = value?.trim();
+  if (!asset || isAbsolutePluginAsset(asset)) return value;
+  if (asset === '.' || asset === '..' || asset.includes('../') || asset.includes('..\\')) return value;
+
+  if (/^https?:/i.test(entry)) {
+    try {
+      return new URL(asset, new URL('.', entry)).toString();
+    } catch {
+      return value;
+    }
+  }
+
+  const index = Math.max(entry.lastIndexOf('/'), entry.lastIndexOf('\\'));
+  if (index < 0) return value;
+  const separator = entry.includes('\\') ? '\\' : '/';
+  return `${entry.slice(0, index)}${separator}${asset.replace(/[\\/]+/g, separator)}`;
+}
+
+export async function readPluginTheme(manifest: PluginManifest): Promise<PluginThemePayload> {
+  if (manifest.kind !== 'theme' || !manifest.capabilities.includes('theme')) {
+    throw new Error('插件不是主题插件');
+  }
+
+  const theme = await invokeApi<PluginThemePayload>('plugin_invoke', {
+    entry: manifest.entry,
+    request: { action: 'theme' },
+    pluginId: manifest.id,
+    permissions: manifest.permissions,
+  });
+  if (!theme.variables || Object.keys(theme.variables).length === 0) {
+    throw new Error('主题插件没有返回主题变量');
+  }
+  return {
+    ...theme,
+    preview: resolvePluginAsset(theme.preview, manifest.entry),
+    background: resolvePluginAsset(theme.background, manifest.entry),
+  };
 }
 
 export async function uninstallPlugin(pluginId: string): Promise<PluginManifest[]> {

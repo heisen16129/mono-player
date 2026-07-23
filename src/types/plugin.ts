@@ -17,9 +17,22 @@ export interface PluginPlaybackQualities {
 export type PluginCapability =
   | 'search'
   | 'play'
-  | 'lyrics';
+  | 'lyrics'
+  | 'metadata'
+  | 'cover'
+  | 'album'
+  | 'playlist-import'
+  | 'playlist-export'
+  | 'theme'
+  | 'scrobble'
+  | 'history-sync'
+  | 'batch-rename'
+  | 'lyric-convert'
+  | 'lyric-translate';
 
-export type PluginKind = 'music' | 'lyrics';
+export type PluginKind = 'music' | 'lyrics' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
+
+export type PluginSourceKind = 'official' | 'subscription' | 'local';
 
 export type PluginPermission =
   | 'network'
@@ -35,13 +48,29 @@ export interface PluginManifest {
   kind: PluginKind;
   runtime: PluginRuntime;
   entry: string;
-  author?: string;
-  description?: string;
+  author: string;
+  description: string;
+  icon?: string;
+  updatedAt: string;
   capabilities: PluginCapability[];
+  tags?: string[];
+  highlights?: string[];
+  screenshots?: string[];
   permissions: PluginPermission[];
   sourceUrl?: string;
+  sourceKind: PluginSourceKind;
   installedAt: string;
   enabled: boolean;
+}
+
+export interface PluginThemePayload {
+  id?: string;
+  name?: string;
+  author?: string;
+  variables: Record<string, string>;
+  preview?: string | null;
+  background?: string | null;
+  backgroundOpacity?: number | null;
 }
 
 export interface PluginCatalogItem {
@@ -51,11 +80,17 @@ export interface PluginCatalogItem {
   kind: PluginKind;
   runtime: PluginRuntime;
   entry: string;
-  author?: string;
-  description?: string;
+  author: string;
+  description: string;
+  icon?: string;
+  updatedAt: string;
   capabilities: PluginCapability[];
+  tags?: string[];
+  highlights?: string[];
+  screenshots?: string[];
   permissions: PluginPermission[];
   sourceUrl: string;
+  sourceKind: PluginSourceKind;
 }
 
 export interface PluginSubscription {

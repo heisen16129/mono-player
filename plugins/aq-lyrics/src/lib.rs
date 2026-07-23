@@ -71,10 +71,13 @@ fn metadata_response() -> Value {
     json!({
         "id": PROVIDER_ID,
         "name": PROVIDER_NAME,
-        "version": "0.0.0",
+        "version": "1.0.0",
         "kind": "lyrics",
         "author": "Mono",
+        "description": "搜索并返回阿Q歌词 metadata，支持多格式歌词切换。",
+        "updatedAt": "2026-07-23",
         "capabilities": ["search", "lyrics"],
+        "highlights": ["支持歌词搜索", "返回歌词 metadata", "支持多格式歌词"],
         "permissions": ["network"]
     })
 }

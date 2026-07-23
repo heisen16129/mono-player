@@ -1,19 +1,15 @@
 import type { ComputedRef, Ref } from 'vue';
-import { isTauriRuntime, resolveLyricsSource } from '../services/music';
 import { getPluginLyricsMetadata } from '../services/pluginSearch';
-import type { LyricLine, Track, TrackLyrics } from '../types/music';
+import type { Track, TrackLyrics } from '../types/music';
 import type { PluginSearchTrack } from '../types/plugin';
 import { artworkDisplaySrc } from '../utils/artwork';
 import { getErrorMessage } from '../utils/error';
-import { parseRawLyrics } from '../utils/lyrics';
-import { normalizeLyricLines } from './useLyricsTrackLoader';
 
 export function useLyricsAssociation(options: {
   activeTrack: ComputedRef<Track | null>;
   clearCoverState: () => void;
   closeFontMenu: () => void;
   closeLyricSearchDialog: () => void;
-  lines: Ref<LyricLine[]>;
   lyricSearchStatus: Ref<string>;
   lyricTrackKey: (track: PluginSearchTrack) => string;
   onLyricsCleared: () => void;
@@ -26,18 +22,10 @@ export function useLyricsAssociation(options: {
     trackRaw?: unknown,
   ) => void;
   resolvingLyricTrackKey: Ref<string | null>;
-  scrollToActiveLyric: () => Promise<void>;
   setArtworkCover: (artwork: string) => void;
 }) {
   function defaultLyricSearchQuery() {
     return [options.activeTrack.value?.title, options.activeTrack.value?.artist].filter(Boolean).join(' ').trim();
-  }
-
-  async function resolveRawLyrics(content: string, format?: string | null) {
-    return resolveLyricsSource({
-      content,
-      format: format ?? null,
-    });
   }
 
   async function applyPluginLyrics(track: PluginSearchTrack) {
@@ -57,8 +45,6 @@ export function useLyricsAssociation(options: {
       if (artwork) {
         options.setArtworkCover(artwork);
       }
-      const lyrics = isTauriRuntime() ? await resolveRawLyrics(variant.content, variant.format) : parseRawLyrics(variant.content);
-      options.lines.value = normalizeLyricLines(lyrics);
       options.onLyricsFound(
         source,
         artwork,
@@ -68,7 +54,6 @@ export function useLyricsAssociation(options: {
         track.raw ?? track,
       );
       options.closeLyricSearchDialog();
-      await options.scrollToActiveLyric();
     } catch (error) {
       options.lyricSearchStatus.value = getErrorMessage(error);
     } finally {
@@ -79,7 +64,6 @@ export function useLyricsAssociation(options: {
   }
 
   function clearAssociatedLyrics() {
-    options.lines.value = [];
     options.clearCoverState();
     options.onLyricsCleared();
     options.closeFontMenu();
