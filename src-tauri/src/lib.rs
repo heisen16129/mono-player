@@ -21,7 +21,7 @@ mod workers;
 
 use database::{
     init_database, list_latest_added_tracks, list_tracks, refresh_track_duration, remove_music_dir,
-    update_track_cover, update_track_metadata,
+    read_track_audio_info, update_track_cover, update_track_metadata,
 };
 use scanner::{cancel_scan_music_dir, scan_music_dir};
 use state::AppState;
@@ -141,6 +141,7 @@ pub fn run() {
             update_track_metadata,
             update_track_cover,
             refresh_track_duration,
+            read_track_audio_info,
             scan_music_dir,
             cancel_scan_music_dir,
             lyrics::resolve_lyrics_source,

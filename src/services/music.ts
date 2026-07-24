@@ -63,6 +63,17 @@ export interface RefreshTrackDurationResult {
   duration: number;
 }
 
+export interface ReadTrackAudioInfoRequest {
+  path: string;
+}
+
+export interface TrackAudioInfo {
+  bitrateKbps: number | null;
+  sampleRateHz: number | null;
+  channels: number | null;
+  fileSizeBytes: number | null;
+}
+
 export function isTauriRuntime(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
@@ -113,6 +124,14 @@ export function refreshTrackDuration(request: RefreshTrackDurationRequest): Prom
   }
 
   return invokeApi<RefreshTrackDurationResult>('refresh_track_duration', { request });
+}
+
+export function readTrackAudioInfo(request: ReadTrackAudioInfoRequest): Promise<TrackAudioInfo> {
+  if (!isTauriRuntime()) {
+    return Promise.resolve({ bitrateKbps: null, sampleRateHz: null, channels: null, fileSizeBytes: null });
+  }
+
+  return invokeApi<TrackAudioInfo>('read_track_audio_info', { request });
 }
 
 export function systemWorkerHealth(): Promise<WorkerDiagnosticsSnapshot> {

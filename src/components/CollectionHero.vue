@@ -65,6 +65,10 @@ const emit = defineEmits<{
   border-radius: 7px;
 }
 
+.collection-hero-cover.folder-cover:not(.has-cover-image) {
+  transform: translateY(6px);
+}
+
 .collection-hero-copy {
   display: grid;
   align-content: center;

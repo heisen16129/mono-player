@@ -59,6 +59,22 @@ pub(crate) struct RefreshTrackDurationResult {
     pub(crate) duration: u64,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ReadTrackAudioInfoRequest {
+    pub(crate) path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct TrackAudioInfo {
+    #[serde(rename = "bitrateKbps")]
+    pub(crate) bitrate_kbps: Option<u32>,
+    #[serde(rename = "sampleRateHz")]
+    pub(crate) sample_rate_hz: Option<u32>,
+    pub(crate) channels: Option<u8>,
+    #[serde(rename = "fileSizeBytes")]
+    pub(crate) file_size_bytes: Option<u64>,
+}
+
 /**
  * 閸戣姤鏆熼幒銉︽暪娑撯偓娑?State 閸欍儲鐒洪敍宀€鏁ゆ禍搴ゎ問闂傤喖瀵橀崥顐ｆ殶閹诡喖绨辨潻鐐村复閻ㄥ嫬绨查悽銊ュ彙娴滎偆濮搁幀? */
 //鏉╂瑤閲滅€瑰繐鐨㈢拠銉ュ毐閺佺増姣氶棁鑼舶閸撳秶顏?#[tauri::command]
@@ -184,6 +200,25 @@ pub(crate) fn refresh_track_duration(
     request: RefreshTrackDurationRequest,
 ) -> ApiResponse<RefreshTrackDurationResult> {
     ApiResponse::from_result(refresh_track_duration_inner(state, request))
+}
+
+#[tauri::command]
+pub(crate) fn read_track_audio_info(request: ReadTrackAudioInfoRequest) -> ApiResponse<TrackAudioInfo> {
+    ApiResponse::from_result(read_track_audio_info_inner(request))
+}
+
+fn read_track_audio_info_inner(request: ReadTrackAudioInfoRequest) -> Result<TrackAudioInfo, String> {
+    let path = normalized_local_file_path(&request.path)?;
+    let file_size_bytes = fs::metadata(&path).map(|metadata| metadata.len()).ok();
+    let tagged_file = lofty::read_from_path(&path).map_err(|err| err.to_string())?;
+    let properties = tagged_file.properties();
+
+    Ok(TrackAudioInfo {
+        bitrate_kbps: properties.audio_bitrate().filter(|value| *value > 0),
+        sample_rate_hz: properties.sample_rate().filter(|value| *value > 0),
+        channels: properties.channels().filter(|value| *value > 0),
+        file_size_bytes,
+    })
 }
 
 fn refresh_track_duration_inner(

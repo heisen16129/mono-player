@@ -323,6 +323,7 @@ if (import.meta.hot) {
   width: 38%;
   height: 38%;
   opacity: 0.92;
+  transform: translateY(-6%);
 }
 
 .cover-mini.folder-cover {

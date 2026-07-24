@@ -32,6 +32,18 @@ fn log_plugin_args(method: &str, args: Value) {
     eprintln!("[plugin-rust] {method} args={args}");
 }
 
+fn log_plugin_host_request(plugin_id: Option<&str>, method: &str, url: &str, data: Option<&str>) {
+    eprintln!(
+        "[plugin-host-request] args={}",
+        json!({
+            "pluginId": plugin_id,
+            "method": method,
+            "url": url,
+            "data": data,
+        })
+    );
+}
+
 fn should_skip_plugin_log(method: &str, args: &Value) -> bool {
     method == "search_native_plugin" || value_has_plugin_search_payload(args)
 }
@@ -585,6 +597,12 @@ fn execute_host_request(
         permissions,
     };
     validate_plugin_http_request(&payload)?;
+    log_plugin_host_request(
+        plugin_id.as_deref(),
+        &method,
+        &url,
+        data.as_deref(),
+    );
     crate::plugins::plugin_http_request_backend(method, url, host_request.headers, data)
 }
 

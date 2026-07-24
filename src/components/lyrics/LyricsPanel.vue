@@ -88,12 +88,12 @@ defineExpose({ panel });
       <i :style="{ transform: `translateY(${scrollThumbTop}px)` }"></i>
     </span>
     <div v-if="isLyricSyncOpen" class="lyrics-sync-controls" @pointerdown.stop>
-      <button type="button" title="歌词快0.5秒" aria-label="歌词快0.5秒" @click="emit('shiftTiming', 0.5)">
-        <span>+</span>
+      <button type="button" title="歌词快0.5秒" aria-label="歌词快0.5秒" @click="emit('shiftTiming', -0.5)">
+        <span>-</span>
         <strong>0.5</strong>
       </button>
-      <button type="button" title="歌词慢0.5秒" aria-label="歌词慢0.5秒" @click="emit('shiftTiming', -0.5)">
-        <span>-</span>
+      <button type="button" title="歌词慢0.5秒" aria-label="歌词慢0.5秒" @click="emit('shiftTiming', 0.5)">
+        <span>+</span>
         <strong>0.5</strong>
       </button>
     </div>

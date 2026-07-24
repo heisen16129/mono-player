@@ -6,6 +6,7 @@ defineProps<{
   hasDownloadableCover: boolean;
   hasLinkedLyrics: boolean;
   isFullscreen: boolean;
+  isLyricSyncOpen: boolean;
   left: number;
   linkedLyricsLabel: string;
   top: number;
@@ -13,6 +14,7 @@ defineProps<{
 
 const emit = defineEmits<{
   clearAssociatedLyrics: [];
+  closeLyricSync: [];
   decreaseFontSize: [];
   downloadCover: [];
   downloadLyrics: [format: string];
@@ -47,7 +49,9 @@ const emit = defineEmits<{
     <button class="lyrics-menu-item" type="button" @click="emit('toggleFullscreen')">
       {{ isFullscreen ? '退出全屏' : '全屏显示' }}
     </button>
-    <button class="lyrics-menu-item" type="button" :disabled="!hasDownloadableCover" @click="emit('downloadCover')">下载封面</button>
+    <button v-if="isLyricSyncOpen" class="lyrics-menu-item" type="button" @click="emit('closeLyricSync')">关闭同步</button>
+    <button v-else class="lyrics-menu-item" type="button" @click="emit('openLyricSync')">同步歌词</button>
+    <button v-if="hasDownloadableCover" class="lyrics-menu-item" type="button" @click="emit('downloadCover')">下载封面</button>
     <button
       v-for="format in downloadableLyricFormats"
       :key="format"
@@ -62,7 +66,6 @@ const emit = defineEmits<{
       已关联歌词：{{ linkedLyricsLabel }}
     </span>
     <button class="lyrics-menu-item" type="button" @click="emit('openLyricSearch')">搜索歌词</button>
-    <button class="lyrics-menu-item" type="button" @click="emit('openLyricSync')">同步歌词</button>
     <button v-if="hasAssociatedLyrics" class="lyrics-menu-item" type="button" @click="emit('clearAssociatedLyrics')">取消关联歌词</button>
   </div>
 </template>

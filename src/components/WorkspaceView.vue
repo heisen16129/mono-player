@@ -169,6 +169,7 @@ function handleTrackListScroll(event: Event) {
         :spectrum-levels="spectrumLevels"
         :is-playing="isPlaying"
         :wide="isWideCollection"
+        disable-internal-paging
         enable-artist-links
         enable-context-menu
         @select-track="emit('selectTrack', $event)"

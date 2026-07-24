@@ -60,6 +60,7 @@ const lyricFontSize = computed(() => player.settings.lyricFontSize);
 const {
   closeFontMenu,
   closeFontMenuOnOutsidePointer,
+  closeLyricSyncControls,
   decreaseLyricFontSize,
   fontMenuLeft,
   fontMenuTop,
@@ -298,10 +299,12 @@ onBeforeUnmount(() => {
         :has-downloadable-cover="hasDownloadableCover()"
         :has-linked-lyrics="Boolean(activeLyrics?.lyrics.length && activeTrack)"
         :is-fullscreen="isFullscreen"
+        :is-lyric-sync-open="isLyricSyncOpen"
         :left="fontMenuLeft"
         :linked-lyrics-label="activeTrack ? linkedLyricsLabel(activeTrack) : ''"
         :top="fontMenuTop"
         @clear-associated-lyrics="clearAssociatedLyrics"
+        @close-lyric-sync="closeLyricSyncControls"
         @decrease-font-size="decreaseLyricFontSize"
         @download-cover="downloadCover"
         @download-lyrics="downloadLyrics"

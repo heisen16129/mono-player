@@ -34,7 +34,7 @@ export function usePlayerDockProgress({
 
   const totalDuration = computed(() => activeTrack.value?.duration || runtimeDuration.value || 0);
   const hasTotalDuration = computed(() => totalDuration.value > 0);
-  const totalDurationLabel = computed(() => (hasTotalDuration.value ? formatDuration(totalDuration.value) : '--:--'));
+  const totalDurationLabel = computed(() => (hasTotalDuration.value ? formatDuration(totalDuration.value) : '00:00'));
   const progress = computed(() => {
     if (!hasTotalDuration.value) return 0;
     return Math.min(100, (currentTime.value / totalDuration.value) * 100);

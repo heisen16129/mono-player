@@ -212,7 +212,7 @@ defineExpose({
           :playing="isPlaying && isActiveRow(track)"
           :spectrum-levels="isActiveRow(track) ? spectrumLevels ?? [] : []"
         />
-        <span class="track-title-text">{{ track.title }}</span>
+        <span class="track-title-text" :title="track.title">{{ track.title }}</span>
       </span>
       <span
         v-if="enableArtistLinks"
@@ -512,8 +512,8 @@ defineExpose({
   color: var(--smw-text-secondary);
 }
 
-.track-row span:last-child,
-.track-head span:last-child {
+.track-row > span:last-child,
+.track-head > span:last-child {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -538,8 +538,12 @@ defineExpose({
 }
 
 .track-title-text {
+  display: inline-block;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

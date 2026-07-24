@@ -245,8 +245,7 @@ const realMarketPlugins = computed(() => {
 
   return [...catalogById.keys()]
     .map((pluginId) => toRealMarketPlugin(catalogById.get(pluginId) ?? null, installedById.get(pluginId) ?? null))
-    .filter((plugin): plugin is PluginMarketItem => plugin !== null && isMarketPluginKind(plugin.kind))
-    .sort((left, right) => left.name.localeCompare(right.name, 'zh-Hans-CN'));
+    .filter((plugin): plugin is PluginMarketItem => plugin !== null && isMarketPluginKind(plugin.kind));
 });
 
 const marketPlugins = computed<PluginMarketItem[]>(() => realMarketPlugins.value);
@@ -1085,9 +1084,8 @@ onBeforeUnmount(() => {
             </button>
           </span>
         </div>
-        <div v-if="subscriptions.length === 0" class="subscription-empty subscription-card">
-          <strong>暂无订阅源</strong>
-          <small>添加订阅后，商城会显示远程插件。</small>
+        <div v-if="subscriptions.length === 0" class="subscription-empty">
+          <strong>暂无订阅</strong>
         </div>
       </div>
     </div>
@@ -1161,6 +1159,13 @@ onBeforeUnmount(() => {
 .plugin-subscriptions-panel {
   min-width: 0;
   min-height: 0;
+}
+
+.plugin-subscriptions-panel {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
 }
 
 .plugin-market-sidebar {
@@ -1705,8 +1710,9 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(auto-fit, minmax(260px, max-content));
   gap: 8px 10px;
   align-items: start;
+  flex: 1;
   margin: 2px 0 10px;
-  min-height: 28px;
+  min-height: 0;
 }
 
 .subscription-list:not(.visible) {
@@ -1751,6 +1757,21 @@ onBeforeUnmount(() => {
 .subscription-list small {
   color: var(--smw-text-secondary);
   font-size: 12px;
+}
+
+.subscription-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: var(--smw-text-secondary);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.subscription-empty strong {
+  color: var(--smw-text-secondary);
+  font-size: 13px;
+  font-weight: 560;
 }
 
 .subscription-card-actions {

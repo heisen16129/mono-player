@@ -38,6 +38,11 @@ export function useLyricsActionMenu(options: {
     closeFontMenu();
   }
 
+  function closeLyricSyncControls() {
+    isLyricSyncOpen.value = false;
+    closeFontMenu();
+  }
+
   function shiftLyricTiming(deltaSeconds: number) {
     lyricTimeOffset.value = Math.round((lyricTimeOffset.value + deltaSeconds) * 10) / 10;
     void options.scrollToActiveLyric();
@@ -58,6 +63,7 @@ export function useLyricsActionMenu(options: {
   return {
     closeFontMenu,
     closeFontMenuOnOutsidePointer,
+    closeLyricSyncControls,
     decreaseLyricFontSize,
     fontMenuLeft,
     fontMenuTop,
