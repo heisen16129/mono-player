@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "worker:e2e": "node scripts/worker-e2e.mjs",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
+    "tauri:dev": "powershell -ExecutionPolicy Bypass -File scripts/dev-tauri.ps1",
     "tauri:build": "tauri build"
   },
   "dependencies": {

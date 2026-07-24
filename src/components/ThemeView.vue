@@ -22,17 +22,17 @@ let unlistenSystemThemePreview: UnlistenFn | null = null;
 
 const localThemeCards = computed<BuiltInThemeCard[]>(() => [
   {
-    value: 'wallpaperTone',
-    title: resolveLocale(player.settings.locale) === 'en-US' ? 'System theme' : '\u7cfb\u7edf\u4e3b\u9898',
-    author: 'Mono Player',
-    tone: `wallpaper-tone system-${systemThemePreviewMode.value}`,
-  },
-  {
     value: 'blueWhite',
     title: t(player.settings.locale, 'blueWhiteTheme'),
     author: 'Mono Player',
     tone: 'blue-white',
     previewUrl: blueWhitePreview,
+  },
+  {
+    value: 'wallpaperTone',
+    title: resolveLocale(player.settings.locale) === 'en-US' ? 'System theme' : '\u7cfb\u7edf\u4e3b\u9898',
+    author: 'Mono Player',
+    tone: `wallpaper-tone system-${systemThemePreviewMode.value}`,
   },
 ]);
 

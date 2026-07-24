@@ -54,6 +54,7 @@ import { pluginSearchTrackKey, positiveStableStringHash } from './utils/trackKey
 import { shouldSkipWindowDrag } from './utils/windowDrag';
 
 const player = usePlayerStore();
+const isAppReady = ref(false);
 const { isSidebarCollapsed } = useSidebarCollapse();
 const isLyricsOpen = ref(false);
 const isLyricsTransitioning = ref(false);
@@ -90,6 +91,7 @@ let lastSystemMediaSyncAt = 0;
 const localLyricsRequests = new Map<string, Promise<TrackLyrics | null>>();
 const onlineLyricsRequests = new Map<string, Promise<void>>();
 const selectedLyricFormatByTrackKey = ref(new Map<string, string>());
+const startupLoadingText = computed(() => (resolveLocale(player.settings.locale) === 'en-US' ? 'Loading music library...' : '正在加载音乐库...'));
 
 const searchHistoryLimit = computed(() => Math.max(1, Math.round(player.settings.searchHistoryLimit)));
 const localLyricsMetadataByKey = ref(new Map<string, TrackLyrics>());
@@ -763,31 +765,43 @@ async function startWindowDrag(event: PointerEvent) {
   await getCurrentWindow().startDragging();
 }
 
-onMounted(async () => {
-  await player.hydratePersistedState();
-  if (!player.settings.audioCacheDir) {
-    const defaultCacheDir = await getRustBackendDefaultCacheDir();
-    if (defaultCacheDir) {
-      player.setAudioCacheDir(defaultCacheDir);
+async function initializeApp() {
+  try {
+    await player.hydratePersistedState();
+    if (!player.settings.audioCacheDir) {
+      const defaultCacheDir = await getRustBackendDefaultCacheDir();
+      if (defaultCacheDir) {
+        player.setAudioCacheDir(defaultCacheDir);
+      }
     }
+    await setRustBackendCacheDir(player.settings.audioCacheDir || null);
+    await loadLibraryPanelWidth();
+    await loadDownloadItems();
+    await loadSearchHistory();
+    await player.loadLibrary();
+    const restored = restoreSavedPlaybackSession();
+    if (restored) {
+      await restoreRustPlaybackQueue(restored.track, restored.currentTime);
+    } else {
+      rustPlaybackQueue.value = dedupePlaybackQueue(player.queue.filter((track) => track.path));
+    }
+  } finally {
+    isAppReady.value = true;
   }
-  await setRustBackendCacheDir(player.settings.audioCacheDir || null);
-  await loadLibraryPanelWidth();
-  await loadDownloadItems();
-  await loadSearchHistory();
+
   await startDesktopLyricsActionListener();
   await startDesktopLyricsReadyListener();
   await startDownloadEventListener();
   await startMcpSleepTimerListener();
   await startRustQueueEventListener();
   await startSystemMediaActionListener();
-  await player.loadLibrary();
-  const restored = restoreSavedPlaybackSession();
-  if (restored) {
-    await restoreRustPlaybackQueue(restored.track, restored.currentTime);
-  } else {
-    rustPlaybackQueue.value = dedupePlaybackQueue(player.queue.filter((track) => track.path));
-  }
+}
+
+onMounted(() => {
+  void initializeApp().catch((error) => {
+    player.error = getErrorMessage(error);
+    isAppReady.value = true;
+  });
 });
 
 onBeforeUnmount(() => {
@@ -1962,6 +1976,12 @@ function finishLyricsEnter() {
   >
     <WindowControls class="floating-window-controls" @request-close="handleAppCloseRequest" />
 
+    <div v-if="!isAppReady" class="app-startup-loading" role="status" aria-live="polite">
+      <div class="app-startup-mark">M</div>
+      <span>{{ startupLoadingText }}</span>
+    </div>
+
+    <template v-else>
     <PlaylistContextMenu
       v-if="playlistContextMenu"
       :menu="playlistContextMenu"
@@ -2198,10 +2218,39 @@ function finishLyricsEnter() {
       @toggle-playback-mode="togglePlaybackMode"
     />
 
+    </template>
+
   </main>
 </template>
 
 <style scoped>
+.app-startup-loading {
+  position: relative;
+  z-index: 2;
+  grid-row: 1 / 3;
+  display: grid;
+  gap: 12px;
+  place-content: center;
+  justify-items: center;
+  min-height: 100vh;
+  color: var(--smw-text-secondary);
+  background: var(--smw-bg-canvas);
+  font-size: 13px;
+}
+
+.app-startup-mark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: var(--smw-button-primary);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
 .online-toast {
   position: fixed;
   top: 72px;

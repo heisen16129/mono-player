@@ -108,7 +108,6 @@ button:disabled {
 
 .mono-window.has-theme-background::after {
   background: rgba(246, 252, 239, 0.28);
-  backdrop-filter: blur(2px);
 }
 
 .window-controls {

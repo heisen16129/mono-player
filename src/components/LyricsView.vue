@@ -343,7 +343,13 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow: hidden;
   padding: 24px var(--lyrics-view-padding-x) 16px;
-  background: var(--lyrics-surface, var(--smw-bg-canvas));
+  background: var(--smw-lyrics-bg, var(--smw-bg-canvas));
+}
+
+.lyrics-view.has-cover-background {
+  background-image: var(--lyrics-cover-bg);
+  background-position: center;
+  background-size: cover;
 }
 
 .lyrics-view::before,
@@ -365,22 +371,22 @@ onBeforeUnmount(() => {
 }
 
 .lyrics-view.has-cover-background::before {
-  opacity: 0.42;
+  opacity: 1;
 }
 
 .lyrics-view::after {
   background:
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--smw-lyrics-bg) 58%, transparent) 0%,
-      color-mix(in srgb, var(--smw-lyrics-bg) 42%, transparent) 48%,
-      color-mix(in srgb, var(--smw-lyrics-bg) 68%, transparent) 100%
+      color-mix(in srgb, var(--smw-lyrics-bg) 82%, transparent) 0%,
+      color-mix(in srgb, var(--smw-lyrics-bg) 68%, transparent) 48%,
+      color-mix(in srgb, var(--smw-lyrics-bg) 88%, transparent) 100%
     ),
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.48) 0%,
-      transparent 56%,
-      color-mix(in srgb, var(--smw-lyrics-bg) 18%, transparent) 100%
+      rgba(255, 255, 255, 0.54) 0%,
+      color-mix(in srgb, var(--smw-lyrics-bg) 24%, transparent) 56%,
+      color-mix(in srgb, var(--smw-lyrics-bg) 42%, transparent) 100%
   );
   opacity: 0;
 }
