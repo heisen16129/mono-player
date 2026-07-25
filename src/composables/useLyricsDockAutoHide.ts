@@ -10,13 +10,18 @@ interface LyricsDockAutoHideOptions {
 
 export function useLyricsDockAutoHide({ activeTrack, autoHideEnabled, isAudioPlaying, isLyricsOpen }: LyricsDockAutoHideOptions) {
   const isLyricsDockHovered = ref(false);
+  const isLyricsDockManuallyHidden = ref(false);
   const isLyricsDockReadyToHide = ref(false);
   let lyricsDockHideTimer: number | null = null;
 
   const shouldAutoHideLyricsDock = computed(() => {
     return autoHideEnabled.value && isLyricsOpen.value && isAudioPlaying.value && isLyricsDockReadyToHide.value;
   });
-  const isLyricsDockHidden = computed(() => shouldAutoHideLyricsDock.value && !isLyricsDockHovered.value);
+  const isLyricsDockHidden = computed(() => {
+    if (!isLyricsOpen.value) return false;
+    if (isLyricsDockManuallyHidden.value) return true;
+    return shouldAutoHideLyricsDock.value && !isLyricsDockHovered.value;
+  });
 
   function clearLyricsDockHideTimer() {
     if (lyricsDockHideTimer === null) return;
@@ -46,6 +51,19 @@ export function useLyricsDockAutoHide({ activeTrack, autoHideEnabled, isAudioPla
     isLyricsDockHovered.value = false;
   }
 
+  function hideLyricsDock() {
+    if (!isLyricsOpen.value) return;
+    isLyricsDockManuallyHidden.value = true;
+    isLyricsDockHovered.value = false;
+  }
+
+  function showLyricsDock() {
+    isLyricsDockManuallyHidden.value = false;
+    isLyricsDockReadyToHide.value = false;
+    isLyricsDockHovered.value = false;
+    scheduleLyricsDockHide();
+  }
+
   watch(isAudioPlaying, (playing) => {
     if (!playing) {
       clearLyricsDockHideTimer();
@@ -61,6 +79,7 @@ export function useLyricsDockAutoHide({ activeTrack, autoHideEnabled, isAudioPla
   watch(
     () => activeTrack.value?.id,
     () => {
+      isLyricsDockManuallyHidden.value = false;
       scheduleLyricsDockHide();
       isLyricsDockHovered.value = false;
     },
@@ -68,7 +87,10 @@ export function useLyricsDockAutoHide({ activeTrack, autoHideEnabled, isAudioPla
 
   watch(
     [isLyricsOpen, autoHideEnabled],
-    () => {
+    ([open]) => {
+      if (!open) {
+        isLyricsDockManuallyHidden.value = false;
+      }
       scheduleLyricsDockHide();
       isLyricsDockHovered.value = false;
     },
@@ -77,9 +99,12 @@ export function useLyricsDockAutoHide({ activeTrack, autoHideEnabled, isAudioPla
   onBeforeUnmount(clearLyricsDockHideTimer);
 
   return {
+    hideLyricsDock,
     hoverLyricsDock,
     isLyricsDockHidden,
+    isLyricsDockManuallyHidden,
     leaveLyricsDock,
+    showLyricsDock,
     shouldAutoHideLyricsDock,
   };
 }

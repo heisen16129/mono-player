@@ -57,20 +57,21 @@ export function createPlayerThemeController({ settings, customThemes, cachedSyst
   }
 
   function toggleTheme() {
+    if (settings.value.theme === 'wallpaperTone') {
+      settings.value.theme = 'blueWhite';
+      persistSettings();
+      return;
+    }
+
     settings.value.theme =
       settings.value.theme === 'dark'
         ? 'light'
         : settings.value.theme === 'light'
           ? 'blueWhite'
           : settings.value.theme === 'blueWhite'
-            ? 'wallpaperTone'
-            : settings.value.theme === 'wallpaperTone'
-              ? 'desktopGlass'
+            ? 'desktopGlass'
             : 'dark';
     persistSettings();
-    if (settings.value.theme === 'wallpaperTone') {
-      scheduleSystemThemeRefresh(true);
-    }
   }
 
   function setTheme(theme: PlayerSettings['theme']) {
@@ -101,7 +102,7 @@ export function createPlayerThemeController({ settings, customThemes, cachedSyst
     customThemes.value = customThemes.value.filter((theme) => theme.id !== themeId);
     persistCustomThemes();
     if (settings.value.theme === themeId) {
-      setTheme('wallpaperTone');
+      setTheme('blueWhite');
       return;
     }
 

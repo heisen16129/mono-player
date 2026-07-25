@@ -24,6 +24,7 @@ const props = defineProps<{
   activeTrack: Track | null;
   currentTime: number;
   isPlaying: boolean;
+  isPlayerDockHidden: boolean;
   lyricFormat?: string | null;
   lyricsMetadata?: TrackLyrics | null;
   lyricsStatus?: 'idle' | 'loading' | 'ready' | 'empty' | 'error';
@@ -42,9 +43,20 @@ const emit = defineEmits<{
     trackId?: string | null,
     trackRaw?: unknown,
   ];
+  hidePlayerDock: [];
   notify: [message: string, variant?: 'success' | 'error'];
   seek: [time: number];
+  showPlayerDock: [];
 }>();
+
+function togglePlayerDock() {
+  if (props.isPlayerDockHidden) {
+    emit('showPlayerDock');
+  } else {
+    emit('hidePlayerDock');
+  }
+  closeFontMenu();
+}
 
 const loadedLyricLines = ref<LyricLine[]>([]);
 const isLoadingLyrics = ref(false);
@@ -251,7 +263,10 @@ onBeforeUnmount(() => {
 <template>
   <section
     class="lyrics-view"
-    :class="{ 'has-cover-background': backgroundCoverUrl }"
+    :class="{
+      'has-cover-background': backgroundCoverUrl,
+      'is-player-dock-hidden': isPlayerDockHidden,
+    }"
     :style="lyricsViewStyle"
     @contextmenu.prevent="openActionMenu"
   >
@@ -273,6 +288,7 @@ onBeforeUnmount(() => {
         :is-empty="!loadedLyricLines.length"
         :is-lyric-sync-open="isLyricSyncOpen"
         :is-lyrics-pending="isLyricsPending"
+        :is-player-dock-hidden="isPlayerDockHidden"
         :is-scrolling="isLyricsListScrolling"
         :label="t(player.settings.locale, 'lyrics')"
         :lines="loadedLyricLines"
@@ -300,6 +316,7 @@ onBeforeUnmount(() => {
         :has-linked-lyrics="Boolean(activeLyrics?.lyrics.length && activeTrack)"
         :is-fullscreen="isFullscreen"
         :is-lyric-sync-open="isLyricSyncOpen"
+        :is-player-dock-hidden="isPlayerDockHidden"
         :left="fontMenuLeft"
         :linked-lyrics-label="activeTrack ? linkedLyricsLabel(activeTrack) : ''"
         :top="fontMenuTop"
@@ -309,6 +326,7 @@ onBeforeUnmount(() => {
         @download-cover="downloadCover"
         @download-lyrics="downloadLyrics"
         @increase-font-size="increaseLyricFontSize"
+        @toggle-player-dock="togglePlayerDock"
         @open-lyric-search="openLyricSearchDialog"
         @open-lyric-sync="openLyricSyncControls"
         @toggle-fullscreen="toggleLyricsFullscreen(); closeFontMenu()"
@@ -406,6 +424,7 @@ onBeforeUnmount(() => {
 .lyrics-stage {
   display: grid;
   grid-template-columns: minmax(240px, 360px) minmax(520px, 1.7fr);
+  grid-template-rows: minmax(0, 1fr) var(--player-height);
   gap: clamp(44px, 6vw, 86px);
   align-items: center;
   max-width: 1280px;
@@ -413,8 +432,12 @@ onBeforeUnmount(() => {
   margin: 0 auto;
 }
 
-.mono-window.lyrics-open .lyrics-stage {
-  height: calc(100% - var(--player-height) - 78px);
+.lyrics-stage :deep(.lyrics-cover) {
+  grid-row: 1;
+}
+
+.lyrics-stage :deep(.lyrics-panel-wrap) {
+  grid-row: 1 / 3;
 }
 
 </style>

@@ -390,9 +390,12 @@ const {
 });
 
 const {
+  hideLyricsDock,
   hoverLyricsDock,
   isLyricsDockHidden,
+  isLyricsDockManuallyHidden,
   leaveLyricsDock,
+  showLyricsDock,
   shouldAutoHideLyricsDock,
 } = useLyricsDockAutoHide({
   activeTrack,
@@ -2052,6 +2055,7 @@ function finishLyricsEnter() {
         :current-time="playbackTime"
         :is-playing="isAudioPlaying"
         :lyric-format="playbackLyricFormat"
+        :is-player-dock-hidden="isLyricsDockManuallyHidden"
         :lyrics-metadata="playbackLyricMetadata"
         :lyrics-error="lyricsViewState.error"
         :lyrics-status="activeLyricsViewStatus"
@@ -2060,6 +2064,8 @@ function finishLyricsEnter() {
         @lyrics-cleared="clearActiveTrackLyrics"
         @lyrics-found="updateActiveTrackLyrics"
         @notify="showOnlineToast"
+        @hide-player-dock="hideLyricsDock"
+        @show-player-dock="showLyricsDock"
         @seek="seekToLyric"
       />
     </Transition>

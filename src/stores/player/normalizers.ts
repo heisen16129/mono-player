@@ -80,7 +80,9 @@ export function normalizeSettings(value: unknown): PlayerSettings {
     const useThemeLyricColor = parsed.useThemeLyricColor !== false;
     const rawTheme = String((parsed as { theme?: unknown }).theme ?? '');
     const theme: AppTheme =
-      rawTheme === 'windowsTone'
+      rawTheme === 'wallpaperTone'
+        ? 'blueWhite'
+        : rawTheme === 'windowsTone'
         ? 'desktopGlass'
         : isBuiltInTheme(rawTheme) || rawTheme.startsWith('custom:')
           ? rawTheme as AppTheme

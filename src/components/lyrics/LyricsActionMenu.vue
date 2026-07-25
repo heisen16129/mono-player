@@ -7,6 +7,7 @@ defineProps<{
   hasLinkedLyrics: boolean;
   isFullscreen: boolean;
   isLyricSyncOpen: boolean;
+  isPlayerDockHidden: boolean;
   left: number;
   linkedLyricsLabel: string;
   top: number;
@@ -22,6 +23,7 @@ const emit = defineEmits<{
   openLyricSearch: [];
   openLyricSync: [];
   toggleFullscreen: [];
+  togglePlayerDock: [];
 }>();
 </script>
 
@@ -51,6 +53,9 @@ const emit = defineEmits<{
     </button>
     <button v-if="isLyricSyncOpen" class="lyrics-menu-item" type="button" @click="emit('closeLyricSync')">关闭同步</button>
     <button v-else class="lyrics-menu-item" type="button" @click="emit('openLyricSync')">同步歌词</button>
+    <button class="lyrics-menu-item" type="button" @click="emit('togglePlayerDock')">
+      {{ isPlayerDockHidden ? '显示播放栏' : '关闭播放栏' }}
+    </button>
     <button v-if="hasDownloadableCover" class="lyrics-menu-item" type="button" @click="emit('downloadCover')">下载封面</button>
     <button
       v-for="format in downloadableLyricFormats"

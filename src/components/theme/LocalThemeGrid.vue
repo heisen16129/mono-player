@@ -13,7 +13,6 @@ defineProps<{
   localThemeCards: BuiltInThemeCard[];
   locale: Locale;
   selectedTheme: AppTheme;
-  systemThemePreviewStyle: Record<string, string>;
   themePackageText: string;
 }>();
 
@@ -45,7 +44,6 @@ const emit = defineEmits<{
       <span
         class="theme-card-preview"
         :class="theme.tone"
-        :style="theme.value === 'wallpaperTone' ? systemThemePreviewStyle : undefined"
       >
         <img v-if="theme.previewUrl" class="theme-card-image" :src="theme.previewUrl" alt="" draggable="false" />
         <span class="theme-card-cover" aria-hidden="true"></span>

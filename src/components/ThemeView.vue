@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed } from 'vue';
 import blueWhitePreview from '../assets/theme-previews/blue-white.svg';
 import { resolveLocale, t } from '../i18n';
-import { getSystemThemeState, importThemeFolder } from '../services/music';
+import { importThemeFolder } from '../services/music';
 import { listInstalledPlugins, readPluginTheme, uninstallPlugin } from '../services/plugins';
 import { usePlayerStore } from '../stores/player';
-import type { AppTheme, CustomTheme, SystemThemeState } from '../types/music';
+import type { AppTheme, CustomTheme } from '../types/music';
 import type { PluginManifest } from '../types/plugin';
 import { getErrorMessage } from '../utils/error';
 import PageHeader from './PageHeader.vue';
@@ -16,9 +15,6 @@ import LocalThemeGrid from './theme/LocalThemeGrid.vue';
 import type { BuiltInThemeCard } from './theme/types';
 
 const player = usePlayerStore();
-const systemThemePreviewMode = ref<SystemThemeState['mode']>('light');
-const systemThemePreviewAccent = ref('#dfe4f2');
-let unlistenSystemThemePreview: UnlistenFn | null = null;
 
 const localThemeCards = computed<BuiltInThemeCard[]>(() => [
   {
@@ -28,49 +24,7 @@ const localThemeCards = computed<BuiltInThemeCard[]>(() => [
     tone: 'blue-white',
     previewUrl: blueWhitePreview,
   },
-  {
-    value: 'wallpaperTone',
-    title: resolveLocale(player.settings.locale) === 'en-US' ? 'System theme' : '\u7cfb\u7edf\u4e3b\u9898',
-    author: 'Mono Player',
-    tone: `wallpaper-tone system-${systemThemePreviewMode.value}`,
-  },
 ]);
-
-const systemThemePreviewStyle = computed(() => ({
-  '--system-preview-accent': systemThemePreviewAccent.value,
-}));
-
-function updateSystemThemePreview(state: SystemThemeState) {
-  systemThemePreviewMode.value = state.mode;
-  systemThemePreviewAccent.value = state.wallpaperColor
-    ? `rgb(${state.wallpaperColor.r} ${state.wallpaperColor.g} ${state.wallpaperColor.b})`
-    : state.mode === 'dark'
-      ? '#6d7480'
-      : '#dfe4f2';
-}
-
-async function refreshSystemThemePreview() {
-  try {
-    const state = await getSystemThemeState();
-    updateSystemThemePreview(state);
-  } catch {
-    systemThemePreviewMode.value = 'light';
-    systemThemePreviewAccent.value = '#dfe4f2';
-  }
-}
-
-onMounted(async () => {
-  void refreshSystemThemePreview();
-  unlistenSystemThemePreview = await listen<SystemThemeState>('system-theme-changed', (event) => {
-    updateSystemThemePreview(event.payload);
-  });
-  window.addEventListener('focus', refreshSystemThemePreview);
-});
-
-onUnmounted(() => {
-  window.removeEventListener('focus', refreshSystemThemePreview);
-  unlistenSystemThemePreview?.();
-});
 
 const importThemeText = computed(() => resolveLocale(player.settings.locale) === 'en-US' ? 'Import theme' : '\u5bfc\u5165\u4e3b\u9898');
 const themePackageText = computed(() => resolveLocale(player.settings.locale) === 'en-US' ? 'Theme package folder' : '\u4e3b\u9898\u5305\u6587\u4ef6\u5939');
@@ -163,7 +117,6 @@ async function importCustomTheme() {
       :local-theme-cards="localThemeCards"
       :locale="player.settings.locale"
       :selected-theme="player.settings.theme"
-      :system-theme-preview-style="systemThemePreviewStyle"
       :theme-package-text="themePackageText"
       @import-theme="importCustomTheme"
       @remove-custom-theme="removeCustomTheme"
