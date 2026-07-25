@@ -50,7 +50,7 @@ const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist
 
 <style scoped>
 .playlist-dialog-body {
-  padding: 12px 12px 18px;
+  padding: 16px 18px 20px;
 }
 
 .playlist-name-field {
@@ -77,13 +77,15 @@ const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist
 }
 
 .scan-dialog-actions {
-  --button-min-height: 30px;
-  --button-padding-x: 14px;
+  --button-min-height: 32px;
+  --button-padding-x: 16px;
+  --button-min-width: 58px;
 
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  padding: 16px 12px 12px;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--smw-border-soft);
 }
 
 </style>

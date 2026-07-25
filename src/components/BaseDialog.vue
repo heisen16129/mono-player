@@ -94,7 +94,7 @@ defineEmits<{
   border: 1px solid var(--smw-border-soft);
   border-radius: 8px;
   background: var(--smw-bg-workspace);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.14);
 }
 
 .base-dialog-head {
@@ -102,7 +102,8 @@ defineEmits<{
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 12px 12px;
+  min-height: 64px;
+  padding: 16px 18px 14px;
   border-bottom: 1px solid var(--smw-border-soft);
 }
 
@@ -110,6 +111,21 @@ defineEmits<{
   margin: 0;
   color: var(--smw-text-primary);
   font-size: 17px;
-  font-weight: 560;
+  font-weight: 650;
+}
+
+.base-dialog-head .icon-button {
+  width: 30px;
+  height: 30px;
+  margin-right: -4px;
+  border-radius: 7px;
+  color: var(--smw-text-secondary);
+}
+
+.base-dialog-head .icon-button:hover:not(:disabled),
+.base-dialog-head .icon-button:focus-visible {
+  color: var(--smw-text-primary);
+  background: var(--smw-bg-hover);
+  outline: none;
 }
 </style>

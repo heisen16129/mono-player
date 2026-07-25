@@ -207,8 +207,8 @@ function updateMinutes(event: Event) {
   border: 1px solid var(--smw-border-soft);
   border-radius: 8px;
   color: var(--smw-text-body);
-  background: var(--smw-bg-workspace);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.14);
+  background: var(--smw-player-bg);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
 }
 
 .sleep-timer-status header {
@@ -219,7 +219,8 @@ function updateMinutes(event: Event) {
 
 .sleep-timer-status strong {
   color: var(--smw-text-primary);
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 650;
 }
 
 .sleep-timer-status header button {
@@ -268,6 +269,8 @@ function updateMinutes(event: Event) {
   color: var(--smw-text-primary);
   background: var(--smw-bg-elevated);
   font: inherit;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -283,8 +286,8 @@ function updateMinutes(event: Event) {
 
 .sleep-timer-dialog-body {
   display: grid;
-  gap: 18px;
-  padding: 22px;
+  gap: 14px;
+  padding: 16px;
 }
 
 .sleep-timer-dialog-body footer {
@@ -302,19 +305,25 @@ function updateMinutes(event: Event) {
 .sleep-timer-presets {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
 }
 
 .sleep-timer-presets button {
   display: grid;
-  min-height: 58px;
+  min-height: 50px;
   place-items: center;
-  padding: 8px 0;
+  padding: 6px 0;
   border: 1px solid var(--smw-border-soft);
   border-radius: 8px;
   color: var(--smw-text-primary);
   background: var(--smw-bg-elevated);
+  font: inherit;
   cursor: pointer;
+}
+
+.sleep-timer-presets strong {
+  font-size: 15px;
+  font-weight: 650;
 }
 
 .sleep-timer-presets button.is-active {
@@ -333,7 +342,7 @@ function updateMinutes(event: Event) {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 24px;
+  gap: 18px;
   color: var(--smw-text-secondary);
   font-size: 12px;
 }
@@ -344,8 +353,9 @@ function updateMinutes(event: Event) {
 }
 
 .sleep-timer-custom-time {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  gap: 18px;
 }
 
 .sleep-timer-custom-time label {
@@ -355,15 +365,15 @@ function updateMinutes(event: Event) {
 }
 
 .sleep-timer-custom-time input {
-  width: 60px;
-  height: 40px;
+  width: 64px;
+  height: 36px;
   padding: 0 12px;
   border: 1px solid var(--smw-border-soft);
   border-radius: 8px;
   color: var(--smw-text-primary);
   background: var(--smw-bg-elevated);
   font: inherit;
-  font-weight: 700;
+  font-weight: 650;
   text-align: center;
 }
 
@@ -383,31 +393,35 @@ function updateMinutes(event: Event) {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 44px;
+  min-height: 38px;
   padding: 0 12px;
   background: color-mix(in srgb, var(--smw-bg-selected) 36%, transparent);
   cursor: pointer;
 }
 
 .sleep-timer-action-options input {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   accent-color: var(--smw-button-primary);
 }
 
 .sleep-timer-dialog-body footer {
-  gap: 12px;
+  gap: 10px;
+  margin: 0 -16px -16px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--smw-border-soft);
 }
 
 .sleep-timer-dialog-body footer button {
   flex: 1;
-  height: 46px;
+  height: 38px;
   border: 1px solid var(--smw-border-soft);
   border-radius: 8px;
   color: var(--smw-text-primary);
   background: var(--smw-bg-elevated);
   font: inherit;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
 }
 

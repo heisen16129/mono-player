@@ -137,6 +137,10 @@ defineExpose({ panel });
   padding: 0 34px 0 0;
 }
 
+.lyrics-panel-wrap.is-dock-visible .lyrics-panel.is-empty {
+  padding-bottom: calc(var(--player-height) + 14px);
+}
+
 .lyrics-hint {
   color: var(--smw-text-muted);
   font-size: 13px;
@@ -146,7 +150,9 @@ defineExpose({ panel });
 
 .lyrics-empty {
   display: grid;
-  gap: 12px;
+  min-height: 0;
+  gap: 8px;
+  align-content: center;
   justify-items: center;
 }
 

@@ -195,7 +195,7 @@ button:disabled {
   border-radius: var(--button-radius, 8px);
   font: inherit;
   font-size: var(--button-font-size, 13px);
-  font-weight: var(--button-font-weight, 560);
+  font-weight: var(--button-font-weight, 600);
   white-space: nowrap;
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease, opacity 140ms ease, box-shadow 140ms ease;

@@ -68,14 +68,14 @@ defineEmits<{
 
 <style scoped>
 .scan-dialog-toolbar {
-  --button-min-height: 30px;
+  --button-min-height: 32px;
   --button-padding-x: 14px;
 
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 12px;
+  padding: 14px 18px;
   color: var(--smw-text-secondary);
   font-size: 12px;
 }
@@ -84,9 +84,10 @@ defineEmits<{
   display: grid;
   align-content: start;
   height: 238px;
-  margin: 0 12px;
+  margin: 0 18px;
   overflow: auto;
   border: 1px solid var(--smw-border-soft);
+  border-radius: 7px;
   background: var(--smw-bg-input);
 }
 
@@ -134,19 +135,22 @@ defineEmits<{
 }
 
 .scan-dialog-actions {
-  --button-min-height: 30px;
-  --button-padding-x: 14px;
+  --button-min-height: 32px;
+  --button-padding-x: 16px;
+  --button-min-width: 58px;
 
   display: flex;
   align-items: center;
   gap: 8px;
-  justify-content: space-between;
-  padding: 16px 12px 12px;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--smw-border-soft);
 }
 
 .scan-progress {
   min-width: 0;
-  margin: 0;
+  margin: 0 auto 0 0;
   overflow: hidden;
   color: var(--smw-text-secondary);
   font-size: 12px;

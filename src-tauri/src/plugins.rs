@@ -110,6 +110,13 @@ pub struct PluginLyricsMetadata {
     pub(crate) track_raw: Option<serde_json::Value>,
 }
 
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginLyricsPlaybackGuard {
+    provider_id: String,
+    source_id: String,
+}
+
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginLyricVariant {
@@ -726,10 +733,20 @@ pub async fn resolve_plugin_lyrics_metadata(
     provider_id: String,
     track: serde_json::Value,
     plugins: Vec<PluginPlaybackPlanPlugin>,
+    playback_guard: Option<PluginLyricsPlaybackGuard>,
 ) -> Result<ApiResponse<PluginLyricsMetadata>, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        resolve_plugin_lyrics_metadata_backend(&worker, provider_id, track, plugins)
+        resolve_plugin_lyrics_metadata_backend_checked(&worker, provider_id, track, plugins, || {
+            let Some(guard) = playback_guard.as_ref() else {
+                return Ok(());
+            };
+            if crate::player::is_current_plugin_queue_track(&app, &guard.provider_id, &guard.source_id)? {
+                Ok(())
+            } else {
+                Err("Playback request was replaced.".to_string())
+            }
+        })
     })
     .await
     .map_err(|err| err.to_string())?;
@@ -742,6 +759,19 @@ pub(crate) fn resolve_plugin_lyrics_metadata_backend(
     track: serde_json::Value,
     plugins: Vec<PluginPlaybackPlanPlugin>,
 ) -> Result<PluginLyricsMetadata, String> {
+    resolve_plugin_lyrics_metadata_backend_checked(worker, provider_id, track, plugins, || Ok(()))
+}
+
+fn resolve_plugin_lyrics_metadata_backend_checked<F>(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    provider_id: String,
+    track: serde_json::Value,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+    mut should_continue: F,
+) -> Result<PluginLyricsMetadata, String>
+where
+    F: FnMut() -> Result<(), String>,
+{
     let plugin = plugins
         .into_iter()
         .find(|plugin| plugin.id == provider_id)
@@ -768,12 +798,14 @@ pub(crate) fn resolve_plugin_lyrics_metadata_backend(
         "track": plugin_track,
     });
 
+    should_continue()?;
     let response = worker.invoke_plugin(
         entry,
         request,
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
     )?;
+    should_continue()?;
 
     normalize_plugin_lyrics_metadata(unwrap_plugin_response_envelope(response)?)
 }

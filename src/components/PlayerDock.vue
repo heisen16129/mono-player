@@ -185,15 +185,37 @@ function normalizedBackendPath(path: string | null | undefined) {
   return (path ?? '').replace(/\\/g, '/').toLocaleLowerCase();
 }
 
+function queueSourceKey(track: Track) {
+  const providerId = track.sourceProviderId?.trim();
+  const sourceId = track.sourceId?.trim();
+  if (providerId && sourceId) return `plugin://${providerId}/${sourceId}`;
+  return track.path;
+}
+
+function currentQueueTrack() {
+  const snapshot = rustQueueSnapshot.value;
+  if (!snapshot || typeof snapshot.currentIndex !== 'number') return null;
+  return snapshot.tracks[snapshot.currentIndex] ?? null;
+}
+
 function isActiveRustPath(path: string | null | undefined) {
   const normalizedPath = normalizedBackendPath(path);
   return normalizedPath === normalizedBackendPath(props.activeTrack?.path)
+    || normalizedPath === normalizedBackendPath(rustQueueSnapshot.value?.currentSource)
     || normalizedPath === normalizedBackendPath(seamlessQueuedSource);
 }
 
 function findQueueTrackBySource(source: string) {
   const normalizedSource = normalizedBackendPath(source);
-  return props.queue.find((track) => normalizedBackendPath(track.path) === normalizedSource) ?? null;
+  const track = props.queue.find((track) => (
+    normalizedBackendPath(track.path) === normalizedSource
+    || normalizedBackendPath(queueSourceKey(track)) === normalizedSource
+  ));
+  if (track) return track;
+  if (normalizedSource === normalizedBackendPath(rustQueueSnapshot.value?.currentSource)) {
+    return currentQueueTrack();
+  }
+  return null;
 }
 
 function setQueueControlElement(element: unknown) {
@@ -343,6 +365,7 @@ watch(
 );
 
 async function togglePlayback() {
+  if (props.isPreparingActiveTrack) return;
   if (!props.activeTrack?.path) return;
 
   if (!props.canControlPlayback || !rustBackendActive.value) {

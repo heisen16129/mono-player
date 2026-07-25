@@ -121,7 +121,12 @@ export async function searchPluginLyrics(keyword: string, providerId?: string | 
   return { tracks: [], isEnd: true };
 }
 
-export async function getPluginLyricsMetadata(track: PluginSearchTrack): Promise<PluginLyricsMetadata> {
+export interface PluginLyricsPlaybackGuard {
+  providerId: string;
+  sourceId: string;
+}
+
+export async function getPluginLyricsMetadata(track: PluginSearchTrack, playbackGuard?: PluginLyricsPlaybackGuard): Promise<PluginLyricsMetadata> {
   const plugins = await listInstalledPlugins();
   if (!isTauriRuntime()) throw new Error('Plugin lyrics are only available in the desktop runtime.');
 
@@ -129,6 +134,7 @@ export async function getPluginLyricsMetadata(track: PluginSearchTrack): Promise
     providerId: track.providerId,
     track,
     plugins,
+    playbackGuard,
   });
 }
 

@@ -272,16 +272,9 @@ function submit() {
 </template>
 
 <style scoped>
-:deep(.metadata-dialog-panel .base-dialog-head) {
-  align-items: flex-start;
-  padding: 16px 18px 14px;
-}
-
 .metadata-dialog-title h2 {
   margin: 0;
   color: var(--smw-text-primary);
-  font-size: 17px;
-  font-weight: 650;
 }
 
 .metadata-dialog-title p {

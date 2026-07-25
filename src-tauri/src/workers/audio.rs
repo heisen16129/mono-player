@@ -9,7 +9,7 @@ use rodio::{
     source::SeekError,
     Decoder, OutputStream, OutputStreamBuilder, Sink, Source,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::hash_map::DefaultHasher,
@@ -25,6 +25,9 @@ use std::{
 
 const CACHE_FILE_PREFIX: &str = "mono-stream-";
 const CACHE_FILE_EXTENSION: &str = "audio";
+const REUSABLE_CACHE_TRACKS_DIR: &str = "tracks";
+const REUSABLE_CACHE_METADATA_DIR: &str = "metadata";
+const REUSABLE_CACHE_METADATA_VERSION: u64 = 1;
 const PLAY_FADE_DURATION: Duration = Duration::from_millis(700);
 const PAUSE_FADE_DURATION: Duration = Duration::from_millis(450);
 const STOP_FADE_DURATION: Duration = Duration::from_millis(700);
@@ -39,6 +42,19 @@ const HTTP_STREAM_READ_TIMEOUT: Duration = Duration::from_secs(8);
 pub(crate) struct AudioWorkerState {
     cache_dir: Mutex<PathBuf>,
     worker: Mutex<WorkerProcess>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OnlineAudioCacheIdentity {
+    pub(crate) provider_id: String,
+    pub(crate) track_id: String,
+    pub(crate) quality: String,
+}
+
+pub(crate) struct OnlineAudioCacheLookup {
+    pub(crate) path: PathBuf,
+    pub(crate) identity: OnlineAudioCacheIdentity,
 }
 
 impl AudioWorkerState {
@@ -123,6 +139,7 @@ impl AudioWorkerState {
         restart: bool,
         fade: bool,
         fade_duration_ms: Option<u64>,
+        cache_identity: Option<OnlineAudioCacheIdentity>,
     ) -> Result<(), String> {
         self.expect_ok(WorkerRequest {
             id: "audio-play-url".to_string(),
@@ -132,8 +149,30 @@ impl AudioWorkerState {
                 "restart": restart,
                 "fade": fade,
                 "fadeDurationMs": fade_duration_ms,
+                "cacheIdentity": cache_identity,
             }),
         })
+    }
+
+    pub(crate) fn completed_cache_for_track(
+        &self,
+        provider_id: &str,
+        track_id: &str,
+        quality: Option<&str>,
+    ) -> Option<OnlineAudioCacheLookup> {
+        let cache_dir = self.cache_dir.lock().ok()?.clone();
+        completed_cache_for_track(&cache_dir, provider_id, track_id, quality)
+    }
+
+    pub(crate) fn remove_cached_track(&self, identity: &OnlineAudioCacheIdentity) {
+        let Ok(cache_dir) = self.cache_dir.lock().map(|path| path.clone()) else {
+            return;
+        };
+        let Some(target) = reusable_cache_target(&cache_dir, identity.clone()) else {
+            return;
+        };
+        let _ = fs::remove_file(target.audio_path);
+        let _ = fs::remove_file(target.metadata_path);
     }
 
     pub(crate) fn pause(&self, fade: bool) -> Result<(), String> {
@@ -392,6 +431,7 @@ fn handle_request(runtime: &mut AudioWorkerRuntime, request: WorkerRequest) -> W
                 payload.restart,
                 payload.fade,
                 payload.fade_duration_ms,
+                payload.cache_identity,
                 PathBuf::from(&runtime.cache_dir),
             )
         }),
@@ -461,6 +501,8 @@ struct PlayUrlPayload {
     fade: bool,
     #[serde(default, rename = "fadeDurationMs")]
     fade_duration_ms: Option<u64>,
+    #[serde(default, rename = "cacheIdentity")]
+    cache_identity: Option<OnlineAudioCacheIdentity>,
 }
 
 #[derive(Deserialize)]
@@ -584,6 +626,7 @@ impl AudioBackend {
         restart: bool,
         fade: bool,
         fade_duration_ms: Option<u64>,
+        cache_identity: Option<OnlineAudioCacheIdentity>,
         cache_dir: PathBuf,
     ) -> Result<(), String> {
         let url = url.trim().to_string();
@@ -598,7 +641,7 @@ impl AudioBackend {
             }
         }
 
-        let reader = StreamingHttpReader::open(url.clone(), cache_dir)?;
+        let reader = StreamingHttpReader::open(url.clone(), cache_dir, cache_identity)?;
         let content_length = reader.content_length();
         let stream_state = reader.shared_state();
         let cache_path = reader.cache_path();
@@ -958,8 +1001,33 @@ struct StreamingHttpReader {
     position: u64,
 }
 
+#[derive(Clone)]
+struct ReusableAudioCacheTarget {
+    identity: OnlineAudioCacheIdentity,
+    cache_key: String,
+    audio_path: PathBuf,
+    metadata_path: PathBuf,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReusableAudioCacheMetadata {
+    version: u64,
+    cache_key: String,
+    provider_id: String,
+    track_id: String,
+    quality: String,
+    url: String,
+    content_length: Option<u64>,
+    completed: bool,
+    created_at: u64,
+    last_accessed_at: u64,
+}
+
 struct StreamingHttpState {
     cache_path: PathBuf,
+    reusable_cache: Option<ReusableAudioCacheTarget>,
+    url: String,
     content_length: Option<u64>,
     cached_ranges: Vec<(u64, u64)>,
     requested_range_start: Option<u64>,
@@ -1019,7 +1087,19 @@ impl StreamingHttpState {
 }
 
 impl StreamingHttpReader {
-    fn open(url: String, cache_dir: PathBuf) -> Result<Self, String> {
+    fn open(
+        url: String,
+        cache_dir: PathBuf,
+        cache_identity: Option<OnlineAudioCacheIdentity>,
+    ) -> Result<Self, String> {
+        let reusable_cache =
+            cache_identity.and_then(|identity| reusable_cache_target(&cache_dir, identity));
+        if let Some(target) = &reusable_cache {
+            if let Some(reader) = Self::open_completed_cache(&url, target)? {
+                return Ok(reader);
+            }
+        }
+
         let client = audio_http_client()?;
         let response = client.get(&url).send().map_err(|err| err.to_string())?;
         if !response.status().is_success() {
@@ -1037,7 +1117,18 @@ impl StreamingHttpReader {
             .unwrap_or(false);
 
         fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
-        let cache_path = create_cache_file_path(&cache_dir, &url);
+        let cache_path = reusable_cache
+            .as_ref()
+            .map(|target| target.audio_path.clone())
+            .unwrap_or_else(|| create_cache_file_path(&cache_dir, &url));
+        if let Some(parent) = cache_path.parent() {
+            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+        if let Some(target) = &reusable_cache {
+            if let Some(parent) = target.metadata_path.parent() {
+                fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+            }
+        }
         let writer = OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -1051,6 +1142,8 @@ impl StreamingHttpReader {
         let shared = Arc::new((
             Mutex::new(StreamingHttpState {
                 cache_path: cache_path.clone(),
+                reusable_cache,
+                url: url.clone(),
                 content_length,
                 cached_ranges: Vec::new(),
                 requested_range_start: None,
@@ -1072,6 +1165,55 @@ impl StreamingHttpReader {
             file,
             position: 0,
         })
+    }
+
+    fn open_completed_cache(
+        url: &str,
+        target: &ReusableAudioCacheTarget,
+    ) -> Result<Option<Self>, String> {
+        let Some(metadata) = read_reusable_cache_metadata(target) else {
+            return Ok(None);
+        };
+        if !metadata_matches_target(&metadata, target) || !metadata.completed {
+            return Ok(None);
+        }
+        let Ok(file_metadata) = fs::metadata(&target.audio_path) else {
+            return Ok(None);
+        };
+        if !file_metadata.is_file() || file_metadata.len() == 0 {
+            return Ok(None);
+        }
+        if let Some(content_length) = metadata.content_length {
+            if file_metadata.len() < content_length {
+                return Ok(None);
+            }
+        }
+        let content_length = metadata.content_length.or(Some(file_metadata.len()));
+        touch_reusable_cache_metadata(target, metadata);
+        let file = OpenOptions::new()
+            .read(true)
+            .open(&target.audio_path)
+            .map_err(|err| err.to_string())?;
+        let shared = Arc::new((
+            Mutex::new(StreamingHttpState {
+                cache_path: target.audio_path.clone(),
+                reusable_cache: Some(target.clone()),
+                url: url.to_string(),
+                content_length,
+                cached_ranges: vec![(0, file_metadata.len())],
+                requested_range_start: None,
+                supports_range: true,
+                completed: true,
+                is_buffering: false,
+                error: None,
+            }),
+            Condvar::new(),
+        ));
+        Ok(Some(Self {
+            shared,
+            file,
+            position: 0,
+        }))
     }
 
     fn content_length(&self) -> Option<u64> {
@@ -1335,21 +1477,48 @@ fn request_http_range(
 
 fn mark_http_stream_completed(shared: &Arc<(Mutex<StreamingHttpState>, Condvar)>) {
     let (lock, cvar) = &**shared;
+    let mut reusable_metadata = None;
     if let Ok(mut state) = lock.lock() {
         state.completed = true;
         state.is_buffering = false;
+        if state.is_fully_cached() {
+            reusable_metadata = state.reusable_cache.clone().map(|target| {
+                (
+                    target,
+                    state.url.clone(),
+                    state.content_length,
+                    unix_timestamp_secs(),
+                )
+            });
+        }
         cvar.notify_all();
+    }
+    if let Some((target, url, content_length, timestamp)) = reusable_metadata {
+        write_reusable_cache_metadata(&target, &url, content_length, timestamp);
     }
 }
 
 fn mark_http_stream_failed(shared: &Arc<(Mutex<StreamingHttpState>, Condvar)>, error: String) {
     let (lock, cvar) = &**shared;
+    let mut failed_cache = None;
     if let Ok(mut state) = lock.lock() {
         state.error = Some(error);
         state.completed = true;
         state.is_buffering = false;
+        failed_cache = state.reusable_cache.clone();
         cvar.notify_all();
     }
+    if let Some(target) = failed_cache {
+        remove_failed_reusable_cache(target);
+    }
+}
+
+fn remove_failed_reusable_cache(target: ReusableAudioCacheTarget) {
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(200));
+        let _ = fs::remove_file(&target.audio_path);
+        let _ = fs::remove_file(&target.metadata_path);
+    });
 }
 
 fn create_cache_file_path(cache_dir: &PathBuf, url: &str) -> PathBuf {
@@ -1368,6 +1537,193 @@ fn create_cache_file_path(cache_dir: &PathBuf, url: &str) -> PathBuf {
         CACHE_FILE_EXTENSION
     );
     cache_dir.join(name)
+}
+
+fn reusable_cache_target(
+    cache_dir: &PathBuf,
+    identity: OnlineAudioCacheIdentity,
+) -> Option<ReusableAudioCacheTarget> {
+    let provider_id = identity.provider_id.trim().to_string();
+    let track_id = identity.track_id.trim().to_string();
+    let quality = identity.quality.trim().to_string();
+    if provider_id.is_empty() || track_id.is_empty() || quality.is_empty() {
+        return None;
+    }
+    let identity = OnlineAudioCacheIdentity {
+        provider_id,
+        track_id,
+        quality,
+    };
+    let cache_key = reusable_cache_key(&identity);
+    Some(ReusableAudioCacheTarget {
+        identity,
+        audio_path: cache_dir
+            .join(REUSABLE_CACHE_TRACKS_DIR)
+            .join(format!("{cache_key}.{CACHE_FILE_EXTENSION}")),
+        metadata_path: cache_dir
+            .join(REUSABLE_CACHE_METADATA_DIR)
+            .join(format!("{cache_key}.json")),
+        cache_key,
+    })
+}
+
+fn reusable_cache_key(identity: &OnlineAudioCacheIdentity) -> String {
+    let input = format!(
+        "{}\0{}\0{}",
+        identity.provider_id, identity.track_id, identity.quality
+    );
+    format!("{:016x}", stable_hash64(input.as_bytes()))
+}
+
+fn stable_hash64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in bytes {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+fn read_reusable_cache_metadata(
+    target: &ReusableAudioCacheTarget,
+) -> Option<ReusableAudioCacheMetadata> {
+    let content = fs::read_to_string(&target.metadata_path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+fn read_metadata_file(path: &PathBuf) -> Option<ReusableAudioCacheMetadata> {
+    let content = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+fn completed_cache_for_track(
+    cache_dir: &PathBuf,
+    provider_id: &str,
+    track_id: &str,
+    quality: Option<&str>,
+) -> Option<OnlineAudioCacheLookup> {
+    let provider_id = provider_id.trim();
+    let track_id = track_id.trim();
+    if provider_id.is_empty() || track_id.is_empty() {
+        return None;
+    }
+
+    if let Some(quality) = quality.map(str::trim).filter(|value| !value.is_empty()) {
+        let identity = OnlineAudioCacheIdentity {
+            provider_id: provider_id.to_string(),
+            track_id: track_id.to_string(),
+            quality: quality.to_string(),
+        };
+        let target = reusable_cache_target(cache_dir, identity)?;
+        return completed_cache_lookup_for_target(&target);
+    }
+
+    let metadata_dir = cache_dir.join(REUSABLE_CACHE_METADATA_DIR);
+    let entries = fs::read_dir(metadata_dir).ok()?;
+    let mut candidates = entries
+        .flatten()
+        .filter_map(|entry| {
+            let metadata = read_metadata_file(&entry.path())?;
+            if metadata.version != REUSABLE_CACHE_METADATA_VERSION
+                || metadata.provider_id != provider_id
+                || metadata.track_id != track_id
+                || !metadata.completed
+            {
+                return None;
+            }
+            let target = reusable_cache_target(
+                cache_dir,
+                OnlineAudioCacheIdentity {
+                    provider_id: metadata.provider_id.clone(),
+                    track_id: metadata.track_id.clone(),
+                    quality: metadata.quality.clone(),
+                },
+            )?;
+            let lookup = completed_cache_lookup_for_target(&target)?;
+            Some((metadata.last_accessed_at, lookup))
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by_key(|(last_accessed_at, _)| *last_accessed_at);
+    candidates.pop().map(|(_, lookup)| lookup)
+}
+
+fn completed_cache_lookup_for_target(
+    target: &ReusableAudioCacheTarget,
+) -> Option<OnlineAudioCacheLookup> {
+    let metadata = read_reusable_cache_metadata(target)?;
+    if !metadata_matches_target(&metadata, target) || !metadata.completed {
+        return None;
+    }
+    let file_metadata = fs::metadata(&target.audio_path).ok()?;
+    if !file_metadata.is_file() || file_metadata.len() == 0 {
+        return None;
+    }
+    if let Some(content_length) = metadata.content_length {
+        if file_metadata.len() < content_length {
+            return None;
+        }
+    }
+    touch_reusable_cache_metadata(target, metadata);
+    Some(OnlineAudioCacheLookup {
+        path: target.audio_path.clone(),
+        identity: target.identity.clone(),
+    })
+}
+
+fn metadata_matches_target(
+    metadata: &ReusableAudioCacheMetadata,
+    target: &ReusableAudioCacheTarget,
+) -> bool {
+    metadata.version == REUSABLE_CACHE_METADATA_VERSION
+        && metadata.cache_key == target.cache_key
+        && metadata.provider_id == target.identity.provider_id
+        && metadata.track_id == target.identity.track_id
+        && metadata.quality == target.identity.quality
+}
+
+fn touch_reusable_cache_metadata(
+    target: &ReusableAudioCacheTarget,
+    mut metadata: ReusableAudioCacheMetadata,
+) {
+    metadata.last_accessed_at = unix_timestamp_secs();
+    write_metadata_file(target, &metadata);
+}
+
+fn write_reusable_cache_metadata(
+    target: &ReusableAudioCacheTarget,
+    url: &str,
+    content_length: Option<u64>,
+    timestamp: u64,
+) {
+    let metadata = ReusableAudioCacheMetadata {
+        version: REUSABLE_CACHE_METADATA_VERSION,
+        cache_key: target.cache_key.clone(),
+        provider_id: target.identity.provider_id.clone(),
+        track_id: target.identity.track_id.clone(),
+        quality: target.identity.quality.clone(),
+        url: url.to_string(),
+        content_length,
+        completed: true,
+        created_at: timestamp,
+        last_accessed_at: timestamp,
+    };
+    write_metadata_file(target, &metadata);
+}
+
+fn write_metadata_file(target: &ReusableAudioCacheTarget, metadata: &ReusableAudioCacheMetadata) {
+    if let Some(parent) = target.metadata_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(content) = serde_json::to_string_pretty(metadata) {
+        let _ = fs::write(&target.metadata_path, content);
+    }
+}
+
+fn unix_timestamp_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
 fn ramp_sink_volume(sink: Arc<Sink>, from: f32, to: f32, duration: Duration) {
@@ -1554,6 +1910,8 @@ mod tests {
         let shared = Arc::new((
             Mutex::new(StreamingHttpState {
                 cache_path: cache_path.clone(),
+                reusable_cache: None,
+                url: String::new(),
                 content_length: Some(8),
                 cached_ranges: vec![(0, 8)],
                 requested_range_start: None,
@@ -1582,6 +1940,8 @@ mod tests {
     fn streaming_state_merges_cached_ranges() {
         let mut state = StreamingHttpState {
             cache_path: PathBuf::from("cache.audio"),
+            reusable_cache: None,
+            url: String::new(),
             content_length: Some(10),
             cached_ranges: Vec::new(),
             requested_range_start: None,

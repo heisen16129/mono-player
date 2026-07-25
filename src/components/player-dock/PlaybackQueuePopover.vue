@@ -119,7 +119,7 @@ const emit = defineEmits<{
   border: 1px solid var(--smw-border-soft);
   border-radius: 8px;
   background: var(--smw-player-bg);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
 }
 
 .queue-popover-head {
@@ -127,7 +127,8 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 14px 14px 10px;
+  min-height: 50px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--smw-border-soft);
 }
 
@@ -173,7 +174,7 @@ const emit = defineEmits<{
   display: grid;
   max-height: 390px;
   overflow: auto;
-  padding: 6px;
+  padding: 8px;
 }
 
 .queue-track {

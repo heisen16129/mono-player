@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 mod cache;
 mod queue;
 
+use crate::workers::audio::OnlineAudioCacheIdentity;
 use cache::*;
 pub(crate) use cache::{mono_cache_dir, online_audio_cache_dir};
 use queue::*;
@@ -22,7 +23,6 @@ pub(crate) struct PlayerState {
 impl PlayerState {
     pub(crate) fn new(cache_dir: PathBuf) -> Self {
         let _ = fs::create_dir_all(&cache_dir);
-        cleanup_online_audio_cache_files(&cache_dir, None);
         let default_cache_dir = cache_dir.clone();
 
         let state = Self {
@@ -269,6 +269,11 @@ pub(crate) async fn player_start_queue(
     .map_err(|err| err.to_string())
     .and_then(|result| result);
     Ok(ApiResponse::from_result(result))
+}
+
+struct ResolvedPlaybackSource {
+    source: String,
+    cache_identity: Option<OnlineAudioCacheIdentity>,
 }
 
 #[tauri::command]
@@ -564,9 +569,16 @@ pub(crate) fn player_pause(
 
 #[tauri::command]
 pub(crate) fn player_resume(
+    state: State<'_, PlayerState>,
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
+    app: AppHandle,
 ) -> ApiResponse<()> {
-    ApiResponse::from_empty_result(audio_worker.resume())
+    ApiResponse::from_empty_result((|| {
+        audio_worker.resume()?;
+        let generation = current_playback_generation(&state.inner)?;
+        spawn_audio_worker_state_watcher(app, Some(generation));
+        Ok(())
+    })())
 }
 
 #[tauri::command]
@@ -620,6 +632,27 @@ pub(crate) fn mcp_player_state(app: &AppHandle) -> Result<PlayerSnapshot, String
 pub(crate) fn mcp_queue_snapshot(app: &AppHandle) -> Result<QueueSnapshot, String> {
     let state = app.state::<PlayerState>();
     queue_snapshot(&state.inner)
+}
+
+pub(crate) fn is_current_plugin_queue_track(
+    app: &AppHandle,
+    provider_id: &str,
+    source_id: &str,
+) -> Result<bool, String> {
+    let provider_id = provider_id.trim();
+    let source_id = source_id.trim();
+    if provider_id.is_empty() || source_id.is_empty() {
+        return Ok(false);
+    }
+
+    let state = app.state::<PlayerState>();
+    let backend = state.inner.lock().map_err(|err| err.to_string())?;
+    let Some(current_source) = backend.current_source.as_deref() else {
+        return Ok(false);
+    };
+    let current_source = queue_source_key_for_source(&backend.queue_tracks, current_source)
+        .unwrap_or_else(|| current_source.to_string());
+    Ok(current_source == format!("plugin://{provider_id}/{source_id}"))
 }
 
 fn model_track_to_queue_track(track: Track) -> QueueTrack {
@@ -832,9 +865,12 @@ fn resolve_queue_source_for_playback(
     queue_index: Option<usize>,
     generation: Option<u64>,
     preferred_quality: Option<String>,
-) -> Result<String, String> {
+) -> Result<ResolvedPlaybackSource, String> {
     if !is_plugin_queue_source(&source) {
-        return Ok(source);
+        return Ok(ResolvedPlaybackSource {
+            source,
+            cache_identity: None,
+        });
     }
 
     ensure_current_playback_generation(state, generation)?;
@@ -852,6 +888,28 @@ fn resolve_queue_source_for_playback(
         .clone()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "Plugin queue track is missing sourceProviderId.".to_string())?;
+    let cached_source = app
+        .state::<crate::workers::audio::AudioWorkerState>()
+        .completed_cache_for_track(
+            &provider_id,
+            track.source_id.as_deref().unwrap_or(""),
+            preferred_quality.as_deref(),
+        );
+    if let Some(cached_source) = cached_source {
+        eprintln!(
+            "[plugin-playback] cache hit args={}",
+            json!({
+                "providerId": cached_source.identity.provider_id.as_str(),
+                "trackId": cached_source.identity.track_id.as_str(),
+                "quality": cached_source.identity.quality.as_str(),
+                "path": cached_source.path.to_string_lossy(),
+            })
+        );
+        return Ok(ResolvedPlaybackSource {
+            source: cached_source.path.to_string_lossy().to_string(),
+            cache_identity: Some(cached_source.identity),
+        });
+    }
     let plugins = read_installed_playback_plugins(app)?;
     let quality_fallback = read_quality_fallback(app);
     let track_value = queue_track_plugin_value(&track);
@@ -868,6 +926,15 @@ fn resolve_queue_source_for_playback(
         || ensure_current_playback_generation(state, generation),
     )?;
     let resolved_source = source_result.url.clone();
+    let mut cache_track_id = source_result.source_id.trim().to_string();
+    if cache_track_id.is_empty() {
+        cache_track_id = track.source_id.clone().unwrap_or_default();
+    }
+    let cache_identity = (!cache_track_id.trim().is_empty()).then(|| OnlineAudioCacheIdentity {
+        provider_id: source_result.source_provider_id.clone(),
+        track_id: cache_track_id,
+        quality: source_result.quality.clone(),
+    });
 
     ensure_current_playback_generation(state, generation)?;
 
@@ -883,7 +950,10 @@ fn resolve_queue_source_for_playback(
         }
     }
 
-    Ok(resolved_source)
+    Ok(ResolvedPlaybackSource {
+        source: resolved_source,
+        cache_identity,
+    })
 }
 
 fn apply_plugin_playback_source(
@@ -959,7 +1029,7 @@ fn play_worker_queue_source_by_index_at_position(
     preferred_quality: Option<String>,
 ) -> Result<QueueSnapshot, String> {
     commit_pending_queue_source(state, app, &source, queue_index)?;
-    let source = match resolve_queue_source_for_playback(
+    let resolved = match resolve_queue_source_for_playback(
         state,
         app,
         source,
@@ -971,15 +1041,33 @@ fn play_worker_queue_source_by_index_at_position(
         Err(error) if error == "Playback request was replaced." => return queue_snapshot(state),
         Err(error) => return Err(error),
     };
+    let source = resolved.source;
+    let cache_identity = resolved.cache_identity;
     let audio_worker = app.state::<crate::workers::audio::AudioWorkerState>();
     if is_rust_playable_url(&source) {
-        audio_worker.play_url(source.clone(), true, fade, fade_duration_ms)?;
+        if let Err(error) = audio_worker.play_url(
+            source.clone(),
+            true,
+            fade,
+            fade_duration_ms,
+            cache_identity.clone(),
+        ) {
+            if let Some(identity) = &cache_identity {
+                audio_worker.remove_cached_track(identity);
+            }
+            return Err(error);
+        }
     } else {
         let path = PathBuf::from(source.trim());
         if !path.is_file() {
             return Err("Audio file does not exist.".to_string());
         }
-        audio_worker.play_path(source.clone(), true, fade, fade_duration_ms)?;
+        if let Err(error) = audio_worker.play_path(source.clone(), true, fade, fade_duration_ms) {
+            if let Some(identity) = &cache_identity {
+                audio_worker.remove_cached_track(identity);
+            }
+            return Err(error);
+        }
     }
     if position > 0.0 {
         audio_worker.seek(position)?;

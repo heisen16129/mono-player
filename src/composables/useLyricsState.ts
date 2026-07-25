@@ -14,6 +14,7 @@ export function useLyricsState(activeTrack: ComputedRef<Track | null>) {
     status: 'idle',
     error: null,
   });
+  const settledEmptyLyricsStateByKey = new Map<string, { status: 'empty' | 'error'; error: string | null }>();
 
   const activeLyricsViewStatus = computed(() => lyricsViewState.value.status);
 
@@ -40,8 +41,26 @@ export function useLyricsState(activeTrack: ComputedRef<Track | null>) {
   }
 
   function setLyricsViewState(track: Track | null, status: LyricsViewStatus, error: string | null = null) {
+    const trackKey = lyricsTrackKey(track);
+    if (trackKey && status === 'loading') {
+      const settledState = settledEmptyLyricsStateByKey.get(trackKey);
+      if (settledState) {
+        lyricsViewState.value = {
+          trackKey,
+          status: settledState.status,
+          error: settledState.error,
+        };
+        return;
+      }
+    }
+    if (trackKey && (status === 'empty' || status === 'error')) {
+      settledEmptyLyricsStateByKey.set(trackKey, { status, error });
+    }
+    if (trackKey && status === 'ready') {
+      settledEmptyLyricsStateByKey.delete(trackKey);
+    }
     lyricsViewState.value = {
-      trackKey: lyricsTrackKey(track),
+      trackKey,
       status,
       error,
     };
@@ -52,8 +71,20 @@ export function useLyricsState(activeTrack: ComputedRef<Track | null>) {
       setLyricsViewState(null, 'idle');
       return;
     }
+    const trackKey = lyricsTrackKey(track);
     if (normalizeTrackLyrics(track)?.lyrics.length) {
       setLyricsViewState(track, 'ready');
+      return;
+    }
+    const settledState = trackKey ? settledEmptyLyricsStateByKey.get(trackKey) : null;
+    if (settledState) {
+      setLyricsViewState(track, settledState.status, settledState.error);
+      return;
+    }
+    if (
+      lyricsViewState.value.trackKey === trackKey
+      && (lyricsViewState.value.status === 'empty' || lyricsViewState.value.status === 'error')
+    ) {
       return;
     }
     setLyricsViewState(track, 'loading');

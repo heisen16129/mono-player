@@ -22,9 +22,18 @@ export function useLyricsScroll(options: {
     const currentLine = panel?.querySelector<HTMLElement>('.lyrics-panel .current');
     if (!panel || !currentLine) return;
 
-    const nextTop = currentLine.offsetTop - panel.clientHeight / 2 + currentLine.clientHeight / 2;
+    const centerHeight = lyricsPrimaryRowHeight(panel);
+    const nextTop = currentLine.offsetTop - centerHeight / 2 + currentLine.clientHeight / 2;
     panel.scrollTo({ top: Math.max(0, nextTop), behavior });
     requestAnimationFrame(syncScrollThumb);
+  }
+
+  function lyricsPrimaryRowHeight(panel: HTMLElement) {
+    const styles = getComputedStyle(panel);
+    const playerHeight = Number.parseFloat(styles.getPropertyValue('--player-height')) || 0;
+    const stage = panel.parentElement?.parentElement ?? null;
+    const rowGap = stage ? Number.parseFloat(getComputedStyle(stage).rowGap) || 0 : 0;
+    return Math.max(1, panel.clientHeight - playerHeight - rowGap);
   }
 
   function beginLyricBrowse() {
