@@ -235,7 +235,7 @@ Rust 不会替插件补默认能力或默认 `network` 权限。缺少必填字�
 | `lyrics` | 支持返回歌词 metadata | 歌词面板、播放时补歌词、下载歌词 |
 | `theme` | 支持返回主题变量 | 安装或更新主题插件后写入本地主题 |
 | `metadata` | 预留：补全曲目元数据 | 元数据插件 |
-| `cover` | 预留：补全封面 | 元数据插件 |
+| `cover` | 支持按曲目补全封面 | 歌词页、播放栏或详情页需要封面时单独获取 |
 | `album` | 预留：补全专辑信息 | 元数据插件 |
 | `playlist-import` | 预留：导入歌单 | 歌单插件 |
 | `playlist-export` | 预留：导出歌单 | 歌单插件 |
@@ -264,6 +264,7 @@ Rust 不会替插件补默认能力或默认 `network` 权限。缺少必填字�
 | `qualities` | `play` | 播放前、音质菜单刷新前 | 返回可用音质列表和默认音质。 |
 | `play` | `play` | 点击播放、切换音质、下载前解析播放源 | 返回音频 URL 和可选歌词/封面。 |
 | `lyrics` | `lyrics` | 歌词搜索应用、播放时补歌词、下载歌词 | 返回歌词文本或歌词 URL。 |
+| `cover` | `cover` | 歌词页、播放栏或详情页需要封面时 | 返回封面 URL。 |
 | `theme` | `theme` | 安装或更新主题插件后 | 返回主题变量、预览图和可选背景图。 |
 | `host_response` | 取决于原 action | 插件返回 `hostRequest` 后 | 插件解析 Host HTTP 响应并返回最终 ApiResponse。 |
 
@@ -534,6 +535,37 @@ Host 会强制拆 `ApiResponse`：`code !== 1` 会被当成插件调用失败，
 | `lyrics` | 否 | 嵌入歌词 metadata。缺失且 `includeMetadata` 为 true 时，Host 会再调用 `lyrics`。 |
 
 Host 最终会从 `track` 补齐 `title/artist/album/duration/sourceId/sourceRaw` 等播放源字段，插件不需要重复返回这些字段，但返回也不会有坏处。
+
+## cover
+
+调用时机：歌词页、播放栏或详情页需要封面时。Host 会先筛选已启用且包含 `cover` 能力的插件。搜索列表阶段不应为了展示列表先调用 `cover`。
+
+入参：
+
+```json
+{
+  "action": "cover",
+  "track": {
+    "id": "123",
+    "title": "晴天",
+    "artist": "周杰伦",
+    "album": "叶惠美",
+    "raw": {}
+  }
+}
+```
+
+返回值：
+
+```json
+{
+  "code": 1,
+  "message": "OK",
+  "data": "https://example.com/cover.jpg"
+}
+```
+
+`data` 必须是封面 HTTP(S) URL 字符串。
 
 ## lyrics
 

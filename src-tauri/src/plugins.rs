@@ -762,6 +762,59 @@ pub(crate) fn resolve_plugin_lyrics_metadata_backend(
     resolve_plugin_lyrics_metadata_backend_checked(worker, provider_id, track, plugins, || Ok(()))
 }
 
+#[tauri::command]
+pub async fn resolve_plugin_cover_metadata(
+    app: AppHandle,
+    provider_id: String,
+    track: serde_json::Value,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+) -> Result<ApiResponse<String>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
+        resolve_plugin_cover_metadata_backend(&worker, provider_id, track, plugins)
+    })
+    .await
+    .map_err(|err| err.to_string())?;
+    Ok(ApiResponse::from_result(result))
+}
+
+pub(crate) fn resolve_plugin_cover_metadata_backend(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    provider_id: String,
+    track: serde_json::Value,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+) -> Result<String, String> {
+    let plugin = plugins
+        .into_iter()
+        .find(|plugin| plugin.id == provider_id)
+        .ok_or_else(|| "Plugin for selected track is not installed.".to_string())?;
+
+    if !plugin.enabled {
+        return Err("Plugin for selected track is not enabled.".to_string());
+    }
+
+    if !plugin.capabilities.iter().any(|capability| capability == "cover") {
+        return Err("Plugin for selected track does not support cover.".to_string());
+    }
+
+    let entry = plugin
+        .entry
+        .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
+    let plugin_track = track.get("raw").cloned().unwrap_or(track);
+    let request = json!({
+        "action": "cover",
+        "track": plugin_track,
+    });
+    let response = worker.invoke_plugin(
+        entry,
+        request,
+        Some(plugin.id.clone()),
+        plugin.permissions.clone(),
+    )?;
+
+    normalize_plugin_cover_metadata(unwrap_plugin_response_envelope(response)?)
+}
+
 fn resolve_plugin_lyrics_metadata_backend_checked<F>(
     worker: &crate::workers::plugin::PluginWorkerState,
     provider_id: String,
@@ -1597,6 +1650,15 @@ fn normalize_plugin_lyrics_metadata(
         lyrics,
         track_raw: response.get("raw").cloned(),
     })
+}
+
+fn normalize_plugin_cover_metadata(response: serde_json::Value) -> Result<String, String> {
+    response
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "Plugin cover response must be a URL string.".to_string())
 }
 
 fn normalize_lyrics_format(value: Option<&str>) -> Option<String> {

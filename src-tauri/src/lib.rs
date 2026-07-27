@@ -169,6 +169,7 @@ pub fn run() {
             plugins::resolve_plugin_playback_plan,
             plugins::resolve_plugin_playback_qualities,
             plugins::resolve_plugin_lyrics_metadata,
+            plugins::resolve_plugin_cover_metadata,
             plugins::plugin_invoke,
             plugins::read_plugin_wasm_bytes,
             plugins::plugin_http_request,

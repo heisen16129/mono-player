@@ -9,7 +9,7 @@
 ```ts
 type PluginRuntime = 'wasm';
 type PluginKind = 'music' | 'lyrics';
-type PluginCapability = 'search' | 'play' | 'lyrics';
+type PluginCapability = 'search' | 'play' | 'lyrics' | 'cover';
 ```
 
 插件类型：
@@ -26,8 +26,9 @@ type PluginCapability = 'search' | 'play' | 'lyrics';
 | `search` | 可以搜索歌曲或歌词候选。 |
 | `play` | 可以把搜索结果解析成真实音频地址。 |
 | `lyrics` | 可以返回歌词文本或歌词地址。 |
+| `cover` | 可以按曲目返回封面地址。 |
 
-不要把 `cover`、`album`、`artist`、`playlist`、`download` 当成插件能力。封面、专辑、歌手、下载所需信息是 `search/play/lyrics` 返回结构中的字段，不是独立能力。
+不要把 `album`、`artist`、`playlist`、`download` 当成插件能力。专辑、歌手、下载所需信息是 `search/play/lyrics` 返回结构中的字段，不是独立能力；封面可以作为 `cover` action 单独按需获取。
 
 ## 字段来源
 
