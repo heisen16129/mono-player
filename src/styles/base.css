@@ -60,6 +60,75 @@ button {
   background: transparent;
 }
 
+.transient-scrollbar {
+  scrollbar-color: transparent transparent;
+}
+
+.transient-scrollbar:hover.is-scrolling {
+  scrollbar-color: var(--smw-scrollbar-thumb) transparent;
+}
+
+.transient-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.transient-scrollbar::-webkit-scrollbar-thumb {
+  background:
+    linear-gradient(transparent, transparent)
+    padding-box;
+}
+
+.transient-scrollbar:hover.is-scrolling::-webkit-scrollbar-thumb {
+  background:
+    linear-gradient(var(--smw-scrollbar-thumb), var(--smw-scrollbar-thumb))
+    padding-box;
+}
+
+.transient-scrollbar:hover.is-scrolling::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(var(--smw-scrollbar-thumb-hover), var(--smw-scrollbar-thumb-hover))
+    padding-box;
+}
+
+.sidebar-transient-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.sidebar-transient-scrollbar:hover.is-scrolling {
+  -ms-overflow-style: auto;
+  scrollbar-width: thin;
+}
+
+.sidebar-transient-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+}
+
+.sidebar-transient-scrollbar:hover.is-scrolling::-webkit-scrollbar {
+  display: block;
+  width: 4px;
+}
+
+.sidebar-transient-scrollbar::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.sidebar-transient-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.sidebar-transient-scrollbar:hover.is-scrolling::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--smw-text-muted) 32%, transparent);
+}
+
+.sidebar-transient-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -108,46 +177,6 @@ button:disabled {
 
 .mono-window.has-theme-background::after {
   background: rgba(246, 252, 239, 0.28);
-}
-
-.window-controls {
-  position: relative;
-  display: inline-grid;
-  grid-template-columns: repeat(3, 32px);
-  align-items: center;
-  height: 40px;
-}
-
-.floating-window-controls {
-  position: absolute;
-  top: 12px;
-  right: 8px;
-  z-index: 24;
-}
-
-.window-control {
-  display: grid;
-  width: 32px;
-  height: 40px;
-  place-items: center;
-  border: 0;
-  color: var(--smw-text-secondary);
-  background: transparent;
-  cursor: pointer;
-}
-
-.window-control:hover {
-  color: var(--smw-text-primary);
-  background: transparent;
-}
-
-.window-control-maximize-icon {
-  stroke-width: 1.9;
-}
-
-.window-control.close:hover {
-  color: #d83b3b;
-  background: transparent;
 }
 
 .mono-window.lyrics-open {
@@ -257,7 +286,6 @@ button:disabled {
   --button-padding-x: 14px;
 }
 
-.favorite-button.is-favorite,
-.favorite-icon.is-favorite {
+.favorite-button.is-favorite {
   color: #e5484d;
 }

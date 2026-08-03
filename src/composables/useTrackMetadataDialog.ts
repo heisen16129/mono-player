@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
-import type { TrackMetadataFormValue } from '../components/TrackMetadataDialog.vue';
+import type { TrackMetadataFormValue } from './useTrackMetadataForm';
 import { clearCoverThumbnailCache, refreshTrackDuration, updateTrackCover, updateTrackMetadata } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';

@@ -10,6 +10,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Write};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -314,7 +315,12 @@ fn download_cover_file_inner(
         }
     };
     if embedded_in_track {
-        if let Some(track_path) = request.track_path.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(track_path) = request
+            .track_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
             if let Some(artwork) = crate::covers::refresh_cached_cover_original_file_url_in(
                 &player_state.cache_dir()?,
                 Path::new(track_path),
@@ -538,7 +544,9 @@ fn resolve_download_track_request(
     }
 
     let lyric_variant = track_lyrics_variant(&track.lyrics);
-    let lyrics = lyric_variant.as_ref().map(|variant| variant.content.clone());
+    let lyrics = lyric_variant
+        .as_ref()
+        .map(|variant| variant.content.clone());
     let lyrics_format = lyric_variant.map(|variant| variant.format);
 
     Ok(ResolvedDownloadTrackRequest {
@@ -623,16 +631,22 @@ fn plugin_lyrics_to_track_lyrics(
     lyrics: crate::plugins::PluginLyricsMetadata,
 ) -> TrackLyrics {
     TrackLyrics {
-        provider_id: lyrics.provider_id.or_else(|| track.source_provider_id.clone()),
+        provider_id: lyrics
+            .provider_id
+            .or_else(|| track.source_provider_id.clone()),
         provider_name: lyrics.provider_name.or_else(|| track.source_name.clone()),
         track_id: lyrics.track_id.or_else(|| track.source_id.clone()),
         default_format: lyrics.default_format,
-        lyrics: lyrics.lyrics.into_iter().map(|variant| TrackLyricVariant {
-            format: variant.format,
-            content: variant.content,
-            source_url: variant.source_url,
-            quality: variant.quality,
-        }).collect(),
+        lyrics: lyrics
+            .lyrics
+            .into_iter()
+            .map(|variant| TrackLyricVariant {
+                format: variant.format,
+                content: variant.content,
+                source_url: variant.source_url,
+                quality: variant.quality,
+            })
+            .collect(),
         track_raw: lyrics.track_raw.or_else(|| track.source_raw.clone()),
     }
 }
@@ -677,7 +691,7 @@ pub(crate) fn download_online_track_blocking_with_progress<F: FnMut(u8)>(
 
     let artwork = download_artwork(&client, request.artwork.as_deref());
     report_progress(94);
-    write_audio_metadata(&file_path, &request, artwork);
+    write_audio_metadata_safely(&file_path, &request, artwork);
     let lyrics_stem = file_path
         .file_stem()
         .and_then(|value| value.to_str())
@@ -729,6 +743,21 @@ where
     file.flush().map_err(|err| err.to_string())?;
     report_progress(92);
     Ok(())
+}
+
+fn write_audio_metadata_safely(
+    path: &Path,
+    request: &ResolvedDownloadTrackRequest,
+    artwork: Option<CoverArtwork>,
+) {
+    if let Err(error) = catch_unwind(AssertUnwindSafe(|| {
+        write_audio_metadata(path, request, artwork);
+    })) {
+        eprintln!(
+            "[download] write audio metadata skipped after panic: {}",
+            panic_message(error)
+        );
+    }
 }
 
 fn write_audio_metadata(
@@ -957,8 +986,22 @@ fn sanitize_file_name(value: &str) -> String {
     if cleaned.is_empty() {
         "Unknown Track".to_string()
     } else {
-        cleaned
+        limit_file_name_chars(&cleaned, 80)
     }
+}
+
+fn limit_file_name_chars(value: &str, max_chars: usize) -> String {
+    value.chars().take(max_chars).collect()
+}
+
+fn panic_message(error: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = error.downcast_ref::<&str>() {
+        return (*message).to_string();
+    }
+    if let Some(message) = error.downcast_ref::<String>() {
+        return message.clone();
+    }
+    "unknown panic".to_string()
 }
 
 fn unique_file_path(dir: &Path, stem: &str, extension: &str) -> PathBuf {

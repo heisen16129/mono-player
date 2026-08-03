@@ -110,18 +110,12 @@ pub(super) fn set_queue_backend(
     }
 }
 
-pub(super) fn set_playback_mode_backend(
-    backend: &mut PlayerBackend,
-    playback_mode: String,
-) {
+pub(super) fn set_playback_mode_backend(backend: &mut PlayerBackend, playback_mode: String) {
     let next_playback_mode = normalize_playback_mode(playback_mode);
-    let active_source = backend
-        .current_source
-        .as_deref()
-        .and_then(|source| {
-            queue_source_key_for_source(&backend.queue_tracks, source)
-                .or_else(|| normalize_queue_source(source))
-        });
+    let active_source = backend.current_source.as_deref().and_then(|source| {
+        queue_source_key_for_source(&backend.queue_tracks, source)
+            .or_else(|| normalize_queue_source(source))
+    });
 
     backend.queue_sources = build_play_order_sources(
         &backend.queue_tracks,
@@ -645,5 +639,4 @@ mod tests {
         assert!(normalize_queue_track(plugin_track(None, Some("provider"))).is_none());
         assert!(normalize_queue_track(plugin_track(Some("song-1"), None)).is_none());
     }
-
 }

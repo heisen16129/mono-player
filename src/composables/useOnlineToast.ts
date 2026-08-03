@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
 
 export type OnlineToastVariant = 'success' | 'error';
 
@@ -28,8 +28,9 @@ export function useOnlineToast() {
     onlineToastMessage.value = null;
   }
 
+  onBeforeUnmount(clearOnlineToastTimer);
+
   return {
-    clearOnlineToastTimer,
     closeOnlineToast,
     onlineToastMessage,
     onlineToastVariant,

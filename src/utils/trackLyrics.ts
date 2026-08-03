@@ -49,7 +49,3 @@ export function selectTrackLyricsVariant(lyrics?: TrackLyrics | null, preferredF
 export function selectTrackLyricVariant(track?: Track | null, preferredFormat?: string | null) {
   return selectTrackLyricsVariant(normalizeTrackLyrics(track), preferredFormat);
 }
-
-export function trackRawLyrics(track?: Track | null, preferredFormat?: string | null) {
-  return selectTrackLyricVariant(track, preferredFormat)?.content ?? null;
-}

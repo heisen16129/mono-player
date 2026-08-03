@@ -3,43 +3,11 @@ import AddToPlaylistDialog from './AddToPlaylistDialog.vue';
 import PlaylistDialog from './PlaylistDialog.vue';
 import ScanDialog from './ScanDialog.vue';
 import TrackMetadataDialog from './TrackMetadataDialog.vue';
-import type { TrackMetadataFormValue } from './TrackMetadataDialog.vue';
-import type { Locale, Track, UserPlaylist } from '../types/music';
+import type { AppDialogsEmits, AppDialogsProps } from '../types/appDialogs';
 
-defineProps<{
-  addToPlaylistTrack: Track | null;
-  editingPlaylistId: string | null;
-  isCancelingScan: boolean;
-  isConfirmingScan: boolean;
-  isPlaylistDialogOpen: boolean;
-  isSavingTrackMetadata: boolean;
-  isScanDialogOpen: boolean;
-  locale: Locale;
-  metadataEditingTrack: Track | null;
-  newPlaylistName: string;
-  playlists: UserPlaylist[];
-  scanFolders: { path: string; checked: boolean }[];
-  scanProgressText: string;
-  trackMetadataError: string | null;
-  tracksForPlaylist: (playlist: UserPlaylist) => Track[];
-}>();
+defineProps<AppDialogsProps>();
 
-defineEmits<{
-  addScanFolder: [];
-  addTrackToPlaylist: [track: Track, playlist: UserPlaylist];
-  cancelScanFolders: [];
-  changePlaylistName: [value: string];
-  closeAddToPlaylistDialog: [];
-  closeCreatePlaylistDialog: [];
-  closeScanDialog: [];
-  closeTrackMetadataDialog: [];
-  confirmCreatePlaylist: [];
-  confirmScanFolders: [];
-  openCreatePlaylistFromAddDialog: [];
-  removeScanFolder: [path: string];
-  saveTrackMetadata: [value: TrackMetadataFormValue];
-  updateScanFolderChecked: [path: string, checked: boolean];
-}>();
+defineEmits<AppDialogsEmits>();
 </script>
 
 <template>

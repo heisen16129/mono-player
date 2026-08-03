@@ -1,5 +1,5 @@
 ﻿import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import type { CoverImage, CustomTheme, LyricLine, SystemThemeState, Track, TrackLyrics } from '../types/music';
+import type { CoverImage, LyricLine, SystemThemeState, Track, TrackLyrics } from '../types/music';
 import { invokeApi } from './api';
 
 export interface WorkerDiagnostic {
@@ -223,14 +223,6 @@ export function getSystemThemeState(): Promise<SystemThemeState> {
   }
 
   return invokeApi<SystemThemeState>('get_system_theme_state');
-}
-
-export function importThemeFolder(path: string): Promise<CustomTheme> {
-  if (!isTauriRuntime()) {
-    return Promise.reject(new Error('请在 Tauri 桌面窗口中导入主题。'));
-  }
-
-  return invokeApi<CustomTheme>('import_theme_folder', { path });
 }
 
 export function openTrackInFolder(path: string): Promise<void> {

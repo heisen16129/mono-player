@@ -1,39 +1,42 @@
 ﻿<script setup lang="ts">
+import { computed } from 'vue';
 import { usePlayerStore } from '../stores/player';
-import type { UserPlaylist } from '../types/music';
+import type { PrimarySidebarEmits, PrimarySidebarProps, SidebarNavListeners, SidebarNavProps } from '../types/sidebar';
 import SidebarAccount from './sidebar/SidebarAccount.vue';
 import SidebarBrand from './sidebar/SidebarBrand.vue';
 import SidebarNav from './sidebar/SidebarNav.vue';
 
 const player = usePlayerStore();
 
-defineProps<{
-  activeView: 'library' | 'discover' | 'artists' | 'settings' | 'themes' | 'plugins' | 'downloads';
-  activeCollection: 'all' | 'favorites';
-  activeLibraryFilter: 'all' | 'recentAdded' | 'recentPlayed';
-  activePlaylistId: string | null;
-  collapsed: boolean;
-  enablePlugins: boolean;
-  playlists: UserPlaylist[];
-  showDownloads: boolean;
-}>();
+const props = defineProps<PrimarySidebarProps>();
 
-const emit = defineEmits<{
-  openArtists: [];
-  openDiscover: [];
-  openLibrary: [];
-  openFavorites: [];
-  openRecentAdded: [];
-  openRecentPlayed: [];
-  openSettings: [];
-  openTheme: [];
-  openPlugins: [];
-  openDownloads: [];
-  openPlaylist: [playlistId: string];
-  createPlaylist: [];
-  openPlaylistMenu: [playlist: UserPlaylist, x: number, y: number];
-  toggleCollapsed: [];
-}>();
+const emit = defineEmits<PrimarySidebarEmits>();
+
+const sidebarNavProps = computed<SidebarNavProps>(() => ({
+  activeCollection: props.activeCollection,
+  activeLibraryFilter: props.activeLibraryFilter,
+  activePlaylistId: props.activePlaylistId,
+  activeView: props.activeView,
+  collapsed: props.collapsed,
+  enablePlugins: props.enablePlugins,
+  locale: player.settings.locale,
+  playlists: props.playlists,
+  showDownloads: props.showDownloads,
+}));
+
+const sidebarNavListeners: SidebarNavListeners = {
+  onCreatePlaylist: () => emit('createPlaylist'),
+  onOpenArtists: () => emit('openArtists'),
+  onOpenDiscover: () => emit('openDiscover'),
+  onOpenDownloads: () => emit('openDownloads'),
+  onOpenFavorites: () => emit('openFavorites'),
+  onOpenLibrary: () => emit('openLibrary'),
+  onOpenPlaylist: (...args) => emit('openPlaylist', ...args),
+  onOpenPlaylistMenu: (...args) => emit('openPlaylistMenu', ...args),
+  onOpenPlugins: () => emit('openPlugins'),
+  onOpenRecentAdded: () => emit('openRecentAdded'),
+  onOpenRecentPlayed: () => emit('openRecentPlayed'),
+};
 
 </script>
 
@@ -42,26 +45,7 @@ const emit = defineEmits<{
     <SidebarBrand :collapsed="collapsed" :locale="player.settings.locale" @toggle-collapsed="emit('toggleCollapsed')" />
 
     <SidebarNav
-      :active-view="activeView"
-      :active-collection="activeCollection"
-      :active-library-filter="activeLibraryFilter"
-      :active-playlist-id="activePlaylistId"
-      :collapsed="collapsed"
-      :enable-plugins="enablePlugins"
-      :locale="player.settings.locale"
-      :playlists="playlists"
-      :show-downloads="showDownloads"
-      @open-artists="emit('openArtists')"
-      @open-discover="emit('openDiscover')"
-      @open-library="emit('openLibrary')"
-      @open-favorites="emit('openFavorites')"
-      @open-recent-added="emit('openRecentAdded')"
-      @open-recent-played="emit('openRecentPlayed')"
-      @open-plugins="emit('openPlugins')"
-      @open-downloads="emit('openDownloads')"
-      @open-playlist="emit('openPlaylist', $event)"
-      @create-playlist="emit('createPlaylist')"
-      @open-playlist-menu="(playlist, x, y) => emit('openPlaylistMenu', playlist, x, y)"
+      v-bind="{ ...sidebarNavProps, ...sidebarNavListeners }"
     />
 
     <SidebarAccount
@@ -76,6 +60,7 @@ const emit = defineEmits<{
 
 <style scoped>
 .primary-sidebar {
+  height: 100%;
   min-height: 0;
   border-right: 1px solid var(--smw-border);
 }
@@ -84,7 +69,7 @@ const emit = defineEmits<{
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 16px 16px 20px;
+  padding: 16px 16px 18px;
   overflow: hidden;
   background: var(--smw-bg-sidebar);
   transition:

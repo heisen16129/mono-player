@@ -1,0 +1,103 @@
+<svg width="430" height="760" viewBox="0 0 430 760" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="album" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b7cfa" />
+      <stop offset="0.46" stop-color="#f0b04f" />
+      <stop offset="1" stop-color="#8c3bb8" />
+    </linearGradient>
+    <linearGradient id="coverSoft" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eef5ff" />
+      <stop offset="1" stop-color="#ffffff" />
+    </linearGradient>
+    <filter id="panelShadow" x="-16" y="-24" width="292" height="232" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1f2937" flood-opacity="0.10" />
+    </filter>
+  </defs>
+
+  <rect width="430" height="760" fill="#f7fbff" />
+  <rect x="0" y="0" width="260" height="682" fill="#f2f7fc" />
+  <rect x="260" y="0" width="170" height="682" fill="#fbfdff" />
+  <line x1="260" y1="0" x2="260" y2="682" stroke="#dce7f2" />
+
+  <g font-family="MiSans, Microsoft YaHei UI, Arial, sans-serif">
+    <g transform="translate(30 28)">
+      <circle cx="18" cy="18" r="18" fill="#4d91e8" />
+      <text x="18" y="25" text-anchor="middle" fill="white" font-size="24" font-weight="800">M</text>
+      <text x="54" y="23" fill="#111827" font-size="17" font-weight="750">Mono Player</text>
+    </g>
+
+    <g fill="#111827" font-size="15">
+      <g transform="translate(30 112)">
+        <path d="M18 6v18a5 5 0 1 1-3-4.58V9l14-3v14" stroke="#111827" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <text x="52" y="22">音乐库</text>
+      </g>
+      <g transform="translate(30 164)">
+        <circle cx="17" cy="17" r="7" stroke="#111827" stroke-width="2" />
+        <path d="M22 22l6 6" stroke="#111827" stroke-width="2" stroke-linecap="round" />
+        <text x="52" y="22">在线搜索</text>
+      </g>
+      <g transform="translate(30 216)">
+        <circle cx="17" cy="17" r="9" stroke="#111827" stroke-width="2" />
+        <path d="M17 10v8l5 3" stroke="#111827" stroke-width="2" stroke-linecap="round" />
+        <text x="52" y="22">最近播放</text>
+      </g>
+      <g transform="translate(30 268)">
+        <path d="M17 7v18M9 17l8 8 8-8M8 30h18" stroke="#111827" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <text x="52" y="23">下载管理</text>
+      </g>
+    </g>
+
+    <g transform="translate(0 382)" filter="url(#panelShadow)">
+      <rect x="0.5" y="0.5" width="259" height="184" rx="0" fill="url(#coverSoft)" stroke="#d8e4f0" />
+      <rect x="18" y="18" width="224" height="1" fill="#dce6f1" />
+      <text x="18" y="44" fill="#6b7280" font-size="12">正在播放</text>
+      <circle cx="228" cy="38" r="13" fill="#eef4fb" stroke="#d8e4f0" />
+      <path d="M224 34l8 8M232 34l-8 8" stroke="#6b7280" stroke-width="1.7" stroke-linecap="round" />
+
+      <rect x="18" y="58" width="56" height="56" rx="7" fill="url(#album)" />
+      <path d="M48 76v21a6 6 0 1 1-3.5-5.46V79l16-3v17a6 6 0 1 1-3.5-5.46V74l-9 2Z" fill="white" fill-opacity="0.92" />
+      <text x="88" y="78" fill="#111827" font-size="15" font-weight="750">回马枪</text>
+      <text x="88" y="99" fill="#6b7280" font-size="13">张晓棠</text>
+      <rect x="88" y="106" width="54" height="20" rx="10" fill="#eef4fb" />
+      <text x="115" y="120" text-anchor="middle" fill="#64748b" font-size="11">本地音乐</text>
+
+      <text x="18" y="144" fill="#7b8491" font-size="11">01:23</text>
+      <line x1="56" y1="140" x2="204" y2="140" stroke="#dfe7f0" stroke-width="4" stroke-linecap="round" />
+      <line x1="56" y1="140" x2="116" y2="140" stroke="#111827" stroke-width="4" stroke-linecap="round" />
+      <circle cx="116" cy="140" r="5" fill="#ffffff" stroke="#111827" stroke-width="2" />
+      <text x="212" y="144" fill="#7b8491" font-size="11">03:40</text>
+
+      <g transform="translate(22 154)" stroke="#111827" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7l7 7M10 7l-7 7" opacity="0.45" />
+        <path d="M50 2v20M50 12l14-10v20Z" />
+        <circle cx="104" cy="12" r="18" fill="#111827" stroke="none" />
+        <path d="M99 4v16M109 4v16" stroke="white" stroke-width="2.6" />
+        <path d="M150 2v20M150 12l14-10v20Z" />
+        <path d="M205 5c-7 0-11 3.5-11 7s4 7 11 7M205 5l-4-4M205 19l-4 4" opacity="0.68" />
+      </g>
+    </g>
+
+    <g transform="translate(0 566)">
+      <rect x="0" y="0" width="260" height="74" fill="#f2f7fc" stroke="#d8e4f0" />
+      <line x1="18" y1="0" x2="242" y2="0" stroke="#d8e4f0" />
+      <circle cx="47" cy="37" r="17" fill="#d7e9f7" stroke="#9ab8d4" />
+      <circle cx="59" cy="48" r="6" fill="#28c840" stroke="#f2f7fc" stroke-width="2" />
+      <text x="68" y="34" fill="#111827" font-size="14" font-weight="750">Mono</text>
+      <text x="68" y="53" fill="#6b7280" font-size="12">在线</text>
+      <circle cx="188" cy="38" r="15" fill="#eef4fb" />
+      <path d="M188 30v3M188 43v3M196 38h-3M183 38h-3M193 33l-2 2M185 41l-2 2M193 43l-2-2M185 35l-2-2" stroke="#111827" stroke-width="1.6" stroke-linecap="round" />
+      <circle cx="226" cy="38" r="15" fill="#eef4fb" />
+      <path d="M222 33h8M224 33v12M228 33v12M221 45h10" stroke="#111827" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+  </g>
+
+  <g transform="translate(0 640)">
+    <rect x="0" y="0" width="430" height="120" fill="#eef6ff" stroke="#d5e2ef" />
+    <rect x="24" y="20" width="52" height="52" rx="7" fill="url(#album)" />
+    <text x="88" y="40" fill="#111827" font-family="MiSans, Microsoft YaHei UI, Arial, sans-serif" font-size="15" font-weight="750">对你说</text>
+    <text x="88" y="62" fill="#7a8492" font-family="MiSans, Microsoft YaHei UI, Arial, sans-serif" font-size="13">半吨兄弟</text>
+    <circle cx="358" cy="46" r="24" fill="#4d91e8" />
+    <path d="M352 34l18 12-18 12Z" fill="white" />
+    <line x1="0" y1="0" x2="430" y2="0" stroke="#cddded" />
+  </g>
+</svg>

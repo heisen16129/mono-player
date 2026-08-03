@@ -1,4 +1,4 @@
-import { computed, ref, type ComputedRef } from 'vue';
+import { computed, ref, watch, type ComputedRef } from 'vue';
 import type { Track } from '../types/music';
 import { normalizeTrackLyrics, trackLyricFormats } from '../utils/trackLyrics';
 
@@ -94,6 +94,21 @@ export function useLyricsState(activeTrack: ComputedRef<Track | null>) {
     if (lyricsViewState.value.trackKey !== lyricsTrackKey(track)) return;
     setLyricsViewState(track, status, error);
   }
+
+  watch(
+    () => [lyricsTrackKey(activeTrack.value), normalizeTrackLyrics(activeTrack.value)?.lyrics.length ?? 0] as const,
+    ([trackKey, lyricsCount], previousValue) => {
+      const previousTrackKey = previousValue?.[0] ?? null;
+      if (trackKey !== previousTrackKey) {
+        syncLyricsViewStateForTrack(activeTrack.value);
+        return;
+      }
+      if (lyricsCount > 0) {
+        setLyricsViewState(activeTrack.value, 'ready');
+      }
+    },
+    { immediate: true },
+  );
 
   return {
     activeLyricFormat,

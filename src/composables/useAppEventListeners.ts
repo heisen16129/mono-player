@@ -1,0 +1,106 @@
+import { onBeforeUnmount } from 'vue';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import {
+  DESKTOP_LYRICS_ACTION_EVENT,
+  DESKTOP_LYRICS_READY_EVENT,
+  type DesktopLyricsAction,
+} from '../services/desktopLyrics';
+import type { DownloadQueueEvent } from '../services/downloads';
+import { isTauriRuntime } from '../services/music';
+import { listenRustBackendQueue, type RustQueueSnapshot } from '../services/playerBackend';
+import { listenSystemMediaAction, type SystemMediaAction } from '../services/systemMedia';
+
+interface McpSleepTimerEvent {
+  action?: string | null;
+  minutes?: number;
+}
+
+interface UseAppEventListenersOptions {
+  onDesktopLyricsAction: (action: DesktopLyricsAction) => Promise<void> | void;
+  onDesktopLyricsReady: () => void;
+  onDownloadEvent: (event: DownloadQueueEvent) => void;
+  onMcpSleepTimer: (event: McpSleepTimerEvent) => void;
+  onRustQueueSnapshot: (snapshot: RustQueueSnapshot) => void;
+  onSystemMediaAction: (action: SystemMediaAction) => Promise<void> | void;
+}
+
+export function useAppEventListeners({
+  onDesktopLyricsAction,
+  onDesktopLyricsReady,
+  onDownloadEvent,
+  onMcpSleepTimer,
+  onRustQueueSnapshot,
+  onSystemMediaAction,
+}: UseAppEventListenersOptions) {
+  let desktopLyricsActionUnlisten: UnlistenFn | null = null;
+  let desktopLyricsReadyUnlisten: UnlistenFn | null = null;
+  let downloadEventUnlisten: UnlistenFn | null = null;
+  let mcpSleepTimerUnlisten: UnlistenFn | null = null;
+  let rustQueueUnlisten: UnlistenFn | null = null;
+  let systemMediaUnlisten: UnlistenFn | null = null;
+
+  async function startDownloadEventListener() {
+    if (!isTauriRuntime() || downloadEventUnlisten) return;
+    downloadEventUnlisten = await listen<DownloadQueueEvent>('download://event', (event) => {
+      onDownloadEvent(event.payload);
+    });
+  }
+
+  async function startDesktopLyricsActionListener() {
+    if (!isTauriRuntime() || desktopLyricsActionUnlisten) return;
+    desktopLyricsActionUnlisten = await listen<DesktopLyricsAction>(DESKTOP_LYRICS_ACTION_EVENT, async (event) => {
+      await onDesktopLyricsAction(event.payload);
+    });
+  }
+
+  async function startDesktopLyricsReadyListener() {
+    if (!isTauriRuntime() || desktopLyricsReadyUnlisten) return;
+    desktopLyricsReadyUnlisten = await listen(DESKTOP_LYRICS_READY_EVENT, onDesktopLyricsReady);
+  }
+
+  async function startRustQueueEventListener() {
+    if (!isTauriRuntime() || rustQueueUnlisten) return;
+    rustQueueUnlisten = await listenRustBackendQueue(onRustQueueSnapshot);
+  }
+
+  async function startMcpSleepTimerListener() {
+    if (!isTauriRuntime() || mcpSleepTimerUnlisten) return;
+    mcpSleepTimerUnlisten = await listen<McpSleepTimerEvent>('mcp://sleep-timer', (event) => {
+      onMcpSleepTimer(event.payload);
+    });
+  }
+
+  async function startSystemMediaActionListener() {
+    if (!isTauriRuntime() || systemMediaUnlisten) return;
+    systemMediaUnlisten = await listenSystemMediaAction((action) => {
+      void onSystemMediaAction(action);
+    });
+  }
+
+  function stopAppEventListeners() {
+    downloadEventUnlisten?.();
+    downloadEventUnlisten = null;
+    mcpSleepTimerUnlisten?.();
+    mcpSleepTimerUnlisten = null;
+    desktopLyricsActionUnlisten?.();
+    desktopLyricsActionUnlisten = null;
+    desktopLyricsReadyUnlisten?.();
+    desktopLyricsReadyUnlisten = null;
+    rustQueueUnlisten?.();
+    rustQueueUnlisten = null;
+    systemMediaUnlisten?.();
+    systemMediaUnlisten = null;
+  }
+
+  onBeforeUnmount(stopAppEventListeners);
+
+  return {
+    startDesktopLyricsActionListener,
+    startDesktopLyricsReadyListener,
+    startDownloadEventListener,
+    startMcpSleepTimerListener,
+    startRustQueueEventListener,
+    startSystemMediaActionListener,
+    stopAppEventListeners,
+  };
+}

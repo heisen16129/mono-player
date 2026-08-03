@@ -2,37 +2,16 @@
 import { Clock3, Music2, ScanLine } from '@lucide/vue';
 import { songCount, t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
-import type { Track } from '../types/music';
-import EmptyState from './EmptyState.vue';
-import FolderCover from './FolderCover.vue';
+import type { LibraryPanelEmits, LibraryPanelProps } from '../types/library';
+import LibraryFolderEmptyState from './LibraryFolderEmptyState.vue';
+import LibraryFolderRow from './LibraryFolderRow.vue';
+import LibraryQuickRow from './LibraryQuickRow.vue';
 
 const player = usePlayerStore();
 
-interface LocalFolderItem {
-  path: string;
-  title: string;
-  count: number;
-  tracks: Track[];
-  tone: 'desk' | 'night' | 'mist' | 'road';
-}
+defineProps<LibraryPanelProps>();
 
-defineProps<{
-  activeCollection: 'all' | 'favorites';
-  activeFolderPath: string | null;
-  activeLibraryFilter: 'all' | 'recentAdded' | 'recentPlayed';
-  activeOnlineSearch: boolean;
-  localFolders: LocalFolderItem[];
-  recentAddedCount: number;
-  visibleTrackCount: number;
-}>();
-
-const emit = defineEmits<{
-  chooseFolder: [];
-  openAll: [];
-  openFolder: [path: string];
-  openRecentAdded: [];
-  openScanDialog: [];
-}>();
+const emit = defineEmits<LibraryPanelEmits>();
 </script>
 
 <template>
@@ -42,30 +21,22 @@ const emit = defineEmits<{
     </div>
 
     <div class="quick-list">
-      <button
-        class="quick-row"
-        :class="{ selected: !activeOnlineSearch && activeCollection === 'all' && activeLibraryFilter === 'all' && !activeFolderPath }"
-        type="button"
-        @click="emit('openAll')"
+      <LibraryQuickRow
+        :count-label="songCount(player.settings.locale, visibleTrackCount)"
+        :selected="!activeOnlineSearch && activeCollection === 'all' && activeLibraryFilter === 'all' && !activeFolderPath"
+        :title="t(player.settings.locale, 'allSongs')"
+        @select="emit('openAll')"
       >
-        <span><Music2 :size="19" /></span>
-        <span class="quick-copy">
-          <strong>{{ t(player.settings.locale, 'allSongs') }}</strong>
-          <small>{{ songCount(player.settings.locale, visibleTrackCount) }}</small>
-        </span>
-      </button>
-      <button
-        class="quick-row"
-        :class="{ selected: activeLibraryFilter === 'recentAdded' }"
-        type="button"
-        @click="emit('openRecentAdded')"
+        <template #icon><Music2 :size="19" /></template>
+      </LibraryQuickRow>
+      <LibraryQuickRow
+        :count-label="songCount(player.settings.locale, recentAddedCount)"
+        :selected="activeLibraryFilter === 'recentAdded'"
+        :title="t(player.settings.locale, 'recentAdded')"
+        @select="emit('openRecentAdded')"
       >
-        <span><Clock3 :size="19" /></span>
-        <span class="quick-copy">
-          <strong>{{ t(player.settings.locale, 'recentAdded') }}</strong>
-          <small>{{ songCount(player.settings.locale, recentAddedCount) }}</small>
-        </span>
-      </button>
+        <template #icon><Clock3 :size="19" /></template>
+      </LibraryQuickRow>
     </div>
 
     <div class="divider"></div>
@@ -78,28 +49,34 @@ const emit = defineEmits<{
         </button>
       </div>
 
-      <button
+      <LibraryFolderRow
         v-for="folder in localFolders"
         :key="folder.path"
-        class="playlist-row"
-        :class="{ selected: activeFolderPath === folder.path }"
-        type="button"
-        :title="folder.path"
-        @click="emit('openFolder', folder.path)"
-      >
-        <FolderCover class="cover-mini" :tracks="folder.tracks" :tone="folder.tone" />
-        <span>
-          <strong>{{ folder.title }}</strong>
-          <small>{{ songCount(player.settings.locale, folder.count) }}</small>
-        </span>
-      </button>
+        :count-label="songCount(player.settings.locale, folder.count)"
+        :folder="folder"
+        :selected="activeFolderPath === folder.path"
+        @open="emit('openFolder', $event)"
+      />
 
-      <EmptyState v-if="localFolders.length === 0" class-name="empty-folder-note" :message="t(player.settings.locale, 'emptyFolders')" />
+      <LibraryFolderEmptyState v-if="localFolders.length === 0" :message="t(player.settings.locale, 'emptyFolders')" />
     </section>
   </aside>
 </template>
 
 <style scoped>
+.library-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  padding: 18px 20px 20px;
+  overflow: hidden;
+  border-right: 1px solid var(--smw-library-border);
+  background: var(--smw-library-bg);
+}
+
 .panel-title,
 .section-heading {
   display: flex;
@@ -119,58 +96,6 @@ const emit = defineEmits<{
   gap: 10px;
 }
 
-.quick-row,
-.playlist-row {
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-
-.quick-row {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  column-gap: 12px;
-  align-items: center;
-  min-height: 58px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  text-align: left;
-}
-
-.quick-row:hover,
-.quick-row.selected {
-  background: var(--smw-bg-selected);
-}
-
-.quick-row > span:first-child {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border: 1px solid var(--smw-border);
-  border-radius: 8px;
-  background: var(--smw-bg-input);
-}
-
-.quick-copy {
-  display: grid;
-  gap: 2px;
-  align-content: center;
-  min-width: 0;
-}
-
-.quick-row strong {
-  font-size: 14px;
-  font-weight: 520;
-  line-height: 1.2;
-}
-
-.quick-row small {
-  color: var(--smw-text-secondary);
-  font-size: 13px;
-  line-height: 1.2;
-}
-
 .divider {
   height: 1px;
   background: var(--smw-border);
@@ -187,39 +112,4 @@ const emit = defineEmits<{
   font-size: 13px;
 }
 
-.playlist-row {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-  min-height: 58px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  text-align: left;
-}
-
-.playlist-row:hover,
-.playlist-row.selected {
-  background: var(--smw-bg-selected);
-}
-
-.playlist-row strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
-  font-weight: 520;
-}
-
-.playlist-row small {
-  color: var(--smw-text-secondary);
-  font-size: 13px;
-}
-
-.empty-folder-note {
-  margin: 4px 8px 0;
-  color: var(--smw-text-secondary);
-  font-size: 12px;
-}
 </style>

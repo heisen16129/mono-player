@@ -46,6 +46,7 @@ type MessageKey =
   | 'minimizeToTray'
   | 'musicLibrary'
   | 'network'
+  | 'noMusic'
   | 'noLyrics'
   | 'nowPlayingQueue'
   | 'online'
@@ -131,6 +132,7 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     minimizeToTray: '最小化到托盘',
     musicLibrary: '音乐库',
     network: '网络',
+    noMusic: '暂无音乐',
     noLyrics: '暂无歌词',
     nowPlayingQueue: '当前播放队列',
     online: '在线',
@@ -215,6 +217,7 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     minimizeToTray: 'Minimize to tray',
     musicLibrary: 'Library',
     network: 'Network',
+    noMusic: 'No music',
     noLyrics: 'No lyrics',
     nowPlayingQueue: 'Current playback queue',
     online: 'Online',

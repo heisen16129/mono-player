@@ -1,62 +1,31 @@
 ﻿<script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useLyricsActionMenu } from '../composables/useLyricsActionMenu';
 import { useLyricsAssociation } from '../composables/useLyricsAssociation';
 import { useLyricsCover } from '../composables/useLyricsCover';
 import { useLyricsDownload } from '../composables/useLyricsDownload';
 import { useLyricsFullscreen } from '../composables/useLyricsFullscreen';
 import { useLyricsHighlight } from '../composables/useLyricsHighlight';
+import { useLyricsMetadataState } from '../composables/useLyricsMetadataState';
 import { useLyricsSearch } from '../composables/useLyricsSearch';
 import { useLyricsScroll } from '../composables/useLyricsScroll';
 import { useLyricsTrackLoader } from '../composables/useLyricsTrackLoader';
-import type { LyricLine, Track, TrackLyrics } from '../types/music';
-import { t } from '../i18n';
+import { useLyricsViewPanelBindings } from '../composables/useLyricsViewPanelBindings';
+import { useLyricsViewLabels } from '../composables/useLyricsViewLabels';
+import { useLyricsViewInteractions } from '../composables/useLyricsViewInteractions';
+import { useLyricsViewStyle } from '../composables/useLyricsViewStyle';
+import type { LyricsViewEmits, LyricsViewProps } from '../types/lyricsView';
+import type { LyricLine } from '../types/music';
 import { usePlayerStore } from '../stores/player';
-import LyricsActionMenu from './lyrics/LyricsActionMenu.vue';
-import LyricsCoverPanel from './lyrics/LyricsCoverPanel.vue';
+import LyricsActionMenuOverlay from './lyrics/LyricsActionMenuOverlay.vue';
 import LyricsHeaderBar from './lyrics/LyricsHeaderBar.vue';
-import LyricsPanel from './lyrics/LyricsPanel.vue';
-import LyricsSearchDialog from './lyrics/LyricsSearchDialog.vue';
-import { normalizeTrackLyrics } from '../utils/trackLyrics';
+import LyricsSearchDialogOverlay from './lyrics/LyricsSearchDialogOverlay.vue';
+import LyricsStage from './lyrics/LyricsStage.vue';
 import { trackIdentityKey } from '../utils/trackKey';
 
-const props = defineProps<{
-  activeTrack: Track | null;
-  currentTime: number;
-  isPlaying: boolean;
-  isPlayerDockHidden: boolean;
-  lyricFormat?: string | null;
-  lyricsMetadata?: TrackLyrics | null;
-  lyricsStatus?: 'idle' | 'loading' | 'ready' | 'empty' | 'error';
-  lyricsError?: string | null;
-}>();
+const props = defineProps<LyricsViewProps>();
 
-const emit = defineEmits<{
-  close: [];
-  coverChanged: [];
-  lyricsCleared: [];
-  lyricsFound: [
-    lyrics: TrackLyrics,
-    artwork?: string | null,
-    sourceName?: string | null,
-    providerId?: string | null,
-    trackId?: string | null,
-    trackRaw?: unknown,
-  ];
-  hidePlayerDock: [];
-  notify: [message: string, variant?: 'success' | 'error'];
-  seek: [time: number];
-  showPlayerDock: [];
-}>();
-
-function togglePlayerDock() {
-  if (props.isPlayerDockHidden) {
-    emit('showPlayerDock');
-  } else {
-    emit('hidePlayerDock');
-  }
-  closeFontMenu();
-}
+const emit = defineEmits<LyricsViewEmits>();
 
 const loadedLyricLines = ref<LyricLine[]>([]);
 const isLoadingLyrics = ref(false);
@@ -109,30 +78,23 @@ const {
   defaultQuery: () => [props.activeTrack?.title, props.activeTrack?.artist].filter(Boolean).join(' ').trim(),
   beforeOpen: closeFontMenu,
 });
-const activeLyrics = computed(() => props.lyricsMetadata ?? normalizeTrackLyrics(props.activeTrack));
 const activeTrackRef = computed(() => props.activeTrack);
-const isLyricsPending = computed(() => (
-  !loadedLyricLines.value.length && (props.lyricsStatus === 'loading' || isLoadingLyrics.value)
-));
-const emptyLyricsMessage = computed(() => (
-  props.lyricsStatus === 'error' ? props.lyricsError || '歌词加载失败' : t(player.settings.locale, 'noLyrics')
-));
-const hasAssociatedLyrics = computed(() => Boolean(props.activeTrack?.associatedLyrics?.lyrics.length));
-const activeArtwork = computed(() => props.activeTrack?.associatedArtwork ?? props.activeTrack?.artwork ?? null);
-const availableLyricFormats = computed(() => {
-  const formats = activeLyrics.value?.lyrics.map((variant) => variant.format) ?? [];
-  return formats.filter((format, index) => format && formats.indexOf(format) === index);
-});
-const downloadableLyricFormats = computed(() => {
-  if (!hasAssociatedLyrics.value) return [];
-  const formats = availableLyricFormats.value.length > 0
-    ? availableLyricFormats.value
-    : (activeLyrics.value?.lyrics[0] ? [activeLyrics.value.lyrics[0].format] : []);
-  const items = formats.filter((format, index) => format && formats.indexOf(format) === index);
-  if (items.includes('lrc') && !items.includes('txt')) {
-    items.push('txt');
-  }
-  return items;
+const {
+  activeArtwork,
+  activeLyrics,
+  availableLyricFormats,
+  downloadableLyricFormats,
+  emptyLyricsMessage,
+  hasAssociatedLyrics,
+  isLyricsPending,
+} = useLyricsMetadataState({
+  activeTrack: activeTrackRef,
+  isLoadingLyrics,
+  lines: loadedLyricLines,
+  locale: () => player.settings.locale,
+  lyricsError: () => props.lyricsError,
+  lyricsMetadata: () => props.lyricsMetadata,
+  lyricsStatus: () => props.lyricsStatus,
 });
 const {
   downloadCover,
@@ -212,11 +174,23 @@ const {
   setArtworkCover,
 });
 
-const lyricsViewStyle = computed(() => ({
-  '--lyrics-font-size': `${lyricFontSize.value}px`,
-  '--smw-lyrics-current': player.settings.useThemeLyricColor ? undefined : player.settings.lyricFontColor,
-  '--lyrics-cover-bg': backgroundCoverUrl.value ? `url("${backgroundCoverUrl.value}")` : undefined,
-}));
+const { lyricsViewStyle } = useLyricsViewStyle({
+  backgroundCoverUrl,
+  lyricFontColor: () => player.settings.lyricFontColor,
+  lyricFontSize,
+  useThemeLyricColor: () => player.settings.useThemeLyricColor,
+});
+const {
+  albumLabel,
+  artistLabel,
+  closeLabel,
+  lyricsLabel,
+  lyricsLoadingLabel,
+  titleLabel,
+} = useLyricsViewLabels({
+  activeTrack: activeTrackRef,
+  locale: () => player.settings.locale,
+});
 
 useLyricsTrackLoader({
   activeArtwork,
@@ -238,25 +212,92 @@ useLyricsTrackLoader({
   syncLyricsToCurrentTime,
 });
 
-async function closeLyricsView() {
-  await closeFullscreenIfNeeded();
-  emit('close');
+async function syncLyricsAfterOpen() {
+  await syncLyricsToCurrentTime();
+  requestAnimationFrame(() => {
+    void syncLyricsToCurrentTime();
+    requestAnimationFrame(() => {
+      void syncLyricsToCurrentTime();
+    });
+  });
 }
 
-async function openActionMenu(event: MouseEvent) {
-  await updateFullscreenState();
-  openFontMenu(event);
-}
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (!isOpen) return;
+    void syncLyricsAfterOpen();
+  },
+  { flush: 'post' },
+);
 
-onMounted(() => {
-  document.addEventListener('pointerdown', closeFontMenuOnOutsidePointer);
-  void updateFullscreenState();
-  void syncLyricsToCurrentTime();
+const {
+  closeLyricsView,
+  openActionMenu,
+  toggleFullscreen,
+  togglePlayerDock,
+} = useLyricsViewInteractions({
+  clearLyricsCoverCache,
+  closeFontMenu,
+  closeFontMenuOnOutsidePointer,
+  closeFullscreenIfNeeded,
+  isPlayerDockHidden: () => props.isPlayerDockHidden,
+  onClose: () => emit('close'),
+  onHidePlayerDock: () => emit('hidePlayerDock'),
+  onShowPlayerDock: () => emit('showPlayerDock'),
+  openFontMenu,
+  syncLyricsToCurrentTime,
+  toggleLyricsFullscreen,
+  updateFullscreenState,
 });
 
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', closeFontMenuOnOutsidePointer);
-  clearLyricsCoverCache();
+const {
+  lyricsActionMenuProps,
+  lyricsSearchDialogProps,
+  lyricsStageProps,
+} = useLyricsViewPanelBindings({
+  stage: {
+    activeLyricIndex: () => activeLyricIndex.value,
+    coverUrl: () => displayCoverUrl.value,
+    emptyMessage: () => emptyLyricsMessage.value,
+    isEmpty: () => !loadedLyricLines.value.length,
+    isLyricSyncOpen: () => isLyricSyncOpen.value,
+    isLyricsPending: () => isLyricsPending.value,
+    isPlayerDockHidden: () => props.isPlayerDockHidden,
+    isScrolling: () => isLyricsListScrolling.value,
+    label: () => lyricsLabel.value,
+    lines: () => loadedLyricLines.value,
+    loadingText: () => lyricsLoadingLabel.value,
+    lyricWordProgress: () => lyricWordProgress,
+    scrollThumbTop: () => scrollThumbTop.value,
+    setLyricsPanelRef: () => setLyricsPanelRef,
+  },
+  actionMenu: {
+    downloadableLyricFormats: () => downloadableLyricFormats.value,
+    fontSize: () => lyricFontSize.value,
+    hasAssociatedLyrics: () => hasAssociatedLyrics.value,
+    hasDownloadableCover: () => hasDownloadableCover(),
+    hasLinkedLyrics: () => Boolean(activeLyrics.value?.lyrics.length && props.activeTrack),
+    isFullscreen: () => isFullscreen.value,
+    isLyricSyncOpen: () => isLyricSyncOpen.value,
+    isOpen: () => isFontMenuOpen.value,
+    isPlayerDockHidden: () => props.isPlayerDockHidden,
+    left: () => fontMenuLeft.value,
+    linkedLyricsLabel: () => (props.activeTrack ? linkedLyricsLabel(props.activeTrack) : ''),
+    top: () => fontMenuTop.value,
+  },
+  searchDialog: {
+    isLoadingMore: () => isLoadingMorePluginLyrics.value,
+    isOpen: () => isSearchDialogOpen.value,
+    isSearching: () => isSearchingPluginLyrics.value,
+    providerId: () => lyricSearchProviderId.value,
+    providers: () => lyricSearchProviders.value,
+    resolvingTrackKey: () => resolvingLyricTrackKey.value,
+    results: () => lyricSearchResults.value,
+    status: () => lyricSearchStatus.value,
+    tabItems: () => lyricProviderTabItems.value,
+    trackKey: () => lyricTrackKey,
+  },
 });
 </script>
 
@@ -271,88 +312,49 @@ onBeforeUnmount(() => {
     @contextmenu.prevent="openActionMenu"
   >
     <LyricsHeaderBar
-      :album="activeTrack?.album || t(player.settings.locale, 'localMusic')"
-      :artist="activeTrack?.artist || t(player.settings.locale, 'unknownArtist')"
-      :close-label="t(player.settings.locale, 'close')"
-      :title="activeTrack?.title || t(player.settings.locale, 'unknownTrack')"
+      :album="albumLabel"
+      :artist="artistLabel"
+      :close-label="closeLabel"
+      :title="titleLabel"
       @close="closeLyricsView"
     />
 
-    <div class="lyrics-stage">
-      <LyricsCoverPanel :cover-url="displayCoverUrl" @error="handleCoverError" />
+    <LyricsStage
+      v-bind="lyricsStageProps"
+      @begin-browse="beginLyricBrowse"
+      @cover-error="handleCoverError"
+      @hide-scrollbar="hideLyricsScrollbar"
+      @open-search="openLyricSearchDialog"
+      @restore-realtime="restoreRealtimeLyrics"
+      @scroll="syncScrollThumb"
+      @seek="seekToLyric"
+      @shift-timing="shiftLyricTiming"
+      @wheel="handleLyricsWheel"
+    />
 
-      <LyricsPanel
-        :ref="setLyricsPanelRef"
-        :active-lyric-index="activeLyricIndex"
-        :empty-message="emptyLyricsMessage"
-        :is-empty="!loadedLyricLines.length"
-        :is-lyric-sync-open="isLyricSyncOpen"
-        :is-lyrics-pending="isLyricsPending"
-        :is-player-dock-hidden="isPlayerDockHidden"
-        :is-scrolling="isLyricsListScrolling"
-        :label="t(player.settings.locale, 'lyrics')"
-        :lines="loadedLyricLines"
-        :loading-text="t(player.settings.locale, 'lyricsLoading')"
-        :lyric-word-progress="lyricWordProgress"
-        :scroll-thumb-top="scrollThumbTop"
-        @begin-browse="beginLyricBrowse"
-        @hide-scrollbar="hideLyricsScrollbar"
-        @open-search="openLyricSearchDialog"
-        @restore-realtime="restoreRealtimeLyrics"
-        @scroll="syncScrollThumb"
-        @seek="seekToLyric"
-        @shift-timing="shiftLyricTiming"
-        @wheel="handleLyricsWheel"
-      />
-    </div>
+    <LyricsActionMenuOverlay
+      v-bind="lyricsActionMenuProps"
+      @clear-associated-lyrics="clearAssociatedLyrics"
+      @close-lyric-sync="closeLyricSyncControls"
+      @decrease-font-size="decreaseLyricFontSize"
+      @download-cover="downloadCover"
+      @download-lyrics="downloadLyrics"
+      @increase-font-size="increaseLyricFontSize"
+      @toggle-player-dock="togglePlayerDock"
+      @open-lyric-search="openLyricSearchDialog"
+      @open-lyric-sync="openLyricSyncControls"
+      @toggle-fullscreen="toggleFullscreen"
+    />
 
-    <Teleport to="body">
-      <LyricsActionMenu
-        v-if="isFontMenuOpen"
-        :downloadable-lyric-formats="downloadableLyricFormats"
-        :font-size="lyricFontSize"
-        :has-associated-lyrics="hasAssociatedLyrics"
-        :has-downloadable-cover="hasDownloadableCover()"
-        :has-linked-lyrics="Boolean(activeLyrics?.lyrics.length && activeTrack)"
-        :is-fullscreen="isFullscreen"
-        :is-lyric-sync-open="isLyricSyncOpen"
-        :is-player-dock-hidden="isPlayerDockHidden"
-        :left="fontMenuLeft"
-        :linked-lyrics-label="activeTrack ? linkedLyricsLabel(activeTrack) : ''"
-        :top="fontMenuTop"
-        @clear-associated-lyrics="clearAssociatedLyrics"
-        @close-lyric-sync="closeLyricSyncControls"
-        @decrease-font-size="decreaseLyricFontSize"
-        @download-cover="downloadCover"
-        @download-lyrics="downloadLyrics"
-        @increase-font-size="increaseLyricFontSize"
-        @toggle-player-dock="togglePlayerDock"
-        @open-lyric-search="openLyricSearchDialog"
-        @open-lyric-sync="openLyricSyncControls"
-        @toggle-fullscreen="toggleLyricsFullscreen(); closeFontMenu()"
-      />
-    </Teleport>
-
-    <Teleport to="body">
-      <LyricsSearchDialog
-        v-if="isSearchDialogOpen"
-        v-model:query="lyricSearchQuery"
-        :is-loading-more="isLoadingMorePluginLyrics"
-        :is-searching="isSearchingPluginLyrics"
-        :provider-id="lyricSearchProviderId"
-        :providers="lyricSearchProviders"
-        :resolving-track-key="resolvingLyricTrackKey"
-        :results="lyricSearchResults"
-        :status="lyricSearchStatus"
-        :tab-items="lyricProviderTabItems"
-        :track-key="lyricTrackKey"
-        @apply="applyPluginLyrics"
-        @close="closeLyricSearchDialog"
-        @scroll="handleLyricSearchResultsScroll"
-        @search="searchPluginLyrics"
-        @select-provider="selectLyricSearchProvider"
-      />
-    </Teleport>
+    <LyricsSearchDialogOverlay
+      v-model:query="lyricSearchQuery"
+      v-bind="lyricsSearchDialogProps"
+      @apply="applyPluginLyrics"
+      @close="closeLyricSearchDialog"
+      @scroll="handleLyricSearchResultsScroll"
+      @search="searchPluginLyrics"
+      @select-provider="selectLyricSearchProvider"
+    />
   </section>
 </template>
 
@@ -421,23 +423,5 @@ onBeforeUnmount(() => {
   z-index: 1;
 }
 
-.lyrics-stage {
-  display: grid;
-  grid-template-columns: minmax(240px, 360px) minmax(520px, 1.7fr);
-  grid-template-rows: minmax(0, 1fr) var(--player-height);
-  gap: clamp(44px, 6vw, 86px);
-  align-items: center;
-  max-width: 1280px;
-  height: calc(100% - 78px);
-  margin: 0 auto;
-}
-
-.lyrics-stage :deep(.lyrics-cover) {
-  grid-row: 1;
-}
-
-.lyrics-stage :deep(.lyrics-panel-wrap) {
-  grid-row: 1 / 3;
-}
-
 </style>
+

@@ -11,7 +11,6 @@
 
 <style scoped>
 .library-content-layout {
-  grid-column: 2 / 4;
   display: grid;
   grid-template-columns: var(--library-width) minmax(0, 1fr);
   min-width: 0;
@@ -25,35 +24,6 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-}
-
-.library-panel-slot :deep(.library-panel) {
-  width: 100%;
-  height: 100%;
-}
-
-:deep(.library-panel) {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  min-height: 0;
-  padding: 18px 20px 20px;
-  overflow: hidden;
-  border-right: 1px solid var(--smw-library-border);
-  background: var(--smw-library-bg);
-}
-
-:deep(.panel-title) {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-:deep(.panel-title h1) {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 650;
 }
 
 .library-panel-slide-enter-active,

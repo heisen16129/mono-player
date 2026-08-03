@@ -40,6 +40,14 @@ export function useQueuePopover({ activeTrack, onPlayTrack }: QueuePopoverOption
     queueTrackRefs.value.delete(trackId);
   }
 
+  function setQueueControlElement(element: unknown) {
+    setQueueControl(element instanceof HTMLElement ? element : null);
+  }
+
+  function setQueueTrackElement(trackId: number, element: unknown) {
+    setQueueTrackRef(trackId, element instanceof HTMLElement ? element : null);
+  }
+
   async function locateQueueTrack() {
     if (!activeTrack.value) return;
 
@@ -68,8 +76,8 @@ export function useQueuePopover({ activeTrack, onPlayTrack }: QueuePopoverOption
     isQueueOpen,
     locateQueueTrack,
     playQueueTrack,
-    setQueueControl,
-    setQueueTrackRef,
+    setQueueControlElement,
+    setQueueTrackElement,
     toggleQueuePanel,
   };
 }

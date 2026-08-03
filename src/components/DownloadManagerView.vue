@@ -1,60 +1,34 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref } from 'vue';
 import DownloadItemContextMenu from './DownloadItemContextMenu.vue';
-import EmptyState from './EmptyState.vue';
-import SegmentTabs from './SegmentTabs.vue';
-import TrackTable from './TrackTable.vue';
+import DownloadManagerContent from './DownloadManagerContent.vue';
+import DownloadManagerTabs from './DownloadManagerTabs.vue';
+import { type DownloadManagerTab, useDownloadManagerItems } from '../composables/useDownloadManagerItems';
+import type {
+  DownloadItemContextMenuListeners,
+  DownloadItemContextMenuState,
+  DownloadManagerContentListeners,
+  DownloadManagerContentProps,
+  DownloadManagerViewEmits,
+  DownloadManagerViewProps,
+} from '../types/downloadManager';
 import type { DownloadItem, Track } from '../types/music';
-import { downloadItemTrackId } from '../utils/trackKey';
 
-const props = defineProps<{
-  activeTrack: Track | null;
-  favoriteTrackIds: number[];
-  isPlaying: boolean;
-  items: DownloadItem[];
-}>();
+const props = defineProps<DownloadManagerViewProps>();
 
-const emit = defineEmits<{
-  queueNext: [item: DownloadItem];
-  addToPlaylist: [item: DownloadItem];
-  deleteDownload: [item: DownloadItem];
-  clearRecord: [item: DownloadItem];
-  openFolder: [item: DownloadItem];
-  pauseDownload: [item: DownloadItem];
-  retryDownload: [item: DownloadItem];
-  resumeDownload: [item: DownloadItem];
-  playTrack: [track: Track];
-  selectTrack: [track: Track];
-  toggleFavorite: [track: Track];
-}>();
+const emit = defineEmits<DownloadManagerViewEmits>();
 
-const activeTab = ref<'downloaded' | 'downloading'>('downloaded');
-const downloadContextMenu = ref<{ item: DownloadItem; x: number; y: number } | null>(null);
+const activeTab = ref<DownloadManagerTab>('downloaded');
+const downloadContextMenu = ref<DownloadItemContextMenuState | null>(null);
 const downloadTabs = [
   { id: 'downloaded', label: '已下载' },
   { id: 'downloading', label: '下载中' },
 ];
+const { downloadItemForTrack, visibleTracks } = useDownloadManagerItems(() => props.items, activeTab);
 
-const visibleItems = computed(() => {
-  return props.items.filter((item) => {
-    if (activeTab.value === 'downloaded') return item.status === 'downloaded';
-    return item.status === 'downloading' || item.status === 'failed' || item.status === 'paused';
-  });
+const downloadEmptyMessage = computed(() => {
+  return activeTab.value === 'downloaded' ? '还没有已下载歌曲' : '当前没有下载任务';
 });
-
-const visibleTracks = computed(() => visibleItems.value.map(toDownloadTrack));
-
-const itemByTrackId = computed(() => new Map(
-  visibleItems.value.map((item) => [downloadItemTrackId(item.id), item]),
-));
-
-function getStatusText(item: DownloadItem | null | undefined) {
-  if (!item) return '';
-  if (item.status === 'downloaded') return '已完成';
-  if (item.status === 'failed') return item.error ? `失败：${item.error}` : '失败';
-  if (item.status === 'paused') return '暂停';
-  return `${Math.round(item.progress)}%`;
-}
 
 function openDownloadContextMenu(track: Track, x: number, y: number) {
   const item = downloadItemForTrack(track);
@@ -67,29 +41,41 @@ function closeDownloadContextMenu() {
   downloadContextMenu.value = null;
 }
 
-function toDownloadTrack(item: DownloadItem): Track {
-  return {
-    id: downloadItemTrackId(item.id),
-    path: item.filePath ?? '',
-    title: item.title,
-    artist: item.artist,
-    album: item.album,
-    duration: item.duration,
-    artwork: item.artwork ?? null,
-    sourceId: item.sourceId,
-    sourceName: item.sourceName,
-  };
-}
-
-function downloadItemForTrack(track: Track) {
-  return itemByTrackId.value.get(track.id) ?? null;
-}
-
 function downloadRowClass(track: Track) {
   return {
     'is-context-open': downloadContextMenu.value?.item.id === downloadItemForTrack(track)?.id,
   };
 }
+
+const downloadManagerContentProps = computed<DownloadManagerContentProps>(() => ({
+  activeTrack: props.activeTrack,
+  downloadItemForTrack,
+  emptyMessage: downloadEmptyMessage.value,
+  favoriteTrackIds: props.favoriteTrackIds,
+  isPlaying: props.isPlaying,
+  rowClass: downloadRowClass,
+  showFavoriteAction: activeTab.value === 'downloaded',
+  spectrumLevels: props.spectrumLevels,
+  tracks: visibleTracks.value,
+}));
+
+const downloadManagerContentListeners: DownloadManagerContentListeners = {
+  onOpenTrackMenu: openDownloadContextMenu,
+  onPlayTrack: (track) => emit('playTrack', track),
+  onSelectTrack: (track) => emit('selectTrack', track),
+  onToggleFavorite: (track) => emit('toggleFavorite', track),
+};
+
+const downloadItemContextMenuListeners: DownloadItemContextMenuListeners = {
+  onAddToPlaylist: (item) => emitMenuAction('addToPlaylist', item),
+  onClearRecord: (item) => emitMenuAction('clearRecord', item),
+  onDeleteDownload: (item) => emitMenuAction('deleteDownload', item),
+  onOpenFolder: (item) => emitMenuAction('openFolder', item),
+  onPauseDownload: (item) => emitMenuAction('pauseDownload', item),
+  onQueueNext: (item) => emitMenuAction('queueNext', item),
+  onResumeDownload: (item) => emitMenuAction('resumeDownload', item),
+  onRetryDownload: (item) => emitMenuAction('retryDownload', item),
+};
 
 function emitMenuAction(action: 'queueNext' | 'addToPlaylist' | 'deleteDownload' | 'clearRecord' | 'openFolder' | 'pauseDownload' | 'retryDownload' | 'resumeDownload', item: DownloadItem) {
   if (action === 'queueNext') emit('queueNext', item);
@@ -113,46 +99,14 @@ function selectDownloadTab(tab: string | null) {
     <DownloadItemContextMenu
       v-if="downloadContextMenu"
       :menu="downloadContextMenu"
-      @queue-next="emitMenuAction('queueNext', $event)"
-      @add-to-playlist="emitMenuAction('addToPlaylist', $event)"
-      @delete-download="emitMenuAction('deleteDownload', $event)"
-      @clear-record="emitMenuAction('clearRecord', $event)"
-      @open-folder="emitMenuAction('openFolder', $event)"
-      @pause-download="emitMenuAction('pauseDownload', $event)"
-      @retry-download="emitMenuAction('retryDownload', $event)"
-      @resume-download="emitMenuAction('resumeDownload', $event)"
+      v-bind="downloadItemContextMenuListeners"
     />
 
-    <SegmentTabs label="下载管理" :items="downloadTabs" :model-value="activeTab" root-class="download-tabs" @select="selectDownloadTab" />
+    <DownloadManagerTabs label="涓嬭浇绠＄悊" :items="downloadTabs" :model-value="activeTab" @select="selectDownloadTab" />
 
-    <TrackTable
-      v-if="visibleTracks.length > 0"
-      :active-track="activeTrack"
-      disable-internal-paging
-      enable-context-menu
-      extra-columns="118px 88px"
-      :favorite-track-ids="favoriteTrackIds"
-      :is-playing="isPlaying"
-      label="下载管理"
-      :row-class="downloadRowClass"
-      :tracks="visibleTracks"
-      wide
-      @open-track-menu="openDownloadContextMenu"
-      @play-track="emit('playTrack', $event)"
-      @select-track="emit('selectTrack', $event)"
-      @toggle-favorite="emit('toggleFavorite', $event)"
-    >
-      <template #extraHead>
-        <span>来源</span>
-        <span>状态</span>
-      </template>
-      <template #extraCells="{ track }">
-        <span><i>{{ downloadItemForTrack(track)?.sourceName }}</i></span>
-        <span>{{ getStatusText(downloadItemForTrack(track)) }}</span>
-      </template>
-    </TrackTable>
-
-    <EmptyState v-else class-name="download-empty" :message="activeTab === 'downloaded' ? '还没有已下载歌曲' : '当前没有下载任务'" />
+    <DownloadManagerContent
+      v-bind="{ ...downloadManagerContentProps, ...downloadManagerContentListeners }"
+    />
   </section>
 </template>
 
@@ -160,36 +114,12 @@ function selectDownloadTab(tab: string | null) {
 .download-manager-view {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
   overflow: hidden;
   padding: 22px 20px 24px;
   background: var(--smw-bg-workspace);
-}
-
-.download-manager-view :deep(.track-table) {
-  min-height: 0;
-  overflow: auto;
-}
-
-.download-manager-view :deep(.track-row.is-context-open) {
-  background: var(--smw-bg-selected);
-}
-
-.download-manager-view :deep(.track-row i) {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  color: #fff;
-  background: var(--smw-button-primary);
-  font-style: normal;
-  font-weight: 650;
-}
-
-.download-empty {
-  min-height: 220px;
-  font-size: 13px;
 }
 </style>

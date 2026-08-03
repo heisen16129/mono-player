@@ -49,8 +49,14 @@ export function useActiveTrackState({
 
   const onlinePreparingTrackKey = computed(() => onlineResolvingTrackKey.value ?? queueSwitchingTrackKey.value);
 
+  function clearPreparingPlaybackState() {
+    onlineResolvingTrackKey.value = null;
+    queueSwitchingTrackKey.value = null;
+  }
+
   return {
     activeTrack,
+    clearPreparingPlaybackState,
     currentPlaybackSource,
     currentPlaybackTrack,
     isPreparingActiveTrack,

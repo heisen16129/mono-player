@@ -689,7 +689,10 @@ fn play_online_music(app: &AppHandle, params: Value) -> Result<Value, String> {
 
 fn online_track_from_params(params: Value) -> Result<Track, String> {
     if string_arg(&params, "url").is_some() {
-        return Err("online.playMusic no longer accepts direct url; pass the online track object instead.".to_string());
+        return Err(
+            "online.playMusic no longer accepts direct url; pass the online track object instead."
+                .to_string(),
+        );
     }
 
     let track = params
@@ -750,10 +753,11 @@ fn online_track_hash_id(provider_id: &str, source_id: &str) -> i64 {
 
 fn get_lyrics(app: &AppHandle, params: Value) -> Result<Value, String> {
     if let Some(content) = string_arg(&params, "content") {
-        let lines = crate::lyrics::resolve_lyrics_source_backend(&crate::lyrics::LyricsResolveInfo {
-            content: Some(content),
-            format: string_arg(&params, "format"),
-        })?;
+        let lines =
+            crate::lyrics::resolve_lyrics_source_backend(&crate::lyrics::LyricsResolveInfo {
+                content: Some(content),
+                format: string_arg(&params, "format"),
+            })?;
         return Ok(json!({
             "source": "provided",
             "lines": lines
@@ -764,11 +768,15 @@ fn get_lyrics(app: &AppHandle, params: Value) -> Result<Value, String> {
     let title = string_arg(&params, "title");
     let artist = string_arg(&params, "artist");
     let lines = crate::lyrics::resolve_lyrics_source_backend(&crate::lyrics::LyricsResolveInfo {
-        content: crate::lyrics::read_local_lyrics_bundle_for_track(&path, title.as_deref(), artist.as_deref())
-            .ok()
-            .flatten()
-            .and_then(|lyrics| lyrics.lyrics.into_iter().next())
-            .map(|variant| variant.content),
+        content: crate::lyrics::read_local_lyrics_bundle_for_track(
+            &path,
+            title.as_deref(),
+            artist.as_deref(),
+        )
+        .ok()
+        .flatten()
+        .and_then(|lyrics| lyrics.lyrics.into_iter().next())
+        .map(|variant| variant.content),
         format: None,
     })?;
     Ok(json!({
@@ -806,8 +814,8 @@ fn download_track(app: &AppHandle, params: Value) -> Result<Value, String> {
             "mono_download_track requires downloadDir, or a download directory in settings."
                 .to_string()
         })?;
-    let task_id = string_arg(&params, "taskId")
-        .unwrap_or_else(|| format!("mcp-download-{}", now_ms()));
+    let task_id =
+        string_arg(&params, "taskId").unwrap_or_else(|| format!("mcp-download-{}", now_ms()));
     let request = DownloadTrackRequest {
         task_id: Some(task_id.clone()),
         download_dir,

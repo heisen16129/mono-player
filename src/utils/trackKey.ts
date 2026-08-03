@@ -22,10 +22,6 @@ export function pluginSearchTrackId(track: PluginSearchTrack) {
   return -Math.abs(stableStringHash(pluginSearchTrackKey(track)));
 }
 
-export function downloadItemTrackId(id: string) {
-  return positiveStableStringHash(id);
-}
-
 export function downloadTrackKey(track: Track) {
   const sourceName = track.sourceName ?? '本地';
   const sourceId = track.sourceId ?? String(track.id);

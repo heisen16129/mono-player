@@ -19,9 +19,7 @@ pub(crate) fn resolve_lyrics_source(lyrics: LyricsResolveInfo) -> ApiResponse<Ve
 }
 
 #[tauri::command]
-pub(crate) fn resolve_local_track_lyrics(
-    track: Track,
-) -> ApiResponse<Option<TrackLyrics>> {
+pub(crate) fn resolve_local_track_lyrics(track: Track) -> ApiResponse<Option<TrackLyrics>> {
     eprintln!(
         "[local-lyrics] request path={} title={} artist={}",
         track.path,
@@ -36,7 +34,11 @@ pub(crate) fn resolve_local_track_lyrics(
     match &result {
         Ok(Some(lyrics)) => eprintln!(
             "[local-lyrics] response hasLyrics=true formats={:?} defaultFormat={} variants={}",
-            lyrics.lyrics.iter().map(|item| item.format.as_str()).collect::<Vec<_>>(),
+            lyrics
+                .lyrics
+                .iter()
+                .map(|item| item.format.as_str())
+                .collect::<Vec<_>>(),
             lyrics.default_format.as_deref().unwrap_or(""),
             lyrics.lyrics.len()
         ),

@@ -1,48 +1,33 @@
 ﻿import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { listen } from '@tauri-apps/api/event';
 import { resolveLocale } from '../i18n';
-import { listLatestAddedTracks, listTracks, removeMusicDir, scanMusicDir, toAudioSource } from '../services/music';
+import { listLatestAddedTracks, listTracks, removeMusicDir, scanMusicDir } from '../services/music';
 import { readPersistentValue, removePersistentValue, writePersistentValue } from '../services/persistentStore';
-import type { CustomTheme, Locale, PlaybackMode, PlaybackSession, PlayerSettings, SystemThemeState, Track } from '../types/music';
+import type { CustomTheme, PlaybackMode, PlaybackSession, PlayerSettings, SystemThemeState, Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
 import {
   CUSTOM_THEMES_KEY,
   FAVORITES_KEY,
   fallbackSettings,
-  MAX_AUDIO_CACHE_MAX_MB,
-  MAX_LYRIC_FONT_SIZE,
-  MAX_SEARCH_HISTORY_LIMIT,
-  MAX_SLEEP_TIMER_MINUTES,
-  MIN_AUDIO_CACHE_MAX_MB,
-  MIN_LYRIC_FONT_SIZE,
-  MIN_SEARCH_HISTORY_LIMIT,
-  MIN_SLEEP_TIMER_MINUTES,
-  ONLINE_PLAYBACK_FAILURE_ACTIONS,
   PLAYBACK_SESSION_KEY,
-  QUALITY_FALLBACKS,
   SETTINGS_KEY,
   SYSTEM_THEME_KEY,
 } from './player/constants';
-import { resolveFavoriteTracks, toggleFavoriteTrack } from './player/favorites';
+import { createPlayerFavoriteActions } from './player/favoriteActions';
 import {
   dedupeTracksByPath,
   normalizeCachedSystemThemeState,
   normalizeCustomThemes,
   normalizeFavoriteStore,
-  normalizeLocalPathInput,
   normalizeSettings,
   normalizePlaybackSession,
   type CachedSystemThemeState,
 } from './player/normalizers';
-import {
-  addTrackToPlaylistEntry,
-  createPlaylistEntry,
-  deletePlaylistEntry,
-  removeTrackFromPlaylistEntry,
-  renamePlaylistEntry,
-} from './player/playlists';
+import { createPlayerPlaylistActions } from './player/playlistActions';
+import { createPlayerPlaybackStateActions } from './player/playbackStateActions';
 import { createPlaybackSessionSnapshot, resolvePlaybackSessionRestore } from './player/playbackSession';
+import { createPlayerSettingsActions } from './player/settingsActions';
 import { createPlayerThemeController } from './player/theme';
 
 export const usePlayerStore = defineStore('player', () => {
@@ -73,32 +58,21 @@ export const usePlayerStore = defineStore('player', () => {
     toggleTheme,
   } = createPlayerThemeController({ settings, customThemes, cachedSystemThemeState });
 
-  const filteredTracks = computed(() => {
-    const needle = query.value.trim().toLocaleLowerCase();
-    if (!needle) return tracks.value;
-
-    return tracks.value.filter((track) => {
-      return [track.title, track.artist]
-        .filter(Boolean)
-        .some((value) => value!.toLocaleLowerCase().includes(needle));
-    });
+  const { favoriteTracks, isFavorite, toggleFavorite } = createPlayerFavoriteActions({
+    favoriteTrackIds,
+    favoriteTrackSnapshots,
+    persistFavorites,
+    tracks,
   });
 
-  const currentSource = computed(() => {
-    return currentTrack.value?.path ? toAudioSource(currentTrack.value.path) : '';
-  });
-
-  const favoriteTrackIdSet = computed(() => new Set(favoriteTrackIds.value));
-
-  const favoriteTracks = computed(() => {
-    return resolveFavoriteTracks(favoriteTrackIds.value, tracks.value, favoriteTrackSnapshots.value);
-  });
-
-  const playbackModeLabel = computed(() => {
-    if (playbackMode.value === 'shuffle') return resolveLocale(settings.value.locale) === 'en-US' ? 'Shuffle' : '随机播放';
-    if (playbackMode.value === 'repeat') return resolveLocale(settings.value.locale) === 'en-US' ? 'Repeat' : '循环播放';
-    return resolveLocale(settings.value.locale) === 'en-US' ? 'Single track' : '固定播放';
-  });
+  const {
+    currentSource,
+    filteredTracks,
+    playbackModeLabel,
+    recordRecentlyPlayed,
+    setCurrentTrack,
+    togglePlaybackMode,
+  } = createPlayerPlaybackStateActions({ currentTrack, persistSettings, playbackMode, query, settings, tracks });
 
   async function hydratePersistedState() {
     const [
@@ -165,6 +139,43 @@ export const usePlayerStore = defineStore('player', () => {
     playbackSession.value = session;
     void writePersistentValue(PLAYBACK_SESSION_KEY, session);
   }
+
+  const {
+    setAudioCacheDir,
+    setAudioCacheMaxMb,
+    setAudioOutputDeviceId,
+    setAutoHideLyricsDock,
+    setCloseAction,
+    setCrossfadePlayback,
+    setDownloadDir,
+    setEnableLocalMetadataEditing,
+    setEnablePlugins,
+    setEnableTrackCoverEdit,
+    setEnableTrackDurationRefresh,
+    setEnableTrackMetadataEdit,
+    setFadePlayback,
+    setLocale,
+    setLyricFontColor,
+    setLyricFontSize,
+    setMcpAutoStart,
+    setOnlinePlaybackFailureAction,
+    setQualityFallback,
+    setSearchHistoryLimit,
+    setSeamlessPlayback,
+    setShowTrackCovers,
+    setShowTrackNumbers,
+    setSleepTimerAction,
+    setSleepTimerMinutes,
+    setUseThemeLyricColor,
+  } = createPlayerSettingsActions({ persistSettings, settings });
+
+  const {
+    addTrackToPlaylist,
+    createPlaylist,
+    deletePlaylist,
+    removeTrackFromPlaylist,
+    renamePlaylist,
+  } = createPlayerPlaylistActions({ persistSettings, settings, tracks });
 
   function restorePlaybackSession() {
     const session = playbackSession.value;
@@ -244,171 +255,6 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  function setCurrentTrack(track: Track | null) {
-    currentTrack.value = track;
-  }
-
-  function isFavorite(track: Track | null) {
-    return Boolean(track && favoriteTrackIdSet.value.has(track.id));
-  }
-
-  function toggleFavorite(track: Track | null) {
-    if (!track) return false;
-
-    const result = toggleFavoriteTrack(track, favoriteTrackIds.value, favoriteTrackSnapshots.value, tracks.value);
-    favoriteTrackIds.value = result.favoriteIds;
-    favoriteTrackSnapshots.value = result.snapshots;
-    persistFavorites();
-    return result.isFavorite;
-  }
-
-  function togglePlaybackMode() {
-    if (playbackMode.value === 'shuffle') {
-      playbackMode.value = 'repeat';
-      return;
-    }
-
-    if (playbackMode.value === 'repeat') {
-      playbackMode.value = 'fixed';
-      return;
-    }
-
-    playbackMode.value = 'shuffle';
-  }
-
-  function setCloseAction(action: PlayerSettings['closeAction']) {
-    settings.value.closeAction = action;
-    persistSettings();
-  }
-
-  function setLocale(locale: Locale) {
-    settings.value.locale = locale;
-    persistSettings();
-  }
-
-  function setSleepTimerAction(action: PlayerSettings['sleepTimerAction']) {
-    settings.value.sleepTimerAction = action;
-    persistSettings();
-  }
-
-  function setSleepTimerMinutes(minutes: number) {
-    settings.value.sleepTimerMinutes = Math.min(MAX_SLEEP_TIMER_MINUTES, Math.max(MIN_SLEEP_TIMER_MINUTES, Math.round(minutes)));
-    persistSettings();
-  }
-
-  function setAutoHideLyricsDock(enabled: boolean) {
-    settings.value.autoHideLyricsDock = enabled;
-    persistSettings();
-  }
-
-  function setLyricFontSize(size: number) {
-    settings.value.lyricFontSize = Math.min(MAX_LYRIC_FONT_SIZE, Math.max(MIN_LYRIC_FONT_SIZE, Math.round(size)));
-    persistSettings();
-  }
-
-  function setUseThemeLyricColor(enabled: boolean) {
-    settings.value.useThemeLyricColor = enabled;
-    persistSettings();
-  }
-
-  function setLyricFontColor(color: string) {
-    if (!/^#[0-9a-fA-F]{6}$/.test(color)) return;
-    settings.value.lyricFontColor = color;
-    persistSettings();
-  }
-
-  function setDownloadDir(path: string) {
-    settings.value.downloadDir = path.trim();
-    persistSettings();
-  }
-
-  function setAudioCacheDir(path: string) {
-    settings.value.audioCacheDir = normalizeLocalPathInput(path);
-    persistSettings();
-  }
-
-  function setAudioCacheMaxMb(sizeMb: number) {
-    settings.value.audioCacheMaxMb = Math.min(MAX_AUDIO_CACHE_MAX_MB, Math.max(MIN_AUDIO_CACHE_MAX_MB, Math.round(sizeMb)));
-    persistSettings();
-  }
-
-  function setAudioOutputDeviceId(deviceId: string) {
-    settings.value.audioOutputDeviceId = deviceId.trim();
-    persistSettings();
-  }
-
-  function setSearchHistoryLimit(limit: number) {
-    settings.value.searchHistoryLimit = Math.min(MAX_SEARCH_HISTORY_LIMIT, Math.max(MIN_SEARCH_HISTORY_LIMIT, Math.round(limit)));
-    persistSettings();
-  }
-
-  function setShowTrackCovers(enabled: boolean) {
-    settings.value.showTrackCovers = enabled;
-    persistSettings();
-  }
-
-  function setShowTrackNumbers(enabled: boolean) {
-    settings.value.showTrackNumbers = enabled;
-    persistSettings();
-  }
-
-  function setEnableLocalMetadataEditing(enabled: boolean) {
-    settings.value.enableLocalMetadataEditing = enabled;
-    persistSettings();
-  }
-
-  function setEnableTrackMetadataEdit(enabled: boolean) {
-    settings.value.enableTrackMetadataEdit = enabled;
-    persistSettings();
-  }
-
-  function setEnableTrackCoverEdit(enabled: boolean) {
-    settings.value.enableTrackCoverEdit = enabled;
-    persistSettings();
-  }
-
-  function setEnableTrackDurationRefresh(enabled: boolean) {
-    settings.value.enableTrackDurationRefresh = enabled;
-    persistSettings();
-  }
-
-  function setEnablePlugins(enabled: boolean) {
-    settings.value.enablePlugins = enabled;
-    persistSettings();
-  }
-
-  function setQualityFallback(fallback: PlayerSettings['qualityFallback']) {
-    if (!QUALITY_FALLBACKS.includes(fallback)) return;
-    settings.value.qualityFallback = fallback;
-    persistSettings();
-  }
-
-  function setOnlinePlaybackFailureAction(action: PlayerSettings['onlinePlaybackFailureAction']) {
-    if (!ONLINE_PLAYBACK_FAILURE_ACTIONS.includes(action)) return;
-    settings.value.onlinePlaybackFailureAction = action;
-    persistSettings();
-  }
-
-  function setSeamlessPlayback(enabled: boolean) {
-    settings.value.seamlessPlayback = enabled;
-    persistSettings();
-  }
-
-  function setFadePlayback(enabled: boolean) {
-    settings.value.fadePlayback = enabled;
-    persistSettings();
-  }
-
-  function setCrossfadePlayback(enabled: boolean) {
-    settings.value.crossfadePlayback = enabled;
-    persistSettings();
-  }
-
-  function setMcpAutoStart(enabled: boolean) {
-    settings.value.mcpAutoStart = enabled;
-    persistSettings();
-  }
-
   async function setMusicDirs(paths: string[]) {
     const previousDirs = settings.value.musicDirs;
     settings.value.musicDirs = [...new Set(paths.filter((path) => path.trim()))];
@@ -430,61 +276,6 @@ export const usePlayerStore = defineStore('player', () => {
         currentTrack.value = null;
       }
     }
-  }
-
-  function recordRecentlyPlayed(track: Track | null) {
-    if (!track?.path) return;
-
-    settings.value.recentPlayedTrackIds = [
-      track.id,
-      ...settings.value.recentPlayedTrackIds.filter((id) => id !== track.id),
-    ].slice(0, 100);
-    persistSettings();
-  }
-
-  function createPlaylist(name: string, initialTracks: Array<number | Track> = []) {
-    const result = createPlaylistEntry(settings.value.playlists, name, initialTracks, tracks.value, Date.now());
-    if (!result.created) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
-  }
-
-  function renamePlaylist(playlistId: string, name: string) {
-    const result = renamePlaylistEntry(settings.value.playlists, playlistId, name);
-    if (!result.renamed) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
-  }
-
-  function deletePlaylist(playlistId: string) {
-    const result = deletePlaylistEntry(settings.value.playlists, playlistId);
-    if (!result.deleted) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
-  }
-
-  function addTrackToPlaylist(track: Track, playlistId: string) {
-    const result = addTrackToPlaylistEntry(settings.value.playlists, playlistId, track, tracks.value);
-    if (!result.added) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
-  }
-
-  function removeTrackFromPlaylist(track: Track, playlistId: string) {
-    const result = removeTrackFromPlaylistEntry(settings.value.playlists, playlistId, track);
-    if (!result.removed) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
   }
 
   applySettingsSideEffects();

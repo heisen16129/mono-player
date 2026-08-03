@@ -1,6 +1,6 @@
-﻿use crate::models::Track;
-use crate::state::AppState;
 use crate::api_response::ApiResponse;
+use crate::models::Track;
+use crate::state::AppState;
 use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::picture::{MimeType, Picture, PictureType};
@@ -203,11 +203,15 @@ pub(crate) fn refresh_track_duration(
 }
 
 #[tauri::command]
-pub(crate) fn read_track_audio_info(request: ReadTrackAudioInfoRequest) -> ApiResponse<TrackAudioInfo> {
+pub(crate) fn read_track_audio_info(
+    request: ReadTrackAudioInfoRequest,
+) -> ApiResponse<TrackAudioInfo> {
     ApiResponse::from_result(read_track_audio_info_inner(request))
 }
 
-fn read_track_audio_info_inner(request: ReadTrackAudioInfoRequest) -> Result<TrackAudioInfo, String> {
+fn read_track_audio_info_inner(
+    request: ReadTrackAudioInfoRequest,
+) -> Result<TrackAudioInfo, String> {
     let path = normalized_local_file_path(&request.path)?;
     let file_size_bytes = fs::metadata(&path).map(|metadata| metadata.len()).ok();
     let tagged_file = lofty::read_from_path(&path).map_err(|err| err.to_string())?;
@@ -257,9 +261,8 @@ fn refresh_track_duration_inner(
 
 fn read_track_duration_seconds(path: &Path) -> Result<u64, String> {
     let file = File::open(path).map_err(|err| err.to_string())?;
-    let decoder = Decoder::try_from(file).map_err(|err| {
-        format!("读取失败：音频文件格式异常或包含损坏帧，无法读取时长。{err}")
-    })?;
+    let decoder = Decoder::try_from(file)
+        .map_err(|err| format!("读取失败：音频文件格式异常或包含损坏帧，无法读取时长。{err}"))?;
 
     decoder
         .total_duration()

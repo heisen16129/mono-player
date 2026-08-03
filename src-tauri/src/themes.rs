@@ -1,4 +1,7 @@
-use crate::{api_response::ApiResponse, models::{ImportedTheme, SystemThemeState, ThemePackageManifest, WallpaperThemeColor}};
+use crate::{
+    api_response::ApiResponse,
+    models::{ImportedTheme, SystemThemeState, ThemePackageManifest, WallpaperThemeColor},
+};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};

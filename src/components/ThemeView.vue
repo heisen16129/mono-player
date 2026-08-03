@@ -1,18 +1,16 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
 import { computed } from 'vue';
 import blueWhitePreview from '../assets/theme-previews/blue-white.svg';
 import { resolveLocale, t } from '../i18n';
-import { importThemeFolder } from '../services/music';
 import { listInstalledPlugins, readPluginTheme, uninstallPlugin } from '../services/plugins';
 import { usePlayerStore } from '../stores/player';
 import type { AppTheme, CustomTheme } from '../types/music';
 import type { PluginManifest } from '../types/plugin';
 import { getErrorMessage } from '../utils/error';
-import PageHeader from './PageHeader.vue';
 import LocalThemeGrid from './theme/LocalThemeGrid.vue';
-import type { BuiltInThemeCard } from './theme/types';
+import ThemeHeader from './theme/ThemeHeader.vue';
+import type { BuiltInThemeCard, LocalThemeGridListeners, LocalThemeGridProps } from './theme/types';
 
 const player = usePlayerStore();
 
@@ -26,10 +24,22 @@ const localThemeCards = computed<BuiltInThemeCard[]>(() => [
   },
 ]);
 
-const importThemeText = computed(() => resolveLocale(player.settings.locale) === 'en-US' ? 'Import theme' : '\u5bfc\u5165\u4e3b\u9898');
-const themePackageText = computed(() => resolveLocale(player.settings.locale) === 'en-US' ? 'Theme package folder' : '\u4e3b\u9898\u5305\u6587\u4ef6\u5939');
 const deleteThemeText = computed(() => resolveLocale(player.settings.locale) === 'en-US' ? 'Delete theme' : '\u5220\u9664\u4e3b\u9898');
 const customThemeCards = computed(() => player.customThemes);
+const localThemeGridProps = computed<LocalThemeGridProps>(() => ({
+  customPreviewSrc,
+  customPreviewStyle,
+  customThemeCards: customThemeCards.value,
+  deleteThemeText: deleteThemeText.value,
+  localThemeCards: localThemeCards.value,
+  locale: player.settings.locale,
+  selectedTheme: player.settings.theme,
+}));
+
+const localThemeGridListeners: LocalThemeGridListeners = {
+  onRemoveCustomTheme: removeCustomTheme,
+  onSelectTheme: selectTheme,
+};
 
 function selectTheme(theme: AppTheme) {
   player.setTheme(theme);
@@ -86,49 +96,24 @@ function customPreviewSrc(theme: CustomTheme) {
   return convertFileSrc(theme.preview);
 }
 
-async function importCustomTheme() {
-  const selected = await open({
-    directory: true,
-    multiple: false,
-    title: importThemeText.value,
-  });
-  if (!selected || Array.isArray(selected)) return;
-
-  try {
-    const theme = await importThemeFolder(selected);
-    player.addCustomTheme(theme);
-  } catch (err) {
-    player.error = getErrorMessage(err);
-  }
-}
-
 </script>
 
 <template>
   <section class="theme-view">
-    <PageHeader class="theme-toolbar" :title="t(player.settings.locale, 'themeStyle')" title-class="theme-view-title" />
+    <ThemeHeader :title="t(player.settings.locale, 'themeStyle')" />
 
     <LocalThemeGrid
-      :custom-preview-src="customPreviewSrc"
-      :custom-preview-style="customPreviewStyle"
-      :custom-theme-cards="customThemeCards"
-      :delete-theme-text="deleteThemeText"
-      :import-theme-text="importThemeText"
-      :local-theme-cards="localThemeCards"
-      :locale="player.settings.locale"
-      :selected-theme="player.settings.theme"
-      :theme-package-text="themePackageText"
-      @import-theme="importCustomTheme"
-      @remove-custom-theme="removeCustomTheme"
-      @select-theme="selectTheme"
+      v-bind="{ ...localThemeGridProps, ...localThemeGridListeners }"
     />
   </section>
 </template>
 
 <style scoped>
 .theme-view {
+  height: 100%;
   min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
   overflow: auto;
   padding: 12px 22px 40px;
   background: var(--smw-bg-workspace);

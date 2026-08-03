@@ -60,3 +60,45 @@ onMounted(() => {
     </button>
   </div>
 </template>
+
+<style scoped>
+.window-controls {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: repeat(3, 32px);
+  align-items: center;
+  height: 40px;
+}
+
+.window-controls.floating-window-controls {
+  position: absolute;
+  top: 12px;
+  right: 8px;
+  z-index: 24;
+}
+
+.window-control {
+  display: grid;
+  width: 32px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  color: var(--smw-text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.window-control:hover {
+  color: var(--smw-text-primary);
+  background: transparent;
+}
+
+.window-control-maximize-icon {
+  stroke-width: 1.9;
+}
+
+.window-control.close:hover {
+  color: #d83b3b;
+  background: transparent;
+}
+</style>

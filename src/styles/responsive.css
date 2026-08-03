@@ -33,39 +33,6 @@
     grid-template-rows: minmax(0, 1fr);
   }
 
-  .app-grid {
-    grid-template-columns: 1fr;
-    overflow: auto;
-  }
-
-  .app-grid.settings-grid,
-  .app-grid.theme-grid,
-  .app-grid.plugins-grid,
-  .app-grid.downloads-grid,
-  .app-grid.discover-grid,
-  .app-grid.favorites-grid,
-  .app-grid.artists-grid,
-  .sidebar-collapsed .app-grid.settings-grid,
-  .sidebar-collapsed .app-grid.theme-grid,
-  .sidebar-collapsed .app-grid.plugins-grid,
-  .sidebar-collapsed .app-grid.downloads-grid,
-  .sidebar-collapsed .app-grid.discover-grid,
-  .sidebar-collapsed .app-grid.favorites-grid,
-  .sidebar-collapsed .app-grid.artists-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .settings-grid .settings-view,
-  .theme-grid .theme-view,
-  .plugins-grid .plugin-manager-view,
-  .downloads-grid .download-manager-view,
-  .discover-grid .discover-music-view,
-  .discover-grid .plugin-search-view,
-  .favorites-grid .workspace,
-  .artists-grid .artists-view {
-    grid-column: auto;
-  }
-
   .primary-sidebar,
   .library-panel {
     border-right: 0;
@@ -101,18 +68,9 @@
     padding-bottom: 118px;
   }
 
-  .settings-view,
   .theme-view,
   .download-manager-view {
     padding: 20px 18px 128px;
-  }
-
-  .settings-header h1 {
-    font-size: 25px;
-  }
-
-  .settings-tabs {
-    gap: 22px;
   }
 
   .inline-options {
@@ -160,7 +118,7 @@
 
   .lyrics-panel {
     height: 360px;
-    padding: 150px 0;
+    padding: var(--lyrics-anchor-padding-top, 150px) 0 var(--lyrics-anchor-padding-bottom, 150px);
   }
 
   .lyrics-scrollbar {

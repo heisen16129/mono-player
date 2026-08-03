@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import SegmentTabButton from './SegmentTabButton.vue';
+
 export interface SegmentTabItem {
   disabled?: boolean;
   id: string | null;
@@ -21,16 +23,13 @@ defineEmits<{
 
 <template>
   <nav :class="rootClass" :aria-label="label">
-    <button
+    <SegmentTabButton
       v-for="item in items"
       :key="item.id ?? '__all__'"
-      type="button"
-      :class="{ active: modelValue === item.id, disabled: item.disabled }"
-      :disabled="item.disabled"
-      @click="$emit('select', item.id)"
-    >
-      {{ item.label }}
-    </button>
+      :active="modelValue === item.id"
+      :item="item"
+      @select="$emit('select', $event)"
+    />
   </nav>
 </template>
 
@@ -151,15 +150,14 @@ defineEmits<{
   content: "";
 }
 
-.settings-tabs,
-.theme-tabs {
+.settings-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 30px;
-  overflow-x: auto;
+  overflow: visible;
 }
 
-.settings-tabs button,
-.theme-tabs button {
+.settings-tabs button {
   position: relative;
   padding: 0;
   border: 0;
@@ -169,14 +167,12 @@ defineEmits<{
   cursor: pointer;
 }
 
-.settings-tabs button.active,
-.theme-tabs button.active {
+.settings-tabs button.active {
   color: var(--smw-button-primary);
   font-weight: 680;
 }
 
-.settings-tabs button.active::after,
-.theme-tabs button.active::after {
+.settings-tabs button.active::after {
   position: absolute;
   right: 0;
   bottom: -1px;
@@ -192,17 +188,40 @@ defineEmits<{
   font-size: 15px;
 }
 
-.theme-tabs {
+.plugin-center-tabs {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+  min-height: 42px;
+  margin: 0 0 16px;
   border-bottom: 1px solid var(--smw-border-soft);
 }
 
-.theme-tabs button {
-  height: 38px;
+.plugin-center-tabs button {
+  position: relative;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  color: var(--smw-text-secondary);
+  background: transparent;
+  font: inherit;
   font-size: 14px;
+  cursor: pointer;
 }
 
-.theme-tabs button.active {
+.plugin-center-tabs button.active {
   color: var(--smw-text-primary);
-  font-weight: 700;
+  font-weight: 720;
+}
+
+.plugin-center-tabs button.active::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--smw-button-primary);
+  content: "";
 }
 </style>

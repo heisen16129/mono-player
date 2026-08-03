@@ -1,8 +1,8 @@
+use crate::api_response::ApiResponse;
 use crate::database::{
     delete_missing_tracks_for_dir, delete_tracks_without_files, read_latest_added_tracks,
     read_tracks, upsert_track,
 };
-use crate::api_response::ApiResponse;
 use crate::models::Track;
 use crate::state::AppState;
 use lofty::file::{AudioFile, TaggedFileExt};
@@ -29,7 +29,9 @@ pub(crate) async fn scan_music_dir(
     state: State<'_, AppState>,
     scan_worker: State<'_, crate::workers::scanner::ScanWorkerState>,
 ) -> Result<ApiResponse<ScanMusicDirResult>, String> {
-    Ok(ApiResponse::from_result(scan_music_dir_inner(path, app, state, scan_worker).await))
+    Ok(ApiResponse::from_result(
+        scan_music_dir_inner(path, app, state, scan_worker).await,
+    ))
 }
 
 async fn scan_music_dir_inner(
@@ -44,13 +46,9 @@ async fn scan_music_dir_inner(
     }
     let scan_id = uuid::Uuid::new_v4().to_string();
     let cache_root = app.state::<crate::player::PlayerState>().cache_dir()?;
-    let scanned_tracks = scan_music_dir_in_worker(
-        path,
-        app.clone(),
-        cache_root,
-        scan_worker.inner().clone(),
-    )
-    .await?;
+    let scanned_tracks =
+        scan_music_dir_in_worker(path, app.clone(), cache_root, scan_worker.inner().clone())
+            .await?;
     let _ = app.emit("scan://done", scanned_tracks.len());
     let scanned_paths = scanned_tracks
         .iter()
@@ -101,8 +99,7 @@ async fn scan_music_dir_in_worker(
                 Err(error) => {
                     eprintln!(
                         "[scanner] read cover failed path={} error={}",
-                        track.path,
-                        error
+                        track.path, error
                     );
                     None
                 }

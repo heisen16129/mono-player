@@ -406,11 +406,6 @@
     linear-gradient(145deg, color-mix(in srgb, var(--smw-button-primary) 90%, var(--smw-bg-canvas)), var(--smw-button-primary));
 }
 
-:root[data-theme='wallpaperTone'] .volume-rail::after,
-:root[data-theme='wallpaperTone'] .volume-rail i {
-  background: var(--smw-volume-fill);
-}
-
 :root[data-theme='wallpaperTone'] .quality-popover,
 :root[data-theme='wallpaperTone'] .speed-popover,
 :root[data-theme='wallpaperTone'] .volume-popover,
@@ -423,10 +418,6 @@
 :root[data-theme='wallpaperTone'] .volume-button:hover {
   color: var(--smw-button-primary);
   background: var(--smw-bg-selected);
-}
-
-:root[data-theme='wallpaperTone'] .time-pair span:first-child {
-  color: var(--smw-text-body);
 }
 
 :root[data-theme='desktopGlass'] body,
@@ -529,11 +520,6 @@
   background: rgba(17, 24, 39, 0.9);
 }
 
-:root[data-theme='desktopGlass'] .volume-rail::after,
-:root[data-theme='desktopGlass'] .volume-rail i {
-  background: rgba(31, 41, 55, 0.84);
-}
-
 :root[data-theme='desktopGlass'] .quality-popover,
 :root[data-theme='desktopGlass'] .speed-popover,
 :root[data-theme='desktopGlass'] .volume-popover,
@@ -546,10 +532,6 @@
 :root[data-theme='desktopGlass'] .volume-button:hover {
   color: var(--smw-text-primary);
   background: var(--smw-bg-selected);
-}
-
-:root[data-theme='desktopGlass'] .time-pair span:first-child {
-  color: rgba(17, 24, 39, 0.88);
 }
 
 * {

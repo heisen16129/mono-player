@@ -163,10 +163,3 @@ export interface UserPlaylist {
 }
 
 export type PlaybackMode = 'shuffle' | 'repeat' | 'fixed';
-
-export interface PlaylistSummary {
-  title: string;
-  count: number;
-  selected: boolean;
-  tone: 'night' | 'city' | 'mist' | 'stage' | 'desk' | 'road';
-}

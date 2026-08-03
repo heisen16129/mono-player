@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ChevronRight, Pause, Play, Settings, SkipBack, SkipForward, X } from '@lucide/vue';
+import { Pause, Play, Settings, SkipBack, SkipForward, X } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { invokeApi } from '../services/api';
 import { readPersistentValue } from '../services/persistentStore';
+import TrayMenuActionButton from './TrayMenuActionButton.vue';
+import TrayMenuNowPlayingButton from './TrayMenuNowPlayingButton.vue';
+import TrayMenuPlaybackModeSubmenu from './TrayMenuPlaybackModeSubmenu.vue';
 
 const TRAY_STATE_KEY = 'mono-player-tray-state';
 const SETTINGS_KEY = 'mono-player-settings';
@@ -53,47 +56,31 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="tray-menu-shell">
-    <button class="tray-menu-now" type="button" @click="runAction('show')">
-      <strong>{{ title }}</strong>
-      <span>{{ artist }}</span>
-    </button>
+    <TrayMenuNowPlayingButton :artist="artist" :title="title" @show="runAction('show')" />
 
     <div class="tray-menu-section">
-      <button type="button" @click="runAction('toggle-play')">
-        <Play v-if="!state.isPlaying" :size="15" fill="currentColor" />
-        <Pause v-else :size="15" fill="currentColor" />
-        <span>{{ playLabel }}</span>
-      </button>
-      <button type="button" @click="runAction('previous')">
-        <SkipBack :size="15" fill="currentColor" />
-        <span>&#x4e0a;&#x4e00;&#x9996;</span>
-      </button>
-      <button type="button" @click="runAction('next')">
-        <SkipForward :size="15" fill="currentColor" />
-        <span>&#x4e0b;&#x4e00;&#x9996;</span>
-      </button>
-      <div class="tray-menu-mode">
-        <button type="button">
-          <span>&#x64ad;&#x653e;&#x6a21;&#x5f0f;</span>
-          <ChevronRight :size="15" />
-        </button>
-        <div class="tray-menu-submenu">
-          <button type="button" @click="runAction('mode-shuffle')">&#x968f;&#x673a;&#x64ad;&#x653e;</button>
-          <button type="button" @click="runAction('mode-repeat')">&#x5faa;&#x73af;&#x64ad;&#x653e;</button>
-          <button type="button" @click="runAction('mode-fixed')">&#x56fa;&#x5b9a;&#x64ad;&#x653e;</button>
-        </div>
-      </div>
+      <TrayMenuActionButton :label="playLabel" @action="runAction('toggle-play')">
+        <template #icon>
+          <Play v-if="!state.isPlaying" :size="15" fill="currentColor" />
+          <Pause v-else :size="15" fill="currentColor" />
+        </template>
+      </TrayMenuActionButton>
+      <TrayMenuActionButton label="上一首" @action="runAction('previous')">
+        <template #icon><SkipBack :size="15" fill="currentColor" /></template>
+      </TrayMenuActionButton>
+      <TrayMenuActionButton label="下一首" @action="runAction('next')">
+        <template #icon><SkipForward :size="15" fill="currentColor" /></template>
+      </TrayMenuActionButton>
+      <TrayMenuPlaybackModeSubmenu @action="runAction($event)" />
     </div>
 
     <div class="tray-menu-section">
-      <button type="button" @click="runAction('settings')">
-        <Settings :size="15" />
-        <span>&#x8bbe;&#x7f6e;</span>
-      </button>
-      <button type="button" @click="runAction('exit')">
-        <X :size="15" />
-        <span>&#x9000;&#x51fa;</span>
-      </button>
+      <TrayMenuActionButton label="设置" @action="runAction('settings')">
+        <template #icon><Settings :size="15" /></template>
+      </TrayMenuActionButton>
+      <TrayMenuActionButton label="退出" @action="runAction('exit')">
+        <template #icon><X :size="15" /></template>
+      </TrayMenuActionButton>
     </div>
   </main>
 </template>
@@ -115,99 +102,10 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-.tray-menu-now,
-.tray-menu-section button {
-  width: 100%;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  box-sizing: border-box;
-}
-
-.tray-menu-now {
-  display: grid;
-  gap: 4px;
-  padding: 9px 10px;
-  border-radius: 7px;
-  background: var(--smw-bg-selected);
-}
-
-.tray-menu-now strong,
-.tray-menu-now span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tray-menu-now strong {
-  color: var(--smw-text-primary);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.tray-menu-now span {
-  color: var(--smw-text-secondary);
-  font-size: 12px;
-}
-
 .tray-menu-section {
   display: grid;
   gap: 2px;
   padding-top: 7px;
   border-top: 1px solid var(--smw-border-soft);
-}
-
-.tray-menu-section button,
-.tray-menu-mode > button,
-.tray-menu-submenu button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 6px;
-  color: var(--smw-text-body);
-  font-size: 13px;
-  line-height: 1;
-}
-
-.tray-menu-section button:hover,
-.tray-menu-mode:hover > button,
-.tray-menu-submenu button:hover {
-  background: var(--smw-bg-hover);
-}
-
-.tray-menu-mode {
-  position: relative;
-}
-
-.tray-menu-mode > button {
-  justify-content: space-between;
-}
-
-.tray-menu-submenu {
-  position: absolute;
-  right: calc(100% + 6px);
-  bottom: 0;
-  display: none;
-  width: 116px;
-  padding: 6px;
-  border: 1px solid var(--smw-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--smw-bg-workspace) 97%, transparent);
-  box-shadow: 0 12px 30px rgb(0 0 0 / 16%);
-}
-
-.tray-menu-mode:hover .tray-menu-submenu {
-  display: grid;
-}
-
-.tray-menu-submenu button {
-  justify-content: flex-start;
-  padding: 0 9px;
-  white-space: nowrap;
 }
 </style>

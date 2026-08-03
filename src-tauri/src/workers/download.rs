@@ -12,6 +12,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use tauri::Emitter;
@@ -218,7 +219,18 @@ pub(crate) fn run() -> Result<(), String> {
         }
 
         let response = match decode_request(&line) {
-            Ok(request) => handle_request(&queue_sender, request, started_at_ms)?,
+            Ok(request) => {
+                let request_id = request.id.clone();
+                match handle_request(&queue_sender, request, started_at_ms) {
+                    Ok(response) => response,
+                    Err(error) => WorkerMessage::Response {
+                        id: request_id,
+                        ok: false,
+                        payload: None,
+                        error: Some(error),
+                    },
+                }
+            }
             Err(error) => WorkerMessage::Response {
                 id: "invalid-request".to_string(),
                 ok: false,
@@ -305,10 +317,33 @@ fn start_worker_download_queue(
     let (sender, receiver) = mpsc::channel::<DownloadTrackPayload>();
     thread::spawn(move || {
         for payload in receiver {
-            let _ = download_track(&stdout, "download-queued".to_string(), payload);
+            let task_id = payload.task_id.clone();
+            if let Err(error) = catch_unwind(AssertUnwindSafe(|| {
+                let _ = download_track(&stdout, "download-queued".to_string(), payload);
+            })) {
+                let _ = write_shared_download_event(
+                    &stdout,
+                    &task_id,
+                    "failed",
+                    0,
+                    None,
+                    None,
+                    Some(format!("download task panicked: {}", panic_message(error))),
+                );
+            }
         }
     });
     sender
+}
+
+fn panic_message(error: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = error.downcast_ref::<&str>() {
+        return (*message).to_string();
+    }
+    if let Some(message) = error.downcast_ref::<String>() {
+        return message.clone();
+    }
+    "unknown panic".to_string()
 }
 
 fn download_track(

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { CheckCircle2, Download, MonitorUp } from '@lucide/vue';
 import type { Locale, PlayerSettings, Track } from '../../types/music';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption } from '../../types/plugin';
 import { t } from '../../i18n';
-import SpinnerIcon from '../SpinnerIcon.vue';
+import DesktopLyricsEntryButton from './DesktopLyricsEntryButton.vue';
+import DockDownloadButton from './DockDownloadButton.vue';
 import PlaybackOptionControls from './PlaybackOptionControls.vue';
 import PlaybackQueuePopover from './PlaybackQueuePopover.vue';
 import PlaybackSpeedControl from './PlaybackSpeedControl.vue';
@@ -77,20 +77,12 @@ const emit = defineEmits<{
 
 <template>
   <div class="playback-meta">
-    <button
+    <DockDownloadButton
       v-if="showActiveTrackDownload"
-      class="icon-button dock-download-button"
-      :class="{ 'is-downloaded': isActiveTrackDownloaded, 'is-downloading': isActiveTrackDownloading }"
-      type="button"
-      :disabled="isActiveTrackDownloaded || isActiveTrackDownloading"
-      :aria-label="isActiveTrackDownloaded ? '已下载' : isActiveTrackDownloading ? '下载中' : '下载'"
-      :title="isActiveTrackDownloaded ? '已下载' : isActiveTrackDownloading ? '下载中' : '下载'"
-      @click="!isActiveTrackDownloading && emit('downloadActiveTrack')"
-    >
-      <CheckCircle2 v-if="isActiveTrackDownloaded" :size="18" />
-      <SpinnerIcon v-else-if="isActiveTrackDownloading" :size="18" />
-      <Download v-else :size="18" />
-    </button>
+      :is-downloaded="isActiveTrackDownloaded"
+      :is-downloading="isActiveTrackDownloading"
+      @download="emit('downloadActiveTrack')"
+    />
     <PlaybackOptionControls
       :lyric-format="lyricFormat"
       :lyric-format-label="lyricFormatLabel"
@@ -103,15 +95,7 @@ const emit = defineEmits<{
       @lyric-format-change="emit('lyricFormatChange', $event)"
       @online-quality-change="emit('onlineQualityChange', $event)"
     />
-    <button
-      class="icon-button"
-      type="button"
-      aria-label="打开桌面歌词"
-      title="打开桌面歌词"
-      @click="emit('openDesktopLyrics')"
-    >
-      <MonitorUp class="desktop-lyrics-entry-icon" :size="18" />
-    </button>
+    <DesktopLyricsEntryButton @open="emit('openDesktopLyrics')" />
     <SleepTimerControl
       :action="sleepTimerAction"
       :execute-at-label="sleepTimerExecuteAtLabel"
@@ -176,54 +160,21 @@ const emit = defineEmits<{
   font-size: 12px;
 }
 
-.playback-meta .icon-button {
+.playback-meta :deep(.icon-button) {
+  box-sizing: border-box;
+  flex: 0 0 28px;
   width: 28px;
   min-width: 28px;
   height: 28px;
+  padding: 0;
   border-radius: 8px;
   color: var(--smw-text-body);
+  line-height: 0;
 }
 
-.playback-meta svg {
+.playback-meta :deep(svg) {
   width: 18px;
   height: 18px;
   stroke-width: 2;
-}
-
-.playback-meta .desktop-lyrics-entry-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.dock-download-button.is-downloaded {
-  color: var(--smw-button-primary);
-  cursor: default;
-  opacity: 0.92;
-}
-
-.dock-download-button.is-downloaded:hover,
-.dock-download-button.is-downloaded:focus-visible {
-  background: color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
-}
-
-.dock-download-button.is-downloading {
-  color: var(--smw-button-primary);
-  cursor: default;
-  opacity: 0.92;
-}
-
-.dock-download-button.is-downloading:hover,
-.dock-download-button.is-downloading:focus-visible {
-  background: color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
-}
-
-.dock-download-button.is-downloading svg {
-  animation: spin 760ms linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

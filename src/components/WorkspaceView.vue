@@ -1,109 +1,60 @@
 ﻿<script setup lang="ts">
-import type { Track } from '../types/music';
-import { computed, ref } from 'vue';
-import { durationText, songCountLong, t } from '../i18n';
-import { useScrollingState } from '../composables/useScrollingState';
+import { computed, ref, toRef } from 'vue';
+import { t } from '../i18n';
+import { useWorkspaceCollectionDisplay } from '../composables/useWorkspaceCollectionDisplay';
 import { usePlayerStore } from '../stores/player';
+import type { WorkspaceTrackListListeners, WorkspaceTrackListProps, WorkspaceViewEmits, WorkspaceViewProps } from '../types/workspace';
 import CollectionHero from './CollectionHero.vue';
-import EmptyState from './EmptyState.vue';
-import SearchInput from './SearchInput.vue';
-import TrackTable from './TrackTable.vue';
+import WorkspaceSearchToolbar from './WorkspaceSearchToolbar.vue';
+import WorkspaceTrackList from './WorkspaceTrackList.vue';
 
-const props = defineProps<{
-  activeCollection: 'all' | 'favorites';
-  activeTrack: Track | null;
-  error: string | null;
-  favoriteTrackIds: number[];
-  isPlaying: boolean;
-  preparingTrackId?: number | null;
-  spectrumLevels: number[];
-  libraryFilter: 'all' | 'recentAdded' | 'recentPlayed';
-  libraryMeta: { count: number; minutes: number };
-  libraryTitle: string;
-  isPlaylistView?: boolean;
-  modelValue: string;
-  tracks: Track[];
-  useTrackCover?: boolean;
-}>();
+const props = defineProps<WorkspaceViewProps>();
 
-const emit = defineEmits<{
-  chooseFolder: [];
-  openArtist: [artistName: string];
-  openTrackMenu: [track: Track, x: number, y: number];
-  playFavoriteTracks: [];
-  playVisibleTracks: [];
-  playTrack: [track: Track];
-  rescan: [];
-  selectTrack: [track: Track];
-  toggleFavorite: [track: Track];
-  'update:modelValue': [value: string];
-}>();
+const emit = defineEmits<WorkspaceViewEmits>();
 
-const trackTableRef = ref<InstanceType<typeof TrackTable> | null>(null);
-const { isScrolling: isTrackListScrolling, showScrolling: showTrackListScrolling } = useScrollingState();
+const trackListRef = ref<InstanceType<typeof WorkspaceTrackList> | null>(null);
 const player = usePlayerStore();
 
-const favoriteStats = computed(() => {
-  const totalSeconds = props.tracks.reduce((sum, track) => sum + (track.duration ?? 0), 0);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.round((totalSeconds % 3600) / 60);
-  const duration = durationText(player.settings.locale, hours, minutes);
-
-  return `${songCountLong(player.settings.locale, props.tracks.length)} · ${duration} · ${t(player.settings.locale, 'localLibrary')}`;
+const locale = computed(() => player.settings.locale);
+const {
+  canLocateActiveTrack,
+  collectionDate,
+  collectionEmptyText,
+  collectionHeroId,
+  collectionSubtitle,
+  collectionTitle,
+  hasPlayableVisibleTracks,
+  isWideCollection,
+} = useWorkspaceCollectionDisplay({
+  activeCollection: toRef(props, 'activeCollection'),
+  activeTrack: toRef(props, 'activeTrack'),
+  isPlaylistView: toRef(props, 'isPlaylistView'),
+  libraryFilter: toRef(props, 'libraryFilter'),
+  libraryMeta: toRef(props, 'libraryMeta'),
+  libraryTitle: toRef(props, 'libraryTitle'),
+  locale,
+  tracks: toRef(props, 'tracks'),
 });
 
-const collectionStats = computed(() => {
-  const totalSeconds = props.tracks.reduce((sum, track) => sum + (track.duration ?? 0), 0);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.round((totalSeconds % 3600) / 60);
-  const duration = durationText(player.settings.locale, hours, minutes);
+const workspaceTrackListProps = computed<WorkspaceTrackListProps>(() => ({
+  activeTrack: props.activeTrack,
+  emptyMessage: collectionEmptyText.value,
+  error: props.error,
+  favoriteTrackIds: props.favoriteTrackIds,
+  isPlaying: props.isPlaying,
+  isWideCollection: isWideCollection.value,
+  preparingTrackId: props.preparingTrackId ?? null,
+  spectrumLevels: props.spectrumLevels,
+  tracks: props.tracks,
+}));
 
-  return `${songCountLong(player.settings.locale, props.tracks.length)} · ${duration} · ${t(player.settings.locale, 'localLibrary')}`;
-});
-
-const isWideCollection = computed(() => {
-  return true;
-});
-
-const collectionTitle = computed(() => {
-  if (props.activeCollection === 'favorites') return t(player.settings.locale, 'favorites');
-  if (props.libraryFilter === 'recentAdded') return t(player.settings.locale, 'recentAdded');
-  if (props.libraryFilter === 'recentPlayed') return t(player.settings.locale, 'recentPlayed');
-  return props.libraryTitle;
-});
-
-const collectionSubtitle = computed(() => {
-  if (props.activeCollection === 'favorites') return props.isPlaylistView ? collectionStats.value : favoriteStats.value;
-  if (props.libraryFilter === 'all') return songCountLong(player.settings.locale, props.libraryMeta.count);
-  return collectionStats.value;
-});
-
-const collectionDate = computed(() => {
-  if (props.libraryFilter === 'all' && props.activeCollection !== 'favorites') return '2026-06-14';
-  return '2026-06-15';
-});
-
-const collectionHeroId = computed(() => {
-  if (props.activeCollection === 'favorites') return 'favorites';
-  if (props.libraryFilter === 'recentAdded') return 'recent-added';
-  if (props.libraryFilter === 'recentPlayed') return 'recent-played';
-  return 'library';
-});
-
-const collectionEmptyText = computed(() => {
-  if (props.activeCollection === 'favorites') return t(player.settings.locale, 'emptyFavorites');
-  if (props.libraryFilter === 'recentAdded') return t(player.settings.locale, 'emptyRecentAdded');
-  if (props.libraryFilter === 'recentPlayed') return t(player.settings.locale, 'emptyRecentPlayed');
-  return t(player.settings.locale, 'emptySongs');
-});
-
-const hasPlayableVisibleTracks = computed(() => {
-  return props.tracks.some((track) => track.path);
-});
-
-const canLocateActiveTrack = computed(() => {
-  return Boolean(props.activeTrack && props.tracks.some((track) => track.id === props.activeTrack?.id));
-});
+const workspaceTrackListListeners: WorkspaceTrackListListeners = {
+  onOpenArtist: (...args) => emit('openArtist', ...args),
+  onOpenTrackMenu: (...args) => emit('openTrackMenu', ...args),
+  onPlayTrack: (...args) => emit('playTrack', ...args),
+  onSelectTrack: (...args) => emit('selectTrack', ...args),
+  onToggleFavorite: (...args) => emit('toggleFavorite', ...args),
+};
 
 function playAllVisibleTracks() {
   if (props.activeCollection === 'favorites') {
@@ -118,23 +69,17 @@ async function locateActiveTrack() {
   const activeTrackId = props.activeTrack?.id;
   if (!activeTrackId) return;
 
-  await trackTableRef.value?.scrollToTrack(activeTrackId);
-}
-
-function handleTrackListScroll(event: Event) {
-  showTrackListScrolling();
-  const target = event.currentTarget;
-  if (target instanceof HTMLElement && target.scrollHeight - target.scrollTop - target.clientHeight < 180) {
-    trackTableRef.value?.loadNextPage();
-  }
+  await trackListRef.value?.scrollToTrack(activeTrackId);
 }
 </script>
 
 <template>
   <section class="workspace" :class="{ 'favorites-workspace': isWideCollection }">
-    <header class="workspace-toolbar">
-      <SearchInput :model-value="modelValue" :placeholder="t(player.settings.locale, 'searchPlaceholder')" @update:model-value="emit('update:modelValue', $event)" />
-    </header>
+    <WorkspaceSearchToolbar
+      :model-value="modelValue"
+      :placeholder="t(player.settings.locale, 'searchPlaceholder')"
+      @update:model-value="emit('update:modelValue', $event)"
+    />
 
     <CollectionHero
       :id="collectionHeroId"
@@ -150,35 +95,10 @@ function handleTrackListScroll(event: Event) {
       @locate="locateActiveTrack"
     />
 
-    <div
-      class="track-scroll-area"
-      :class="{ 'is-scrolling': isTrackListScrolling }"
-      @scroll="handleTrackListScroll"
-    >
-      <p v-if="error" class="error">{{ error }}</p>
-      <EmptyState v-if="tracks.length === 0" class-name="favorites-empty" :message="collectionEmptyText" />
-
-      <TrackTable
-        v-else
-        ref="trackTableRef"
-        label="Songs"
-        :tracks="tracks"
-        :active-track="activeTrack"
-        :favorite-track-ids="favoriteTrackIds"
-        :preparing-track-id="preparingTrackId ?? null"
-        :spectrum-levels="spectrumLevels"
-        :is-playing="isPlaying"
-        :wide="isWideCollection"
-        disable-internal-paging
-        enable-artist-links
-        enable-context-menu
-        @select-track="emit('selectTrack', $event)"
-        @play-track="emit('playTrack', $event)"
-        @toggle-favorite="emit('toggleFavorite', $event)"
-        @open-artist="emit('openArtist', $event)"
-        @open-track-menu="(track, x, y) => emit('openTrackMenu', track, x, y)"
-      />
-    </div>
+    <WorkspaceTrackList
+      ref="trackListRef"
+      v-bind="{ ...workspaceTrackListProps, ...workspaceTrackListListeners }"
+    />
   </section>
 </template>
 
@@ -186,73 +106,13 @@ function handleTrackListScroll(event: Event) {
 .workspace {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
   overflow: hidden;
   padding: 12px 22px 24px;
   background: var(--smw-bg-workspace);
-}
-
-.workspace-toolbar {
-  min-height: 40px;
-}
-
-.icon-button.muted {
-  color: var(--smw-text-muted);
-}
-
-:root[data-theme='dark'] .play-button {
-  color: #111111;
-}
-
-.error {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--smw-error-border);
-  border-radius: 8px;
-  color: var(--smw-error-text);
-  background: var(--smw-error-bg);
-  font-size: 13px;
-}
-
-.track-scroll-area {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-top: 0;
-  scrollbar-color: transparent transparent;
-}
-
-.track-scroll-area:hover.is-scrolling {
-  scrollbar-color: var(--smw-scrollbar-thumb) transparent;
-}
-
-.track-scroll-area::-webkit-scrollbar {
-  width: 10px;
-}
-
-.track-scroll-area::-webkit-scrollbar-thumb {
-  background:
-    linear-gradient(transparent, transparent)
-    padding-box;
-}
-
-.track-scroll-area:hover.is-scrolling::-webkit-scrollbar-thumb {
-  background:
-    linear-gradient(var(--smw-scrollbar-thumb), var(--smw-scrollbar-thumb))
-    padding-box;
-}
-
-.track-scroll-area:hover.is-scrolling::-webkit-scrollbar-thumb:hover {
-  background:
-    linear-gradient(var(--smw-scrollbar-thumb-hover), var(--smw-scrollbar-thumb-hover))
-    padding-box;
-}
-
-.favorites-empty {
-  margin-top: 36px;
 }
 
 @media (max-height: 760px) and (min-width: 821px) {
@@ -260,20 +120,12 @@ function handleTrackListScroll(event: Event) {
     padding-top: 10px;
     padding-bottom: 18px;
   }
-
-  .workspace-toolbar {
-    min-height: 36px;
-  }
 }
 
 @media (max-height: 660px) and (min-width: 821px) {
   .workspace {
     padding-top: 8px;
     padding-bottom: 14px;
-  }
-
-  .workspace-toolbar {
-    min-height: 32px;
   }
 }
 </style>

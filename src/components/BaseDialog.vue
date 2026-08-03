@@ -1,24 +1,12 @@
 <script setup lang="ts">
 import { X } from '@lucide/vue';
+import type { BaseDialogEmits, BaseDialogProps } from '../types/baseDialog';
 
-withDefaults(defineProps<{
-  closeLabel: string;
-  closeDisabled?: boolean;
-  closeOnOverlay?: boolean;
-  gridTemplateRows?: string;
-  label: string;
-  maxHeight?: string;
-  overlayBackground?: string;
-  overlayBackdropFilter?: string;
-  overflow?: string;
-  panelClass?: string;
-  title?: string;
-  width?: string;
-  zIndex?: number;
-}>(), {
+withDefaults(defineProps<BaseDialogProps>(), {
   closeDisabled: false,
   closeOnOverlay: false,
   gridTemplateRows: 'none',
+  headerPadding: '16px 18px 14px',
   maxHeight: 'none',
   overlayBackground: 'transparent',
   overlayBackdropFilter: 'none',
@@ -29,9 +17,7 @@ withDefaults(defineProps<{
   zIndex: 120,
 });
 
-defineEmits<{
-  close: [];
-}>();
+defineEmits<BaseDialogEmits>();
 </script>
 
 <template>
@@ -50,6 +36,7 @@ defineEmits<{
       :class="panelClass"
       :style="{
         '--base-dialog-grid-template-rows': gridTemplateRows,
+        '--base-dialog-header-padding': headerPadding,
         '--base-dialog-max-height': maxHeight,
         '--base-dialog-overflow': overflow,
         '--base-dialog-width': width,
@@ -103,7 +90,7 @@ defineEmits<{
   justify-content: space-between;
   gap: 16px;
   min-height: 64px;
-  padding: 16px 18px 14px;
+  padding: var(--base-dialog-header-padding, 16px 18px 14px);
   border-bottom: 1px solid var(--smw-border-soft);
 }
 

@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     io::{self, BufRead, Write},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Mutex, TryLockError},
     thread,
     time::Duration,
@@ -65,13 +65,18 @@ fn value_has_plugin_search_payload(value: &Value) -> bool {
 
 pub(crate) struct PluginWorkerState {
     worker: Mutex<WorkerProcess>,
+    cache_dir: PathBuf,
 }
 
 impl PluginWorkerState {
-    pub(crate) fn start() -> Result<Self, String> {
-        log_plugin_args("PluginWorkerState::start", json!({}));
+    pub(crate) fn start(cache_dir: PathBuf) -> Result<Self, String> {
+        log_plugin_args(
+            "PluginWorkerState::start",
+            json!({ "cacheDir": cache_dir.to_string_lossy() }),
+        );
         Ok(Self {
-            worker: Mutex::new(start_plugin_worker()?),
+            worker: Mutex::new(start_plugin_worker(&cache_dir)?),
+            cache_dir,
         })
     }
 
@@ -101,6 +106,23 @@ impl PluginWorkerState {
             method: methods::PLUGIN_READ_WASM_BYTES.to_string(),
             payload: json!({ "entry": entry }),
         })
+    }
+
+    pub(crate) fn refresh_plugin_wasm_cache(&self, entry: String) -> Result<(), String> {
+        if !entry.starts_with("http://") && !entry.starts_with("https://") {
+            return Ok(());
+        }
+
+        log_plugin_args(
+            "PluginWorkerState::refresh_plugin_wasm_cache",
+            json!({ "entry": entry }),
+        );
+        let _: Vec<u8> = self.deserialize_response(WorkerRequest {
+            id: "plugin-refresh-wasm-cache".to_string(),
+            method: methods::PLUGIN_READ_WASM_BYTES.to_string(),
+            payload: json!({ "entry": entry, "refreshCache": true }),
+        })?;
+        Ok(())
     }
 
     pub(crate) fn plugin_http_request(
@@ -219,7 +241,7 @@ impl PluginWorkerState {
                 Ok(mut worker) => {
                     should_continue()?;
                     let response: Result<Value, String> = Self::deserialize_worker_message(
-                        Self::request_with_locked_worker(&mut worker, &worker_request)?,
+                        self.request_with_locked_worker(&mut worker, &worker_request)?,
                     );
                     match response {
                         Ok(response) => {
@@ -257,7 +279,7 @@ impl PluginWorkerState {
     pub(crate) fn restart_process(&self) -> Result<(), String> {
         let mut worker = self.worker.lock().map_err(|err| err.to_string())?;
         worker.stop();
-        *worker = start_plugin_worker()?;
+        *worker = start_plugin_worker(&self.cache_dir)?;
         Ok(())
     }
 
@@ -269,17 +291,18 @@ impl PluginWorkerState {
 
     fn request(&self, request: &WorkerRequest) -> Result<WorkerMessage, String> {
         let mut worker = self.worker.lock().map_err(|err| err.to_string())?;
-        Self::request_with_locked_worker(&mut worker, request)
+        self.request_with_locked_worker(&mut worker, request)
     }
 
     fn request_with_locked_worker(
+        &self,
         worker: &mut WorkerProcess,
         request: &WorkerRequest,
     ) -> Result<WorkerMessage, String> {
         match worker.request(request) {
             Ok(message) => Ok(message),
             Err(first_error) => {
-                let mut restarted_worker = start_plugin_worker()?;
+                let mut restarted_worker = start_plugin_worker(&self.cache_dir)?;
                 let message = restarted_worker.request(request).map_err(|retry_error| {
                     format!(
                         "plugin worker restarted after error ({first_error}); retry failed: {retry_error}"
@@ -315,9 +338,13 @@ impl PluginWorkerState {
     }
 }
 
-fn start_plugin_worker() -> Result<WorkerProcess, String> {
-    log_plugin_args("start_plugin_worker", json!({}));
-    let mut worker = WorkerProcess::spawn_current_exe("plugin", PLUGIN_WORKER_FLAG, &[])?;
+fn start_plugin_worker(cache_dir: &Path) -> Result<WorkerProcess, String> {
+    log_plugin_args(
+        "start_plugin_worker",
+        json!({ "cacheDir": cache_dir.to_string_lossy() }),
+    );
+    let args = vec![cache_dir.to_string_lossy().to_string()];
+    let mut worker = WorkerProcess::spawn_current_exe("plugin", PLUGIN_WORKER_FLAG, &args)?;
     let request = WorkerRequest {
         id: "plugin-worker-startup".to_string(),
         method: methods::WORKER_PING.to_string(),
@@ -334,8 +361,11 @@ fn start_plugin_worker() -> Result<WorkerProcess, String> {
     }
 }
 
-pub(crate) fn run() -> Result<(), String> {
-    log_plugin_args("plugin_worker::run", json!({}));
+pub(crate) fn run(cache_dir: PathBuf) -> Result<(), String> {
+    log_plugin_args(
+        "plugin_worker::run",
+        json!({ "cacheDir": cache_dir.to_string_lossy() }),
+    );
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let started_at_ms = crate::workers::worker_started_at_ms();
@@ -347,7 +377,7 @@ pub(crate) fn run() -> Result<(), String> {
         }
 
         let response = match decode_request(&line) {
-            Ok(request) => handle_request(request, started_at_ms),
+            Ok(request) => handle_request(request, started_at_ms, &cache_dir),
             Err(error) => WorkerMessage::Response {
                 id: "invalid-request".to_string(),
                 ok: false,
@@ -374,7 +404,7 @@ pub(crate) fn run() -> Result<(), String> {
     Ok(())
 }
 
-fn handle_request(request: WorkerRequest, started_at_ms: u128) -> WorkerMessage {
+fn handle_request(request: WorkerRequest, started_at_ms: u128, cache_dir: &Path) -> WorkerMessage {
     log_plugin_args(
         "handle_request",
         json!({
@@ -416,7 +446,12 @@ fn handle_request(request: WorkerRequest, started_at_ms: u128) -> WorkerMessage 
             let payload = serde_json::from_value::<ReadWasmPayload>(request.payload)
                 .map_err(|err| err.to_string())?;
             validate_wasm_entry(&payload.entry)?;
-            crate::plugins::read_plugin_wasm_bytes_backend(payload.entry).map(|value| json!(value))
+            crate::plugins::read_plugin_wasm_bytes_backend(
+                payload.entry,
+                Some(cache_dir),
+                payload.refresh_cache,
+            )
+            .map(|value| json!(value))
         }),
         methods::PLUGIN_HTTP_REQUEST => response_from_result(request.id, || {
             let payload = serde_json::from_value::<HttpRequestPayload>(request.payload)
@@ -434,7 +469,7 @@ fn handle_request(request: WorkerRequest, started_at_ms: u128) -> WorkerMessage 
             let payload = serde_json::from_value::<InvokePayload>(request.payload)
                 .map_err(|err| err.to_string())?;
             validate_plugin_invoke_entry(&payload.entry)?;
-            invoke_plugin_backend(payload)
+            invoke_plugin_backend(payload, cache_dir)
         }),
         method => WorkerMessage::Response {
             id: request.id,
@@ -455,6 +490,8 @@ struct FetchCatalogPayload {
 #[serde(rename_all = "camelCase")]
 struct ReadWasmPayload {
     entry: String,
+    #[serde(default)]
+    refresh_cache: bool,
 }
 
 #[derive(Deserialize)]
@@ -487,7 +524,7 @@ struct HostRequestPayload {
     body: Option<String>,
 }
 
-fn invoke_plugin_backend(payload: InvokePayload) -> Result<Value, String> {
+fn invoke_plugin_backend(payload: InvokePayload, cache_dir: &Path) -> Result<Value, String> {
     log_plugin_args(
         "invoke_plugin_backend",
         json!({
@@ -498,7 +535,8 @@ fn invoke_plugin_backend(payload: InvokePayload) -> Result<Value, String> {
         }),
     );
 
-    let wasm_bytes = crate::plugins::read_plugin_wasm_bytes_backend(payload.entry)?;
+    let wasm_bytes =
+        crate::plugins::read_plugin_wasm_bytes_backend(payload.entry, Some(cache_dir), false)?;
     let engine = Engine::default();
     let module = Module::from_binary(&engine, &wasm_bytes).map_err(|err| err.to_string())?;
     let mut store = Store::new(&engine, ());
@@ -597,12 +635,7 @@ fn execute_host_request(
         permissions,
     };
     validate_plugin_http_request(&payload)?;
-    log_plugin_host_request(
-        plugin_id.as_deref(),
-        &method,
-        &url,
-        data.as_deref(),
-    );
+    log_plugin_host_request(plugin_id.as_deref(), &method, &url, data.as_deref());
     crate::plugins::plugin_http_request_backend(method, url, host_request.headers, data)
 }
 
@@ -801,7 +834,6 @@ fn validate_wasm_entry(entry: &str) -> Result<(), String> {
 }
 
 fn validate_plugin_invoke_entry(entry: &str) -> Result<(), String> {
-
     validate_wasm_entry(entry)
 }
 

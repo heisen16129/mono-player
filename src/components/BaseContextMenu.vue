@@ -1,12 +1,8 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import type { BaseContextMenuProps } from '../types/baseContextMenu';
 
-const props = withDefaults(defineProps<{
-  x: number;
-  y: number;
-  minWidth?: string;
-  zIndex?: number;
-}>(), {
+const props = withDefaults(defineProps<BaseContextMenuProps>(), {
   minWidth: '238px',
   zIndex: 320,
 });

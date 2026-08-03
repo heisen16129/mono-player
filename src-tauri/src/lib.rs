@@ -20,8 +20,8 @@ mod tray;
 mod workers;
 
 use database::{
-    init_database, list_latest_added_tracks, list_tracks, refresh_track_duration, remove_music_dir,
-    read_track_audio_info, update_track_cover, update_track_metadata,
+    init_database, list_latest_added_tracks, list_tracks, read_track_audio_info,
+    refresh_track_duration, remove_music_dir, update_track_cover, update_track_metadata,
 };
 use scanner::{cancel_scan_music_dir, scan_music_dir};
 use state::AppState;
@@ -98,7 +98,7 @@ pub fn run() {
             app.manage(workers::download::DownloadWorkerState::start(
                 app.handle().clone(),
             )?);
-            app.manage(workers::plugin::PluginWorkerState::start()?);
+            app.manage(workers::plugin::PluginWorkerState::start(audio_cache_dir.clone())?);
             app.manage(workers::scanner::ScanWorkerState::default());
             app.manage(system_media::init(app.handle()));
             themes::start_system_theme_watcher(app.handle().clone());

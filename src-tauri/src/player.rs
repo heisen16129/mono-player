@@ -3,7 +3,13 @@ use crate::models::Track;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{fs, path::PathBuf, sync::{Arc, Mutex}, thread, time::Duration};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
+};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod cache;
@@ -297,7 +303,9 @@ pub(crate) fn player_restore_queue(
             crossfade_playback,
             crossfade_duration_ms,
         );
-        if let Some((source, queue_index)) = initial_queue_source(&mut backend, current_source.as_deref()) {
+        if let Some((source, queue_index)) =
+            initial_queue_source(&mut backend, current_source.as_deref())
+        {
             backend.current_source = Some(source);
             backend.queue_index = Some(queue_index);
         } else {
@@ -977,7 +985,10 @@ fn apply_plugin_playback_source(
         .duration
         .map(|duration| duration as f64)
         .or(queue_track.duration);
-    queue_track.artwork = source_result.artwork.clone().or(queue_track.artwork.clone());
+    queue_track.artwork = source_result
+        .artwork
+        .clone()
+        .or(queue_track.artwork.clone());
 }
 
 fn play_worker_queue_source_by_index(

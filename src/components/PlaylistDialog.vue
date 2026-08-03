@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { resolveLocale, t } from '../i18n';
 import type { Locale } from '../types/music';
 import BaseDialog from './BaseDialog.vue';
+import PlaylistNameField from './PlaylistNameField.vue';
 
 const props = defineProps<{
   editing: boolean;
@@ -25,15 +26,12 @@ const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist
 
       <form class="playlist-dialog-form" @submit.prevent="$emit('confirm')">
         <div class="playlist-dialog-body">
-          <label class="playlist-name-field">
-            <span>{{ isEnglish ? 'Playlist name' : '歌单名称' }}</span>
-            <input
-              :value="name"
-              type="text"
-              :placeholder="isEnglish ? 'New playlist' : '新建歌单'"
-              @input="emit('update:name', ($event.target as HTMLInputElement).value)"
-            />
-          </label>
+          <PlaylistNameField
+            :label="isEnglish ? 'Playlist name' : '歌单名称'"
+            :name="name"
+            :placeholder="isEnglish ? 'New playlist' : '新建歌单'"
+            @update:name="emit('update:name', $event)"
+          />
         </div>
 
         <footer class="scan-dialog-actions">
@@ -51,29 +49,6 @@ const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist
 <style scoped>
 .playlist-dialog-body {
   padding: 16px 18px 20px;
-}
-
-.playlist-name-field {
-  display: grid;
-  gap: 8px;
-  color: var(--smw-text-secondary);
-  font-size: 13px;
-}
-
-.playlist-name-field input {
-  height: 38px;
-  padding: 0 12px;
-  border: 1px solid var(--smw-border);
-  border-radius: 8px;
-  outline: none;
-  color: var(--smw-text-primary);
-  background: var(--smw-bg-input);
-  font: inherit;
-}
-
-.playlist-name-field input:focus {
-  border-color: var(--smw-border-strong);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--smw-button-primary) 12%, transparent);
 }
 
 .scan-dialog-actions {

@@ -1,0 +1,29 @@
+<script setup lang="ts">
+defineProps<{
+  label: string;
+}>();
+
+const emit = defineEmits<{
+  refresh: [];
+}>();
+</script>
+
+<template>
+  <button class="secondary-button compact" type="button" @click="emit('refresh')">
+    {{ label }}
+  </button>
+</template>
+
+<style scoped>
+.secondary-button.compact:hover {
+  border-color: color-mix(in srgb, var(--smw-button-primary) 34%, var(--smw-border));
+  color: var(--smw-button-primary);
+  background: color-mix(in srgb, var(--smw-button-primary) 8%, var(--smw-bg-input));
+}
+
+.secondary-button.compact:focus-visible {
+  border-color: var(--smw-button-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
+  outline: none;
+}
+</style>

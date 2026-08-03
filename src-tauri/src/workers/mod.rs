@@ -10,7 +10,9 @@ pub(crate) mod scanner;
 
 use serde_json::{json, Value};
 use std::{
-    env, process,
+    env,
+    path::PathBuf,
+    process,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -34,7 +36,11 @@ pub fn run_worker_from_args() -> Result<bool, String> {
             Ok(true)
         }
         Some(PLUGIN_WORKER_FLAG) => {
-            plugin::run()?;
+            let cache_dir = args
+                .next()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::temp_dir().join("mono-player"));
+            plugin::run(cache_dir)?;
             Ok(true)
         }
         Some(MCP_API_WORKER_FLAG) => {

@@ -31,12 +31,17 @@ pub(crate) async fn read_cover_thumbnail(
     state: State<'_, PlayerState>,
     path: String,
 ) -> Result<ApiResponse<Option<CoverImage>>, String> {
-    Ok(ApiResponse::from_result((|| async {
-        let cache_root = state.cache_dir()?;
-        tauri::async_runtime::spawn_blocking(move || read_cover_thumbnail_blocking(&cache_root, &path))
+    Ok(ApiResponse::from_result(
+        (|| async {
+            let cache_root = state.cache_dir()?;
+            tauri::async_runtime::spawn_blocking(move || {
+                read_cover_thumbnail_blocking(&cache_root, &path)
+            })
             .await
             .map_err(|err| err.to_string())?
-    })().await))
+        })()
+        .await,
+    ))
 }
 
 fn read_cover_thumbnail_blocking(

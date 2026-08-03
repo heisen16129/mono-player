@@ -1,6 +1,8 @@
-import { nextTick, onBeforeUnmount, ref, watch, type ComputedRef, type Ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue';
 import type { LyricLine } from '../types/music';
 import { useScrollingState } from './useScrollingState';
+
+const LYRICS_DOCK_CLIP_GAP = 14;
 
 export function useLyricsScroll(options: {
   activeLyricIndex: ComputedRef<number>;
@@ -19,21 +21,37 @@ export function useLyricsScroll(options: {
     await nextTick();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const panel = lyricsPanel.value?.panel ?? null;
-    const currentLine = panel?.querySelector<HTMLElement>('.lyrics-panel .current');
-    if (!panel || !currentLine) return;
+    if (!panel) return;
 
-    const centerHeight = lyricsPrimaryRowHeight(panel);
+    const centerHeight = syncLyricsPanelMetrics(panel);
+    const currentLine = panel.querySelector<HTMLElement>('.current');
+    if (!currentLine) return;
+
     const nextTop = currentLine.offsetTop - centerHeight / 2 + currentLine.clientHeight / 2;
     panel.scrollTo({ top: Math.max(0, nextTop), behavior });
     requestAnimationFrame(syncScrollThumb);
   }
 
-  function lyricsPrimaryRowHeight(panel: HTMLElement) {
+  function lyricsBottomInset(panel: HTMLElement) {
+    const wrap = panel.parentElement;
+    if (!wrap?.classList.contains('is-dock-visible')) return 0;
+
     const styles = getComputedStyle(panel);
     const playerHeight = Number.parseFloat(styles.getPropertyValue('--player-height')) || 0;
-    const stage = panel.parentElement?.parentElement ?? null;
-    const rowGap = stage ? Number.parseFloat(getComputedStyle(stage).rowGap) || 0 : 0;
-    return Math.max(1, panel.clientHeight - playerHeight - rowGap);
+    return playerHeight + LYRICS_DOCK_CLIP_GAP;
+  }
+
+  function lyricsVisibleHeight(panel: HTMLElement) {
+    return Math.max(1, panel.clientHeight - lyricsBottomInset(panel));
+  }
+
+  function syncLyricsPanelMetrics(panel: HTMLElement) {
+    const visibleHeight = lyricsVisibleHeight(panel);
+    const bottomInset = lyricsBottomInset(panel);
+    const anchorPadding = Math.max(32, visibleHeight / 2);
+    panel.style.setProperty('--lyrics-anchor-padding-top', `${anchorPadding}px`);
+    panel.style.setProperty('--lyrics-anchor-padding-bottom', `${anchorPadding + bottomInset}px`);
+    return visibleHeight;
   }
 
   function beginLyricBrowse() {
@@ -108,8 +126,16 @@ export function useLyricsScroll(options: {
       : null;
 
     if (lyricsPanel.value) {
+      if (lyricsPanel.value.panel) syncLyricsPanelMetrics(lyricsPanel.value.panel);
       void syncLyricsToCurrentTime();
     }
+  }
+
+  function handleResize() {
+    const panel = lyricsPanel.value?.panel ?? null;
+    if (!panel) return;
+    syncLyricsPanelMetrics(panel);
+    void syncLyricsToCurrentTime();
   }
 
   watch(options.activeLyricIndex, async () => {
@@ -125,10 +151,21 @@ export function useLyricsScroll(options: {
     void syncLyricsToCurrentTime();
   }, { flush: 'post' });
 
+  watch(options.lines, () => {
+    const panel = lyricsPanel.value?.panel ?? null;
+    if (!panel) return;
+    syncLyricsPanelMetrics(panel);
+  }, { flush: 'post' });
+
+  onMounted(() => {
+    window.addEventListener('resize', handleResize);
+  });
+
   onBeforeUnmount(() => {
     if (browseRestoreTimer) {
       window.clearTimeout(browseRestoreTimer);
     }
+    window.removeEventListener('resize', handleResize);
   });
 
   return {

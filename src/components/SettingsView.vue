@@ -1,16 +1,18 @@
 ﻿<script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useScrollingState } from '../composables/useScrollingState';
 import { t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
-import PageHeader from './PageHeader.vue';
-import SegmentTabs from './SegmentTabs.vue';
 import GeneralSettingsPanel from './settings/GeneralSettingsPanel.vue';
 import LyricsSettingsPanel from './settings/LyricsSettingsPanel.vue';
 import McpSettingsPanel from './settings/McpSettingsPanel.vue';
 import PlaybackSettingsPanel from './settings/PlaybackSettingsPanel.vue';
 import PluginSettingsPanel from './settings/PluginSettingsPanel.vue';
+import SettingsHeader from './settings/SettingsHeader.vue';
+import SettingsTabs from './settings/SettingsTabs.vue';
 
 const player = usePlayerStore();
+const { isScrolling, showScrolling } = useScrollingState();
 const tabKeys = ['settings', 'playback', 'lyrics', 'mcp', 'plugins', 'shortcuts', 'network', 'backup'] as const;
 const activeTab = ref<(typeof tabKeys)[number]>('settings');
 const locale = computed(() => player.settings.locale);
@@ -25,11 +27,11 @@ function selectSettingsTab(tab: string | null) {
 
 <template>
   <section class="settings-view">
-    <PageHeader class="settings-header" :title="t(locale, 'preferences')">
-      <SegmentTabs :label="t(locale, 'settings')" :items="settingsTabItems" :model-value="activeTab" root-class="settings-tabs" @select="selectSettingsTab" />
-    </PageHeader>
+    <SettingsHeader :title="t(locale, 'preferences')">
+      <SettingsTabs :label="t(locale, 'settings')" :items="settingsTabItems" :model-value="activeTab" @select="selectSettingsTab" />
+    </SettingsHeader>
 
-    <div class="settings-content">
+    <div class="settings-content transient-scrollbar" :class="{ 'is-scrolling': isScrolling }" @scroll="showScrolling">
       <GeneralSettingsPanel v-if="activeTab === 'settings'" />
 
       <PlaybackSettingsPanel v-else-if="activeTab === 'playback'" />
@@ -52,22 +54,24 @@ function selectSettingsTab(tab: string | null) {
   --button-min-height: 36px;
   --button-padding-x: 14px;
 
+  height: 100%;
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 24px 34px 40px;
   background: var(--smw-bg-workspace);
-  scrollbar-width: none;
-}
-
-.settings-view::-webkit-scrollbar {
-  display: none;
 }
 
 .settings-content {
-  display: grid;
+  display: block;
+  flex: 1 1 0;
   max-width: 980px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-top: 18px;
 }
 
@@ -82,5 +86,15 @@ function selectSettingsTab(tab: string | null) {
   margin: 0;
   font-size: 16px;
   font-weight: 720;
+}
+
+@media (max-width: 820px) {
+  .settings-view {
+    padding: 20px 18px 0;
+  }
+
+  .settings-content {
+    padding-bottom: 128px;
+  }
 }
 </style>

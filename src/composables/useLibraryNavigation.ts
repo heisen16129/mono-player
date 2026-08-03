@@ -1,14 +1,10 @@
-import { ref, type ComputedRef } from 'vue';
+import { ref } from 'vue';
 
 export type AppView = 'library' | 'discover' | 'artists' | 'settings' | 'themes' | 'plugins' | 'downloads';
 export type LibraryCollection = 'all' | 'favorites';
 export type LibraryFilter = 'all' | 'recentAdded' | 'recentPlayed';
 
-export interface ArtistGroupLike {
-  name: string;
-}
-
-export function useLibraryNavigation(artistGroups: ComputedRef<ArtistGroupLike[]>) {
+export function useLibraryNavigation(getDefaultArtistName: () => string | null) {
   const activeView = ref<AppView>('library');
   const activeCollection = ref<LibraryCollection>('all');
   const activeLibraryFilter = ref<LibraryFilter>('all');
@@ -94,7 +90,7 @@ export function useLibraryNavigation(artistGroups: ComputedRef<ArtistGroupLike[]
     isLibraryPanelMode.value = false;
     activeFolderPath.value = null;
     activePlaylistId.value = null;
-    activeArtistName.value = artistGroups.value[0]?.name ?? null;
+    activeArtistName.value = getDefaultArtistName();
   }
 
   function openSettingsView() {

@@ -138,17 +138,6 @@ export async function getPluginLyricsMetadata(track: PluginSearchTrack, playback
   });
 }
 
-export async function getPluginCoverMetadata(track: PluginSearchTrack): Promise<string> {
-  const plugins = await listInstalledPlugins();
-  if (!isTauriRuntime()) throw new Error('Plugin covers are only available in the desktop runtime.');
-
-  return invokeApi<string>('resolve_plugin_cover_metadata', {
-    providerId: track.providerId,
-    track,
-    plugins,
-  });
-}
-
 export async function resolvePluginPlaybackQualitiesWithRust(track: PluginSearchTrack): Promise<PluginPlaybackQualities> {
   const plugins = await listInstalledPlugins();
   if (!isTauriRuntime()) throw new Error('Plugin playback is only available in the desktop runtime.');
