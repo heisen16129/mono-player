@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { usePlayerStore } from '../stores/player';
+import { useInAppShortcuts } from '../composables/useInAppShortcuts';
 import { usePlaybackNotifications } from '../composables/usePlaybackNotifications';
 import { usePlayerDockControlBindings } from '../composables/usePlayerDockControlBindings';
 import { usePlayerDockLabels } from '../composables/usePlayerDockLabels';
@@ -167,6 +168,21 @@ const {
   onPrevious: () => emit('playPrevious'),
   onToggleFavorite: () => emit('toggleFavorite'),
   onTogglePlaybackMode: () => emit('togglePlaybackMode'),
+});
+
+useInAppShortcuts({
+  bindings: computed(() => player.settings.appShortcuts),
+  enabled: computed(() => player.settings.enableAppShortcuts),
+  actions: {
+    nextTrack: requestNextTrack,
+    previousTrack: requestPreviousTrack,
+    toggleDesktopLyrics: () => emit('toggleDesktopLyrics'),
+    toggleFavorite: requestFavoriteToggle,
+    togglePlayback,
+    togglePlaybackMode: requestPlaybackModeToggle,
+    volumeDown: () => changeVolume(Math.max(0, volume.value - 5)),
+    volumeUp: () => changeVolume(Math.min(100, volume.value + 5)),
+  },
 });
 
 usePlayerDockLifecycle({

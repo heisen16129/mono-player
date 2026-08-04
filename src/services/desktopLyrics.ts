@@ -78,6 +78,18 @@ export async function openDesktopLyricsWindow() {
   return lyricsWindow;
 }
 
+export async function toggleDesktopLyricsWindow() {
+  if (!isTauriRuntime()) return null;
+
+  const existingWindow = await WebviewWindow.getByLabel(DESKTOP_LYRICS_LABEL);
+  if (existingWindow) {
+    await existingWindow.close();
+    return null;
+  }
+
+  return openDesktopLyricsWindow();
+}
+
 export async function broadcastDesktopLyricsState(state: DesktopLyricsState) {
   if (!isTauriRuntime()) return;
   await emit(DESKTOP_LYRICS_UPDATE_EVENT, state);

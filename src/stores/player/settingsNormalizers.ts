@@ -12,10 +12,19 @@ import {
   MIN_SLEEP_TIMER_MINUTES,
   ONLINE_PLAYBACK_FAILURE_ACTIONS,
   QUALITY_FALLBACKS,
+  DEFAULT_SHORTCUT_BINDINGS,
 } from './constants';
 import { normalizeFavoriteTracks } from './favoriteNormalizers';
 import { normalizeLocalPathInput } from './pathNormalizers';
 import { isBuiltInTheme } from './themeNormalizers';
+
+function normalizeShortcutBindings(value: unknown) {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return Object.fromEntries(Object.entries(DEFAULT_SHORTCUT_BINDINGS).map(([action, fallback]) => [
+    action,
+    typeof source[action] === 'string' ? source[action].trim() : fallback,
+  ])) as typeof DEFAULT_SHORTCUT_BINDINGS;
+}
 
 export function normalizeSettings(value: unknown): PlayerSettings {
   try {
@@ -102,7 +111,9 @@ export function normalizeSettings(value: unknown): PlayerSettings {
     const fadePlayback = parsed.fadePlayback === true;
     const crossfadePlayback = parsed.crossfadePlayback === true;
     const mcpAutoStart = parsed.mcpAutoStart !== false;
-    return { ...parsed, musicDirs: dirs, lastAddedTrackIds, recentPlayedTrackIds, playlists, closeAction, locale, sleepTimerAction, sleepTimerMinutes, theme, autoHideLyricsDock, lyricFontSize, useThemeLyricColor, lyricFontColor, downloadDir, audioCacheDir, audioCacheMaxMb, audioOutputDeviceId, searchHistoryLimit, showTrackNumbers, showTrackCovers, enableLocalMetadataEditing, enableTrackMetadataEdit, enableTrackCoverEdit, enableTrackDurationRefresh, enablePlugins, qualityFallback, onlinePlaybackFailureAction, seamlessPlayback, fadePlayback, crossfadePlayback, mcpAutoStart };
+    const enableAppShortcuts = parsed.enableAppShortcuts !== false;
+    const appShortcuts = normalizeShortcutBindings(parsed.appShortcuts);
+    return { ...parsed, musicDirs: dirs, lastAddedTrackIds, recentPlayedTrackIds, playlists, closeAction, locale, sleepTimerAction, sleepTimerMinutes, theme, autoHideLyricsDock, lyricFontSize, useThemeLyricColor, lyricFontColor, downloadDir, audioCacheDir, audioCacheMaxMb, audioOutputDeviceId, searchHistoryLimit, showTrackNumbers, showTrackCovers, enableLocalMetadataEditing, enableTrackMetadataEdit, enableTrackCoverEdit, enableTrackDurationRefresh, enablePlugins, qualityFallback, onlinePlaybackFailureAction, seamlessPlayback, fadePlayback, crossfadePlayback, mcpAutoStart, enableAppShortcuts, appShortcuts };
   } catch {
     return fallbackSettings;
   }

@@ -59,6 +59,7 @@ interface UseAppPlayerSurfaceBindingsActions {
   seekToLyric: LyricsViewListeners['onSeek'];
   showLyricsDock: LyricsViewListeners['onShowPlayerDock'];
   showOnlineToast: LyricsViewListeners['onNotify'];
+  toggleDesktopLyrics: PlayerDockListeners['onToggleDesktopLyrics'];
   toggleFavoriteTrack: PlayerDockListeners['onToggleFavorite'];
   toggleLyricsView: PlayerDockListeners['onOpenLyrics'];
   togglePlaybackMode: PlayerDockListeners['onTogglePlaybackMode'];
@@ -111,6 +112,7 @@ export function useAppPlayerSurfaceBindings({
       onMouseleave: actions.leaveLyricsDock,
       onDownloadActiveTrack: actions.downloadActiveOnlineTrack,
       onOpenDesktopLyrics: actions.openDesktopLyrics,
+      onToggleDesktopLyrics: actions.toggleDesktopLyrics,
       onOpenLyrics: actions.toggleLyricsView,
       onLyricFormatChange: actions.changeLyricFormat,
       onOnlineQualityChange: actions.changeOnlinePlaybackQuality,

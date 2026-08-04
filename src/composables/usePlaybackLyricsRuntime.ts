@@ -131,6 +131,7 @@ export function usePlaybackLyricsRuntime({
   const {
     broadcastCurrentDesktopLyricsState,
     openDesktopLyrics,
+    toggleDesktopLyrics,
   } = useDesktopLyricsSync({
     activeTrack,
     isAudioPlaying,
@@ -150,6 +151,7 @@ export function usePlaybackLyricsRuntime({
     lyricsTrackKey,
     lyricsViewState,
     openDesktopLyrics,
+    toggleDesktopLyrics,
     playbackLyricFormat,
     playbackLyricFormats,
     playbackLyricMetadata,

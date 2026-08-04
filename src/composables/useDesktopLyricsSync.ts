@@ -1,5 +1,5 @@
 import { watch } from 'vue';
-import { broadcastDesktopLyricsState, openDesktopLyricsWindow } from '../services/desktopLyrics';
+import { broadcastDesktopLyricsState, openDesktopLyricsWindow, toggleDesktopLyricsWindow } from '../services/desktopLyrics';
 import type { Track, TrackLyricVariant } from '../types/music';
 
 interface ReadonlyRefValue<T> {
@@ -53,6 +53,11 @@ export function useDesktopLyricsSync({
     await broadcastCurrentDesktopLyricsState();
   }
 
+  async function toggleDesktopLyrics() {
+    const window = await toggleDesktopLyricsWindow();
+    if (window) await broadcastCurrentDesktopLyricsState();
+  }
+
   watch(
     () => [
       activeTrack.value,
@@ -71,5 +76,6 @@ export function useDesktopLyricsSync({
   return {
     broadcastCurrentDesktopLyricsState,
     openDesktopLyrics,
+    toggleDesktopLyrics,
   };
 }

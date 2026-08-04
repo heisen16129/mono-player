@@ -418,6 +418,7 @@ const {
   playbackLyricFormats,
   playbackLyricMetadata,
   syncLyricsViewStateForTrack,
+  toggleDesktopLyrics,
   updateActiveTrackLyrics,
 } = usePlaybackLyricsRuntime({
   activeTrack,
@@ -782,6 +783,7 @@ const {
     hoverLyricsDock,
     leaveLyricsDock,
     openDesktopLyrics,
+    toggleDesktopLyrics,
     playActiveTrack,
     playNextTrack,
     playPreviousTrack,

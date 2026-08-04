@@ -31,6 +31,7 @@ export interface PlayerDockEmits {
   mouseleave: [];
   openDesktopLyrics: [];
   openLyrics: [];
+  toggleDesktopLyrics: [];
   onlineQualityChange: [quality: PluginPlaybackQuality];
   lyricFormatChange: [format: string];
   downloadActiveTrack: [];
@@ -53,6 +54,7 @@ export interface PlayerDockListeners {
   onDownloadActiveTrack: () => void;
   onOpenDesktopLyrics: () => void;
   onOpenLyrics: () => void;
+  onToggleDesktopLyrics: () => void;
   onLyricFormatChange: (...args: PlayerDockEmits['lyricFormatChange']) => void;
   onOnlineQualityChange: (...args: PlayerDockEmits['onlineQualityChange']) => void;
   onPlayNext: () => void;

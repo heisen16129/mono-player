@@ -96,6 +96,17 @@ export type Locale = 'system' | AppLocale;
 export type BuiltInTheme = 'dark' | 'light' | 'blueWhite' | 'wallpaperTone' | 'desktopGlass';
 export type CustomThemeId = `custom:${string}`;
 export type AppTheme = BuiltInTheme | CustomThemeId;
+export type ShortcutAction =
+  | 'togglePlayback'
+  | 'nextTrack'
+  | 'previousTrack'
+  | 'volumeUp'
+  | 'volumeDown'
+  | 'toggleDesktopLyrics'
+  | 'toggleFavorite'
+  | 'togglePlaybackMode';
+
+export type ShortcutBindings = Record<ShortcutAction, string>;
 
 export interface CustomTheme {
   id: CustomThemeId;
@@ -141,6 +152,8 @@ export interface PlayerSettings {
   fadePlayback: boolean;
   crossfadePlayback: boolean;
   mcpAutoStart: boolean;
+  enableAppShortcuts: boolean;
+  appShortcuts: ShortcutBindings;
 }
 
 export type PlaybackQualityFallback = 'lower' | 'higher' | 'none';

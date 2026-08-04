@@ -10,6 +10,7 @@ import PlaybackSettingsPanel from './settings/PlaybackSettingsPanel.vue';
 import PluginSettingsPanel from './settings/PluginSettingsPanel.vue';
 import SettingsHeader from './settings/SettingsHeader.vue';
 import SettingsTabs from './settings/SettingsTabs.vue';
+import ShortcutSettingsPanel from './settings/ShortcutSettingsPanel.vue';
 
 const player = usePlayerStore();
 const { isScrolling, showScrolling } = useScrollingState();
@@ -41,6 +42,8 @@ function selectSettingsTab(tab: string | null) {
       <McpSettingsPanel v-else-if="activeTab === 'mcp'" />
 
       <PluginSettingsPanel v-else-if="activeTab === 'plugins'" />
+
+      <ShortcutSettingsPanel v-else-if="activeTab === 'shortcuts'" />
 
       <section v-else class="settings-section">
         <h2>{{ t(locale, activeTab) }}</h2>

@@ -1,5 +1,5 @@
 import type { Ref } from 'vue';
-import type { Locale, PlayerSettings } from '../../types/music';
+import type { Locale, PlayerSettings, ShortcutAction } from '../../types/music';
 import {
   MAX_AUDIO_CACHE_MAX_MB,
   MAX_LYRIC_FONT_SIZE,
@@ -153,6 +153,16 @@ export function createPlayerSettingsActions({ persistSettings, settings }: Playe
     persistSettings();
   }
 
+  function setEnableAppShortcuts(enabled: boolean) {
+    settings.value.enableAppShortcuts = enabled;
+    persistSettings();
+  }
+
+  function setAppShortcut(action: ShortcutAction, shortcut: string) {
+    settings.value.appShortcuts = { ...settings.value.appShortcuts, [action]: shortcut.trim() };
+    persistSettings();
+  }
+
   return {
     setAudioCacheDir,
     setAudioCacheMaxMb,
@@ -161,7 +171,9 @@ export function createPlayerSettingsActions({ persistSettings, settings }: Playe
     setCloseAction,
     setCrossfadePlayback,
     setDownloadDir,
+    setAppShortcut,
     setEnableLocalMetadataEditing,
+    setEnableAppShortcuts,
     setEnablePlugins,
     setEnableTrackCoverEdit,
     setEnableTrackDurationRefresh,

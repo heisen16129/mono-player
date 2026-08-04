@@ -1,4 +1,4 @@
-import type { PlayerSettings } from '../../types/music';
+import type { PlayerSettings, ShortcutBindings } from '../../types/music';
 
 export const SETTINGS_KEY = 'mono-player-settings';
 export const FAVORITES_KEY = 'mono-player-favorites';
@@ -19,6 +19,17 @@ export const MAX_AUDIO_CACHE_MAX_MB = 51200;
 
 export const QUALITY_FALLBACKS = ['lower', 'higher', 'none'] as const;
 export const ONLINE_PLAYBACK_FAILURE_ACTIONS = ['pause', 'next'] as const;
+
+export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
+  togglePlayback: 'Space',
+  nextTrack: 'Ctrl+Right',
+  previousTrack: 'Ctrl+Left',
+  volumeUp: 'Ctrl+Up',
+  volumeDown: 'Ctrl+Down',
+  toggleDesktopLyrics: 'Ctrl+L',
+  toggleFavorite: 'Ctrl+F',
+  togglePlaybackMode: 'Ctrl+M',
+};
 
 export const fallbackSettings: PlayerSettings = {
   musicDir: '',
@@ -54,4 +65,6 @@ export const fallbackSettings: PlayerSettings = {
   fadePlayback: false,
   crossfadePlayback: false,
   mcpAutoStart: true,
+  enableAppShortcuts: true,
+  appShortcuts: DEFAULT_SHORTCUT_BINDINGS,
 };
