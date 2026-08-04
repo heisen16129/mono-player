@@ -31,7 +31,7 @@ defineEmits<{
 <style scoped>
 .lyrics-close {
   position: absolute;
-  top: 48px;
+  top: calc(12px - var(--lyrics-view-padding-top, 0px));
   left: calc(var(--lyrics-control-center-x) - var(--lyrics-view-padding-x, 0px) - 17px);
   z-index: 20;
 }
