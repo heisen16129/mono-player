@@ -1,6 +1,5 @@
 import type { ComputedRef, Ref } from 'vue';
 import { usePlaybackSession } from './usePlaybackSession';
-import { useSleepTimerExitAction } from './useSleepTimerExitAction';
 import type { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 
@@ -27,12 +26,7 @@ export function usePlaybackSessionRuntime({
     selectedTrack,
   });
 
-  const { handleSleepTimerExit } = useSleepTimerExitAction({
-    savePlaybackSessionNow: playbackSession.savePlaybackSessionNow,
-  });
-
   return {
     ...playbackSession,
-    handleSleepTimerExit,
   };
 }

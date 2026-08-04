@@ -1,23 +1,25 @@
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { resolveLocale } from '../i18n';
+import {
+  clearSleepTimerBackend,
+  getSleepTimerStatus,
+  listenSleepTimerStatus,
+  pauseSleepTimerBackend,
+  resumeSleepTimerBackend,
+  startSleepTimerBackend,
+  type SleepTimerSnapshot,
+} from '../services/sleepTimer';
 import type { usePlayerStore } from '../stores/player';
 
-export type SleepTimerAction = 'stop' | 'exit' | 'finishTrack';
+export type { SleepTimerAction } from '../services/sleepTimer';
 
 type PlayerStore = ReturnType<typeof usePlayerStore>;
 
-interface SleepTimerRequest {
-  minutes: number;
-  action: SleepTimerAction | null;
-}
-
 interface SleepTimerOptions {
   player: PlayerStore;
-  onStop: () => void;
-  onExit: () => void;
 }
 
-export function useSleepTimer({ player, onExit, onStop }: SleepTimerOptions) {
+export function useSleepTimer({ player }: SleepTimerOptions) {
   const sleepTimerMinutes = ref(player.settings.sleepTimerMinutes);
   const sleepTimerHours = ref(0);
   const sleepTimerEndsAt = ref<number | null>(null);
@@ -26,10 +28,8 @@ export function useSleepTimer({ player, onExit, onStop }: SleepTimerOptions) {
   const isSleepTimerDialogOpen = ref(false);
   const isSleepTimerStatusOpen = ref(false);
   const sleepTimerTotalSeconds = ref(Math.max(60, player.settings.sleepTimerMinutes * 60));
-  const sleepTimerStopAfterTrackPending = ref(false);
   const sleepTimerPresetMinutes = [10, 20, 30, 45, 60];
-  let sleepTimerTimeout = 0;
-  let sleepTimerTick = 0;
+  let unlistenSleepTimerStatus: (() => void) | null = null;
 
   const isSleepTimerActive = computed(() => sleepTimerEndsAt.value !== null);
   const isSleepTimerPaused = computed(() => sleepTimerPausedRemainingSeconds.value !== null);
@@ -80,103 +80,40 @@ export function useSleepTimer({ player, onExit, onStop }: SleepTimerOptions) {
     sleepTimerMinutes.value = minutes % 60;
   }
 
-  function clearSleepTimer() {
-    if (sleepTimerTimeout) {
-      window.clearTimeout(sleepTimerTimeout);
-      sleepTimerTimeout = 0;
-    }
-    if (sleepTimerTick) {
-      window.clearInterval(sleepTimerTick);
-      sleepTimerTick = 0;
-    }
-    sleepTimerEndsAt.value = null;
-    sleepTimerRemainingSeconds.value = 0;
-    sleepTimerPausedRemainingSeconds.value = null;
+  function applySleepTimerSnapshot(snapshot: SleepTimerSnapshot) {
+    sleepTimerEndsAt.value = snapshot.endsAtMs;
+    sleepTimerPausedRemainingSeconds.value = snapshot.isPaused ? snapshot.remainingSeconds : null;
+    sleepTimerRemainingSeconds.value = snapshot.remainingSeconds;
+    sleepTimerTotalSeconds.value = Math.max(60, snapshot.totalSeconds || player.settings.sleepTimerMinutes * 60);
+  }
+
+  async function clearSleepTimer() {
+    const snapshot = await clearSleepTimerBackend();
+    applySleepTimerSnapshot(snapshot);
     isSleepTimerStatusOpen.value = false;
-    sleepTimerStopAfterTrackPending.value = false;
   }
 
-  function updateSleepTimerRemaining() {
-    if (sleepTimerEndsAt.value === null) return;
-    sleepTimerRemainingSeconds.value = Math.max(0, Math.ceil((sleepTimerEndsAt.value - Date.now()) / 1000));
-  }
-
-  function runSleepTimerAction() {
-    const action = player.settings.sleepTimerAction;
-    if (action === 'finishTrack') {
-      if (sleepTimerTimeout) {
-        window.clearTimeout(sleepTimerTimeout);
-        sleepTimerTimeout = 0;
-      }
-      if (sleepTimerTick) {
-        window.clearInterval(sleepTimerTick);
-        sleepTimerTick = 0;
-      }
-      sleepTimerEndsAt.value = null;
-      sleepTimerRemainingSeconds.value = 0;
-      sleepTimerPausedRemainingSeconds.value = null;
-      sleepTimerStopAfterTrackPending.value = true;
-      return;
-    }
-
-    clearSleepTimer();
-    onStop();
-    if (action === 'exit') {
-      onExit();
-    }
-  }
-
-  function startSleepTimer() {
+  async function startSleepTimer() {
     const hours = Math.min(99, Math.max(0, Math.round(Number(sleepTimerHours.value) || 0)));
     const minutePart = Math.min(59, Math.max(0, Math.round(Number(sleepTimerMinutes.value) || 0)));
     const minutes = Math.min(999, Math.max(1, hours * 60 + minutePart));
     sleepTimerHours.value = Math.floor(minutes / 60);
     sleepTimerMinutes.value = minutes % 60;
     player.setSleepTimerMinutes(minutes);
-    clearSleepTimer();
-
-    sleepTimerTotalSeconds.value = minutes * 60;
-    sleepTimerEndsAt.value = Date.now() + minutes * 60_000;
-    updateSleepTimerRemaining();
-    sleepTimerTick = window.setInterval(updateSleepTimerRemaining, 1000);
-    sleepTimerTimeout = window.setTimeout(runSleepTimerAction, minutes * 60_000);
+    const snapshot = await startSleepTimerBackend(minutes, player.settings.sleepTimerAction);
+    applySleepTimerSnapshot(snapshot);
     closeSleepTimerDialog();
     isSleepTimerStatusOpen.value = false;
   }
 
-  function pauseSleepTimer() {
-    if (sleepTimerEndsAt.value === null) return;
-    sleepTimerPausedRemainingSeconds.value = sleepTimerRemainingSeconds.value;
-    if (sleepTimerTimeout) {
-      window.clearTimeout(sleepTimerTimeout);
-      sleepTimerTimeout = 0;
-    }
-    if (sleepTimerTick) {
-      window.clearInterval(sleepTimerTick);
-      sleepTimerTick = 0;
-    }
-    sleepTimerEndsAt.value = null;
+  async function pauseSleepTimer() {
+    const snapshot = await pauseSleepTimerBackend();
+    applySleepTimerSnapshot(snapshot);
   }
 
-  function resumeSleepTimer() {
-    const remainingSeconds = sleepTimerPausedRemainingSeconds.value;
-    if (!remainingSeconds) return;
-    sleepTimerPausedRemainingSeconds.value = null;
-    sleepTimerEndsAt.value = Date.now() + remainingSeconds * 1000;
-    updateSleepTimerRemaining();
-    sleepTimerTick = window.setInterval(updateSleepTimerRemaining, 1000);
-    sleepTimerTimeout = window.setTimeout(runSleepTimerAction, remainingSeconds * 1000);
-  }
-
-  function handleSleepTimerRequest(request: SleepTimerRequest | null) {
-    if (!request) return;
-    const minutes = Math.min(999, Math.max(1, Math.round(Number(request.minutes) || 0)));
-    if (request.action) {
-      player.setSleepTimerAction(request.action);
-    }
-    sleepTimerHours.value = Math.floor(minutes / 60);
-    sleepTimerMinutes.value = minutes % 60;
-    startSleepTimer();
+  async function resumeSleepTimer() {
+    const snapshot = await resumeSleepTimerBackend();
+    applySleepTimerSnapshot(snapshot);
   }
 
   function syncSleepTimerSetting(minutes: number) {
@@ -185,12 +122,21 @@ export function useSleepTimer({ player, onExit, onStop }: SleepTimerOptions) {
     }
   }
 
+  onMounted(async () => {
+    applySleepTimerSnapshot(await getSleepTimerStatus());
+    unlistenSleepTimerStatus = await listenSleepTimerStatus(applySleepTimerSnapshot);
+  });
+
+  onBeforeUnmount(() => {
+    unlistenSleepTimerStatus?.();
+    unlistenSleepTimerStatus = null;
+  });
+
   return {
     clearSleepTimer,
     closeSleepTimerDialog,
     closeSleepTimerStatus,
     handleSleepTimerButtonClick,
-    handleSleepTimerRequest,
     isSleepTimerActive,
     isSleepTimerDialogOpen,
     isSleepTimerPaused,
@@ -205,7 +151,6 @@ export function useSleepTimer({ player, onExit, onStop }: SleepTimerOptions) {
     sleepTimerPresetMinutes,
     sleepTimerProgressPercent,
     sleepTimerRemainingLabel,
-    sleepTimerStopAfterTrackPending,
     startSleepTimer,
     syncSleepTimerSetting,
   };

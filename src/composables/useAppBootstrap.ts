@@ -23,7 +23,6 @@ interface UseAppBootstrapOptions {
   startDesktopLyricsActionListener: () => Promise<void>;
   startDesktopLyricsReadyListener: () => Promise<void>;
   startDownloadEventListener: () => Promise<void>;
-  startMcpSleepTimerListener: () => Promise<void>;
   startRustQueueEventListener: () => Promise<void>;
   startSystemMediaActionListener: () => Promise<void>;
 }
@@ -40,7 +39,6 @@ export function useAppBootstrap({
   startDesktopLyricsActionListener,
   startDesktopLyricsReadyListener,
   startDownloadEventListener,
-  startMcpSleepTimerListener,
   startRustQueueEventListener,
   startSystemMediaActionListener,
 }: UseAppBootstrapOptions) {
@@ -70,7 +68,6 @@ export function useAppBootstrap({
     await startDesktopLyricsActionListener();
     await startDesktopLyricsReadyListener();
     await startDownloadEventListener();
-    await startMcpSleepTimerListener();
     await startRustQueueEventListener();
     await startSystemMediaActionListener();
   }

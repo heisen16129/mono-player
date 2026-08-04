@@ -16,9 +16,7 @@ use std::{
     process, thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tauri::{AppHandle, Emitter, Manager};
-
-const MCP_SLEEP_TIMER_EVENT: &str = "mcp://sleep-timer";
+use tauri::{AppHandle, Manager};
 
 const BRIDGE_FILE_NAME: &str = "mcp-bridge.json";
 const BRIDGE_PATH: &str = "/mcp-bridge";
@@ -570,22 +568,18 @@ fn set_sleep_timer(app: &AppHandle, params: Value) -> Result<Value, String> {
         }
     }
 
-    let ends_at_ms = now_ms() + u128::from(minutes) * 60_000;
-    app.emit(
-        MCP_SLEEP_TIMER_EVENT,
-        json!({
-            "minutes": minutes,
-            "action": action,
-            "endsAtMs": ends_at_ms
-        }),
-    )
-    .map_err(|err| err.to_string())?;
+    let action = match action.as_deref() {
+        Some("exit") => crate::sleep_timer::SleepTimerAction::Exit,
+        Some("finishTrack") => crate::sleep_timer::SleepTimerAction::FinishTrack,
+        _ => crate::sleep_timer::SleepTimerAction::Stop,
+    };
+    let snapshot = crate::sleep_timer::start_sleep_timer_backend(app.clone(), minutes, action)?;
 
     Ok(json!({
         "ok": true,
         "minutes": minutes,
-        "action": action,
-        "endsAtMs": ends_at_ms
+        "action": snapshot.action,
+        "endsAtMs": snapshot.ends_at_ms
     }))
 }
 

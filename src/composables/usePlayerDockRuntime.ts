@@ -16,6 +16,7 @@ import { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
 import { queueSourceKey } from '../utils/queueSource';
+import { resolveRustQueueSnapshotTrack } from '../utils/rustQueueSnapshot';
 
 interface PlayerDockProgressRuntime {
   runtimeDuration: Ref<number>;
@@ -37,7 +38,6 @@ interface PlayerDockRuntimeOptions {
   restoreRequestId: ComputedRef<number>;
   restoreTime: ComputedRef<number>;
   rustBackendActive: Ref<boolean>;
-  sleepTimerStopAfterTrackPending: Ref<boolean>;
   togglePlaybackRequestId: ComputedRef<number>;
   onOutputDeviceFallback: (previousDeviceId: string) => void;
   onClearPlaybackError: () => void;
@@ -62,7 +62,6 @@ export function usePlayerDockRuntime({
   restoreRequestId,
   restoreTime,
   rustBackendActive,
-  sleepTimerStopAfterTrackPending,
   togglePlaybackRequestId,
   onOutputDeviceFallback,
   onClearPlaybackError,
@@ -90,8 +89,7 @@ export function usePlayerDockRuntime({
 
   function currentQueueTrack() {
     const snapshot = rustQueueSnapshot.value;
-    if (!snapshot || typeof snapshot.currentIndex !== 'number') return null;
-    return snapshot.tracks[snapshot.currentIndex] ?? null;
+    return snapshot ? resolveRustQueueSnapshotTrack(snapshot, snapshot.tracks) : null;
   }
 
   function isActiveRustPath(path: string | null | undefined) {
@@ -335,11 +333,6 @@ export function usePlayerDockRuntime({
 
   useRustPlaybackListeners({
     onAdvanced: (source) => {
-      if (sleepTimerStopAfterTrackPending.value) {
-        sleepTimerStopAfterTrackPending.value = false;
-        void stopRustBackend(false);
-        return;
-      }
       const queuedTrack = findQueueTrackBySource(source);
       if (!queuedTrack) return;
 
@@ -360,14 +353,6 @@ export function usePlayerDockRuntime({
     onEnded: () => {
       if (!rustBackendActive.value) return;
 
-      if (sleepTimerStopAfterTrackPending.value) {
-        sleepTimerStopAfterTrackPending.value = false;
-        isPlaying.value = false;
-        rustBackendActive.value = false;
-        progress.stopSmoothProgress();
-        onPlaybackStateChange(false);
-        return;
-      }
       isPlaying.value = false;
       rustBackendActive.value = false;
       progress.stopSmoothProgress();

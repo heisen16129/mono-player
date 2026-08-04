@@ -34,7 +34,6 @@ import { useLocalPlaybackActions } from './composables/useLocalPlaybackActions';
 import { useLocalLibraryQueuePruning } from './composables/useLocalLibraryQueuePruning';
 import { useLyricsDockAutoHide } from './composables/useLyricsDockAutoHide';
 import { useLyricsViewVisibility } from './composables/useLyricsViewVisibility';
-import { useMcpSleepTimerRequest } from './composables/useMcpSleepTimerRequest';
 import { useNavigationAvailabilityGuards } from './composables/useNavigationAvailabilityGuards';
 import { useOnlinePlaybackController } from './composables/useOnlinePlaybackController';
 import { useOnlinePlaybackLookup } from './composables/useOnlinePlaybackLookup';
@@ -106,14 +105,6 @@ const {
   showOnlineToast,
 } = useOnlineToast();
 usePlayerErrorToast({
-  player,
-  showToast: showOnlineToast,
-});
-const {
-  handleMcpSleepTimerEvent,
-  sleepTimerRequest,
-  sleepTimerRequestId,
-} = useMcpSleepTimerRequest({
   player,
   showToast: showOnlineToast,
 });
@@ -493,7 +484,6 @@ const {
 });
 
 const {
-  handleSleepTimerExit,
   restorePlaybackRequestId,
   restorePlaybackTime,
   restoreSavedPlaybackSession,
@@ -554,7 +544,6 @@ const {
   startDesktopLyricsActionListener,
   startDesktopLyricsReadyListener,
   startDownloadEventListener,
-  startMcpSleepTimerListener,
   startRustQueueEventListener,
   startSystemMediaActionListener,
 } = useExternalPlaybackEventBridge({
@@ -567,7 +556,6 @@ const {
   broadcastCurrentDesktopLyricsState,
   getIsRestoringPlaybackQueue,
   handleDownloadQueueEvent,
-  handleMcpSleepTimerEvent,
   handleRustQueueSnapshot,
   openSettingsView,
   playNextTrack,
@@ -598,7 +586,6 @@ useAppBootstrap({
   startDesktopLyricsActionListener,
   startDesktopLyricsReadyListener,
   startDownloadEventListener,
-  startMcpSleepTimerListener,
   startRustQueueEventListener,
   startSystemMediaActionListener,
 });
@@ -775,8 +762,6 @@ const {
     shouldShowActiveTrackDownload,
     shouldShowLyricFormat,
     shouldShowOnlineQuality,
-    sleepTimerRequest,
-    sleepTimerRequestId,
     togglePlaybackRequestId,
   },
   actions: {
@@ -787,7 +772,6 @@ const {
     closeLyricsView,
     downloadActiveOnlineTrack,
     handlePlaybackFailure,
-    handleSleepTimerExit,
     hideLyricsDock,
     hoverLyricsDock,
     leaveLyricsDock,

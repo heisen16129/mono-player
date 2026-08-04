@@ -66,10 +66,11 @@ const sidebarNavListeners: SidebarNavListeners = {
 }
 
 .primary-sidebar {
+  --sidebar-nav-item-width: calc(var(--sidebar-width) - 26px);
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 16px 16px 18px;
+  padding: 16px 16px 18px 10px;
   overflow: hidden;
   background: var(--smw-bg-sidebar);
   transition:
@@ -78,7 +79,9 @@ const sidebarNavListeners: SidebarNavListeners = {
 }
 
 .primary-sidebar.collapsed {
+  --sidebar-nav-item-width: 58px;
   align-items: center;
+  overflow: visible;
   padding-inline: 10px;
 }
 

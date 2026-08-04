@@ -3,13 +3,12 @@ import { t } from '../../i18n';
 import type { Locale } from '../../types/music';
 
 defineProps<{
-  collapsed: boolean;
   locale: Locale;
 }>();
 </script>
 
 <template>
-  <span class="account-meta" :class="{ 'is-collapsed': collapsed }">
+  <span class="account-meta">
     <strong>Mono</strong>
     <small>{{ t(locale, 'online') }}</small>
   </span>
@@ -18,12 +17,12 @@ defineProps<{
 <style scoped>
 .account-meta {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
   max-width: 150px;
   overflow: hidden;
   opacity: 1;
-  line-height: 1.15;
+  line-height: 1;
   white-space: nowrap;
   transform: translateX(0);
   transition:
@@ -32,22 +31,24 @@ defineProps<{
     transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.account-meta.is-collapsed {
-  display: none;
-}
-
 .account-meta strong,
 .account-meta small {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .account-meta strong {
+  color: var(--smw-text-primary);
   font-size: 13px;
-  font-weight: 560;
+  font-weight: 620;
+  line-height: 15px;
 }
 
 .account-meta small {
   color: var(--smw-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 13px;
 }
 </style>

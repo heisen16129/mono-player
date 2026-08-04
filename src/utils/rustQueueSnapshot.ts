@@ -3,15 +3,22 @@ import type { Track } from '../types/music';
 import { normalizePath } from './path';
 import { normalizedQueueSourceKey } from './queueSource';
 
-export function resolveRustQueueSnapshotTrack(snapshot: RustQueueSnapshot, tracks: Track[]) {
-  const currentSource = snapshot.currentSource ?? '';
-  const normalizedSource = currentSource ? normalizePath(currentSource) : '';
+function findTrackBySource(tracks: Track[], source: string) {
+  const normalizedSource = source ? normalizePath(source) : '';
+  if (!normalizedSource) return null;
   return tracks.find((item) => (
     normalizePath(item.path) === normalizedSource
     || normalizedQueueSourceKey(item) === normalizedSource
-  )) ?? (
-    typeof snapshot.currentIndex === 'number'
-      ? tracks[snapshot.currentIndex] ?? null
-      : null
-  );
+  )) ?? null;
+}
+
+export function resolveRustQueueSnapshotTrack(snapshot: RustQueueSnapshot, tracks: Track[]) {
+  const currentSource = snapshot.currentSource ?? '';
+  const currentTrack = findTrackBySource(tracks, currentSource);
+  if (currentTrack) return currentTrack;
+
+  if (typeof snapshot.currentIndex !== 'number') return null;
+
+  const indexedSource = snapshot.sources[snapshot.currentIndex] ?? '';
+  return findTrackBySource(tracks, indexedSource) ?? tracks[snapshot.currentIndex] ?? null;
 }

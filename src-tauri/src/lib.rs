@@ -12,6 +12,7 @@ mod player;
 mod plugins;
 mod scanner;
 mod shell;
+mod sleep_timer;
 mod state;
 mod store;
 mod system_media;
@@ -100,6 +101,7 @@ pub fn run() {
             )?);
             app.manage(workers::plugin::PluginWorkerState::start(audio_cache_dir.clone())?);
             app.manage(workers::scanner::ScanWorkerState::default());
+            app.manage(sleep_timer::SleepTimerState::default());
             app.manage(system_media::init(app.handle()));
             themes::start_system_theme_watcher(app.handle().clone());
 
@@ -198,6 +200,11 @@ pub fn run() {
             player::player_seek,
             player::player_set_volume,
             player::player_set_speed,
+            sleep_timer::sleep_timer_status,
+            sleep_timer::sleep_timer_start,
+            sleep_timer::sleep_timer_clear,
+            sleep_timer::sleep_timer_pause,
+            sleep_timer::sleep_timer_resume,
             shell::open_track_in_folder,
             system_media::system_media_update,
             system_media::system_media_clear,

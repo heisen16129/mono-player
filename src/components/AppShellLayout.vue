@@ -41,12 +41,22 @@ defineEmits<{
 </template>
 
 <style scoped>
+@property --app-sidebar-width {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 260px;
+}
+
 .mono-window {
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  --app-sidebar-width: var(--sidebar-width);
+  grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
+  transition:
+    --app-sidebar-width 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    grid-template-columns 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .mono-window.sidebar-collapsed {
-  grid-template-columns: var(--sidebar-collapsed-width) minmax(0, 1fr);
+  --app-sidebar-width: var(--sidebar-collapsed-width);
 }
 
 .app-shell-menu {
@@ -57,6 +67,11 @@ defineEmits<{
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.mono-window.sidebar-collapsed:not(.lyrics-open) .app-shell-menu {
+  z-index: 20;
+  overflow: visible;
 }
 
 .app-shell-content {
@@ -105,6 +120,12 @@ defineEmits<{
 
   .app-shell-dock {
     grid-row: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mono-window {
+    transition: none;
   }
 }
 </style>

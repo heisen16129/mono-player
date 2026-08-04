@@ -68,6 +68,12 @@ defineEmits<{
   color: var(--smw-text-secondary);
 }
 
+.search-field input:focus,
+.search-field input:focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+
 .search-field input::-webkit-search-cancel-button,
 .search-field input::-webkit-search-decoration,
 .plugin-search-input input::-webkit-search-cancel-button,

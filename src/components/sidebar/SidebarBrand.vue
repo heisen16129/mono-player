@@ -19,7 +19,8 @@ const emit = defineEmits<{
     <SidebarBrandMark :collapsed="collapsed" @expand="emit('toggleCollapsed')" />
     <strong class="sidebar-text">Mono Player</strong>
     <SidebarBrandCollapseButton
-      v-if="!collapsed"
+      class="brand-collapse-button"
+      :class="{ 'is-hidden': collapsed }"
       :label="t(locale, 'collapseSidebar')"
       @collapse="emit('toggleCollapsed')"
     />
@@ -29,12 +30,17 @@ const emit = defineEmits<{
 <style scoped>
 .brand {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  width: var(--sidebar-nav-item-width, 100%);
+  overflow: hidden;
   padding: 0;
   font-size: 17px;
+  transition:
+    grid-template-columns 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    gap 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .brand :deep(.brand-mark) {
@@ -42,10 +48,10 @@ const emit = defineEmits<{
 }
 
 .brand.is-collapsed {
-  grid-template-columns: 58px;
-  justify-content: center;
-  gap: 8px;
-  width: 58px;
+  align-self: flex-start;
+  grid-template-columns: 58px minmax(0, 0fr) 0;
+  justify-content: start;
+  gap: 0;
   padding: 0;
 }
 
@@ -62,11 +68,23 @@ const emit = defineEmits<{
     transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.brand > .sidebar-text {
-  max-width: none;
+.brand.is-collapsed .sidebar-text {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-6px);
 }
 
-.brand.is-collapsed .sidebar-text {
-  display: none;
+.brand-collapse-button {
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 120ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.brand-collapse-button.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-6px);
 }
 </style>

@@ -37,8 +37,9 @@ function openPlaylistMenu(playlist: UserPlaylist, event: MouseEvent) {
   display: flex;
   align-items: center;
   gap: 4px;
+  width: var(--sidebar-nav-item-width, 100%);
   height: 42px;
-  padding: 0 2px;
+  padding: 0;
   overflow: hidden;
   border: 0;
   border-radius: 8px;
@@ -51,6 +52,7 @@ function openPlaylistMenu(playlist: UserPlaylist, event: MouseEvent) {
   text-align: left;
   cursor: pointer;
   transition:
+    width 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
     background-color 160ms ease,
     color 180ms ease;
 }
@@ -63,7 +65,6 @@ function openPlaylistMenu(playlist: UserPlaylist, event: MouseEvent) {
 .playlist-nav-item.is-collapsed {
   justify-content: flex-start;
   gap: 0;
-  width: 58px;
   padding: 0;
   margin-left: 0;
 }

@@ -6,11 +6,6 @@ import type { DownloadQueueEvent } from '../services/downloads';
 import type { RustQueueSnapshot } from '../services/playerBackend';
 import type { PlaybackMode, Track } from '../types/music';
 
-interface McpSleepTimerEvent {
-  action?: string | null;
-  minutes?: number;
-}
-
 interface UseExternalPlaybackEventBridgeOptions {
   activeTrack: ComputedRef<Track | null>;
   isAudioPlaying: Ref<boolean>;
@@ -21,7 +16,6 @@ interface UseExternalPlaybackEventBridgeOptions {
   broadcastCurrentDesktopLyricsState: () => Promise<void> | void;
   getIsRestoringPlaybackQueue: () => boolean;
   handleDownloadQueueEvent: (event: DownloadQueueEvent) => void;
-  handleMcpSleepTimerEvent: (event: McpSleepTimerEvent) => void;
   handleRustQueueSnapshot: (snapshot: RustQueueSnapshot, markPreparing?: boolean) => void;
   openSettingsView: () => void;
   playNextTrack: () => Promise<void>;
@@ -40,7 +34,6 @@ export function useExternalPlaybackEventBridge({
   broadcastCurrentDesktopLyricsState,
   getIsRestoringPlaybackQueue,
   handleDownloadQueueEvent,
-  handleMcpSleepTimerEvent,
   handleRustQueueSnapshot,
   openSettingsView,
   playNextTrack,
@@ -77,7 +70,6 @@ export function useExternalPlaybackEventBridge({
       void broadcastCurrentDesktopLyricsState();
     },
     onDownloadEvent: handleDownloadQueueEvent,
-    onMcpSleepTimer: handleMcpSleepTimerEvent,
     onRustQueueSnapshot: (snapshot) => {
       handleRustQueueSnapshot(snapshot, !getIsRestoringPlaybackQueue());
     },

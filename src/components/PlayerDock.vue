@@ -26,7 +26,6 @@ const player = usePlayerStore();
 const isPlaying = ref(false);
 const rustBackendActive = ref(false);
 const playbackRate = ref(1);
-let stopPlayback = () => {};
 
 const {
   clearPlaybackError,
@@ -55,7 +54,6 @@ const {
   closeSleepTimerDialog,
   closeSleepTimerStatus,
   handleSleepTimerButtonClick,
-  handleSleepTimerRequest,
   isSleepTimerActive,
   isSleepTimerDialogOpen,
   isSleepTimerPaused,
@@ -69,13 +67,10 @@ const {
   sleepTimerPresetMinutes,
   sleepTimerProgressPercent,
   sleepTimerRemainingLabel,
-  sleepTimerStopAfterTrackPending,
   startSleepTimer,
   syncSleepTimerSetting,
 } = useSleepTimer({
   player,
-  onStop: () => stopPlayback(),
-  onExit: () => emit('sleepTimerExit'),
 });
 
 const {
@@ -108,7 +103,6 @@ const {
   isMuted,
   queueTracks,
   spectrumLevels,
-  stopPlayback: stopRuntimePlayback,
   toggleMute,
   togglePlayback,
   volume,
@@ -130,7 +124,6 @@ const {
   restoreRequestId: computed(() => props.restoreRequestId),
   restoreTime: computed(() => props.restoreTime),
   rustBackendActive,
-  sleepTimerStopAfterTrackPending,
   togglePlaybackRequestId: computed(() => props.togglePlaybackRequestId),
   onClearPlaybackError: clearPlaybackError,
   onOutputDeviceFallback: showOutputDeviceFallbackNotice,
@@ -140,8 +133,6 @@ const {
   onSeamlessAdvance: (track) => emit('seamlessAdvance', track),
   onSpectrumChange: (levels) => emit('spectrumChange', levels),
 });
-
-stopPlayback = stopRuntimePlayback;
 
 const {
   coverUrl,
@@ -179,13 +170,9 @@ const {
 });
 
 usePlayerDockLifecycle({
-  clearSleepTimer,
   getSeekRequestId: () => props.seekRequestId,
   getSeekTime: () => props.seekTime,
   getSleepTimerMinutesSetting: () => player.settings.sleepTimerMinutes,
-  getSleepTimerRequest: () => props.sleepTimerRequest,
-  getSleepTimerRequestId: () => props.sleepTimerRequestId,
-  handleSleepTimerRequest,
   seekPlaybackTo,
   syncSleepTimerSetting,
 });

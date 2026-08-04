@@ -28,8 +28,13 @@ const emit = defineEmits<SidebarPlaylistCreateControlEmits>();
   grid-template-columns: minmax(0, 1fr) 32px;
   gap: 6px;
   align-items: center;
+  width: var(--sidebar-nav-item-width, 100%);
   height: 34px;
   margin: 5px 0 6px 8px;
+  transition:
+    width 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    margin 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    grid-template-columns 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .nav-divider {
@@ -56,7 +61,6 @@ const emit = defineEmits<SidebarPlaylistCreateControlEmits>();
 }
 
 .nav-section-break.is-collapsed {
-  width: 58px;
   margin: 5px 0 6px;
   grid-template-columns: 58px;
 }

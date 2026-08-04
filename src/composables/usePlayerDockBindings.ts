@@ -33,8 +33,6 @@ export function usePlayerDockBindings({ listeners, props }: UsePlayerDockBinding
     isActiveTrackDownloading: props.isActiveTrackDownloading(),
     showOnlineQuality: props.showOnlineQuality(),
     showLyricFormat: props.showLyricFormat(),
-    sleepTimerRequest: props.sleepTimerRequest(),
-    sleepTimerRequestId: props.sleepTimerRequestId(),
     togglePlaybackRequestId: props.togglePlaybackRequestId(),
   }));
 

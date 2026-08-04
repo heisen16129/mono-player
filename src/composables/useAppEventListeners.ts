@@ -10,16 +10,10 @@ import { isTauriRuntime } from '../services/music';
 import { listenRustBackendQueue, type RustQueueSnapshot } from '../services/playerBackend';
 import { listenSystemMediaAction, type SystemMediaAction } from '../services/systemMedia';
 
-interface McpSleepTimerEvent {
-  action?: string | null;
-  minutes?: number;
-}
-
 interface UseAppEventListenersOptions {
   onDesktopLyricsAction: (action: DesktopLyricsAction) => Promise<void> | void;
   onDesktopLyricsReady: () => void;
   onDownloadEvent: (event: DownloadQueueEvent) => void;
-  onMcpSleepTimer: (event: McpSleepTimerEvent) => void;
   onRustQueueSnapshot: (snapshot: RustQueueSnapshot) => void;
   onSystemMediaAction: (action: SystemMediaAction) => Promise<void> | void;
 }
@@ -28,14 +22,12 @@ export function useAppEventListeners({
   onDesktopLyricsAction,
   onDesktopLyricsReady,
   onDownloadEvent,
-  onMcpSleepTimer,
   onRustQueueSnapshot,
   onSystemMediaAction,
 }: UseAppEventListenersOptions) {
   let desktopLyricsActionUnlisten: UnlistenFn | null = null;
   let desktopLyricsReadyUnlisten: UnlistenFn | null = null;
   let downloadEventUnlisten: UnlistenFn | null = null;
-  let mcpSleepTimerUnlisten: UnlistenFn | null = null;
   let rustQueueUnlisten: UnlistenFn | null = null;
   let systemMediaUnlisten: UnlistenFn | null = null;
 
@@ -63,13 +55,6 @@ export function useAppEventListeners({
     rustQueueUnlisten = await listenRustBackendQueue(onRustQueueSnapshot);
   }
 
-  async function startMcpSleepTimerListener() {
-    if (!isTauriRuntime() || mcpSleepTimerUnlisten) return;
-    mcpSleepTimerUnlisten = await listen<McpSleepTimerEvent>('mcp://sleep-timer', (event) => {
-      onMcpSleepTimer(event.payload);
-    });
-  }
-
   async function startSystemMediaActionListener() {
     if (!isTauriRuntime() || systemMediaUnlisten) return;
     systemMediaUnlisten = await listenSystemMediaAction((action) => {
@@ -80,8 +65,6 @@ export function useAppEventListeners({
   function stopAppEventListeners() {
     downloadEventUnlisten?.();
     downloadEventUnlisten = null;
-    mcpSleepTimerUnlisten?.();
-    mcpSleepTimerUnlisten = null;
     desktopLyricsActionUnlisten?.();
     desktopLyricsActionUnlisten = null;
     desktopLyricsReadyUnlisten?.();
@@ -98,7 +81,6 @@ export function useAppEventListeners({
     startDesktopLyricsActionListener,
     startDesktopLyricsReadyListener,
     startDownloadEventListener,
-    startMcpSleepTimerListener,
     startRustQueueEventListener,
     startSystemMediaActionListener,
     stopAppEventListeners,

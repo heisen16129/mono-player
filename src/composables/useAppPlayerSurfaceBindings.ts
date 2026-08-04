@@ -2,7 +2,7 @@ import type { Ref } from 'vue';
 import type { usePlayerStore } from '../stores/player';
 import type { Track, TrackLyrics } from '../types/music';
 import type { LyricsViewListeners, LyricsViewProps } from '../types/lyricsView';
-import type { PlayerDockListeners, PlayerDockProps } from '../types/playerDock';
+import type { PlayerDockListeners } from '../types/playerDock';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption } from '../types/plugin';
 import { useLyricsViewBindings } from './useLyricsViewBindings';
 import { usePlayerDockBindings } from './usePlayerDockBindings';
@@ -37,8 +37,6 @@ interface UseAppPlayerSurfaceBindingsState {
   shouldShowActiveTrackDownload: ReadonlyRefValue<boolean>;
   shouldShowLyricFormat: ReadonlyRefValue<boolean>;
   shouldShowOnlineQuality: ReadonlyRefValue<boolean>;
-  sleepTimerRequest: ReadonlyRefValue<PlayerDockProps['sleepTimerRequest']>;
-  sleepTimerRequestId: ReadonlyRefValue<number>;
   togglePlaybackRequestId: ReadonlyRefValue<number>;
 }
 
@@ -50,7 +48,6 @@ interface UseAppPlayerSurfaceBindingsActions {
   closeLyricsView: LyricsViewListeners['onClose'];
   downloadActiveOnlineTrack: PlayerDockListeners['onDownloadActiveTrack'];
   handlePlaybackFailure: PlayerDockListeners['onPlaybackError'];
-  handleSleepTimerExit: PlayerDockListeners['onSleepTimerExit'];
   hideLyricsDock: LyricsViewListeners['onHidePlayerDock'];
   hoverLyricsDock: PlayerDockListeners['onMouseenter'];
   leaveLyricsDock: PlayerDockListeners['onMouseleave'];
@@ -107,8 +104,6 @@ export function useAppPlayerSurfaceBindings({
       isActiveTrackDownloading: () => state.isActiveOnlineTrackDownloading.value,
       showOnlineQuality: () => state.shouldShowOnlineQuality.value,
       showLyricFormat: () => state.shouldShowLyricFormat.value && state.isLyricsOpen.value,
-      sleepTimerRequest: () => state.sleepTimerRequest.value,
-      sleepTimerRequestId: () => state.sleepTimerRequestId.value,
       togglePlaybackRequestId: () => state.togglePlaybackRequestId.value,
     },
     listeners: {
@@ -127,7 +122,6 @@ export function useAppPlayerSurfaceBindings({
       onSpectrumChange: actions.updatePlaybackSpectrum,
       onRequestInitialPlayback: actions.playActiveTrack,
       onSeamlessAdvance: handleSeamlessAdvance,
-      onSleepTimerExit: actions.handleSleepTimerExit,
       onTimeChange: actions.updatePlaybackTime,
       onToggleFavorite: actions.toggleFavoriteTrack,
       onTogglePlaybackMode: actions.togglePlaybackMode,

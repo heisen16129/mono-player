@@ -848,6 +848,11 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
 }
 
 fn advance_worker_queue_after_end(app: &AppHandle) -> Result<bool, String> {
+    if crate::sleep_timer::consume_finish_track_pending(app) {
+        let _ = mcp_stop(app);
+        return Ok(false);
+    }
+
     let player_state = app.state::<PlayerState>();
     let Some((source, next_index)) = next_queue_source(&player_state.inner)? else {
         return Ok(false);

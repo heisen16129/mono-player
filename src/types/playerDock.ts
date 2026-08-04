@@ -1,4 +1,3 @@
-import type { SleepTimerAction } from '../composables/useSleepTimer';
 import type { Locale, PlaybackMode, PlayerSettings, Track } from './music';
 import type { PluginPlaybackQuality, PluginPlaybackQualityOption } from './plugin';
 
@@ -24,8 +23,6 @@ export interface PlayerDockProps {
   isActiveTrackDownloading: boolean;
   showOnlineQuality: boolean;
   showLyricFormat: boolean;
-  sleepTimerRequest: { minutes: number; action: SleepTimerAction | null } | null;
-  sleepTimerRequestId: number;
   togglePlaybackRequestId: number;
 }
 
@@ -45,7 +42,6 @@ export interface PlayerDockEmits {
   playQueueTrack: [track: Track];
   seamlessAdvance: [track: Track];
   requestInitialPlayback: [startTime?: number];
-  sleepTimerExit: [];
   playbackStateChange: [isPlaying: boolean];
   playbackError: [message: string];
   spectrumChange: [levels: number[]];
@@ -67,7 +63,6 @@ export interface PlayerDockListeners {
   onSpectrumChange: (...args: PlayerDockEmits['spectrumChange']) => void;
   onRequestInitialPlayback: (...args: PlayerDockEmits['requestInitialPlayback']) => void;
   onSeamlessAdvance: (...args: PlayerDockEmits['seamlessAdvance']) => void;
-  onSleepTimerExit: () => void;
   onTimeChange: (...args: PlayerDockEmits['timeChange']) => void;
   onToggleFavorite: () => void;
   onTogglePlaybackMode: () => void;
