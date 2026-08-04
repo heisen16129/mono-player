@@ -9,6 +9,13 @@ export function artworkDisplaySrc(url: string | null | undefined) {
   return convertFileSrc(value.replace(/^file:\/\/\//i, ''));
 }
 
+export function filePathToArtworkUrl(path: string) {
+  const normalizedPath = path.trim().replace(/\\/g, '/');
+  if (!normalizedPath) return '';
+  if (/^[a-z]+:\/\//i.test(normalizedPath)) return normalizedPath;
+  return `file:///${normalizedPath}`;
+}
+
 export function usableArtworkDisplaySrc(url: string | null | undefined, failedUrls?: Set<string>) {
   const displayUrl = artworkDisplaySrc(url);
   if (!displayUrl || failedUrls?.has(displayUrl)) return '';

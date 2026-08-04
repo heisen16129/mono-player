@@ -65,6 +65,7 @@ const libraryPanelListeners: LibraryPanelListeners = {
 
 const workspaceViewProps = computed<WorkspaceViewProps>(() => ({
   activeCollection: props.activeCollection,
+  activePlaylistId: null,
   activeTrack: props.activeTrack,
   error: props.playerError,
   favoriteTrackIds: props.favoriteTrackIds,
@@ -81,6 +82,7 @@ const workspaceViewProps = computed<WorkspaceViewProps>(() => ({
 
 const workspaceViewListeners: WorkspaceViewListeners = {
   'onUpdate:modelValue': (value) => emit('updatePlayerQuery', value),
+  onChangePlaylistCover: () => {},
   onOpenArtist: (artistName) => emit('openArtistFromTrack', artistName),
   onOpenTrackMenu: (track, x, y) => emit('openTrackContextMenu', track, x, y),
   onPlayFavoriteTracks: () => emit('playFavoriteTracks'),

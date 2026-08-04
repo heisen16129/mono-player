@@ -1,7 +1,7 @@
 import type { Track, UserPlaylist } from '../../types/music';
 import { createTrackSnapshot } from './favorites';
 
-export function createPlaylistEntry(playlists: UserPlaylist[], name: string, initialTracks: Array<number | Track>, libraryTracks: Track[], createdAt: number) {
+export function createPlaylistEntry(playlists: UserPlaylist[], name: string, initialTracks: Array<number | Track>, libraryTracks: Track[], createdAt: number, cover?: string | null) {
   const title = name.trim();
   if (!title || playlists.some((playlist) => playlist.name.trim() === title)) {
     return { created: false, playlists };
@@ -19,6 +19,7 @@ export function createPlaylistEntry(playlists: UserPlaylist[], name: string, ini
       {
         id: `playlist-${createdAt}`,
         name: title,
+        cover: cover?.trim() || null,
         trackIds,
         tracks: snapshots,
         createdAt,
@@ -41,6 +42,18 @@ export function renamePlaylistEntry(playlists: UserPlaylist[], playlistId: strin
   });
 
   return { renamed, playlists: nextPlaylists };
+}
+
+export function updatePlaylistCoverEntry(playlists: UserPlaylist[], playlistId: string, cover: string | null) {
+  let updated = false;
+  const nextCover = cover?.trim() || null;
+  const nextPlaylists = playlists.map((playlist) => {
+    if (playlist.id !== playlistId) return playlist;
+    updated = true;
+    return { ...playlist, cover: nextCover };
+  });
+
+  return { updated, playlists: nextPlaylists };
 }
 
 export function deletePlaylistEntry(playlists: UserPlaylist[], playlistId: string) {

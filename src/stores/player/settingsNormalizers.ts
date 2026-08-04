@@ -52,6 +52,7 @@ export function normalizeSettings(value: unknown): PlayerSettings {
         }).map((playlist) => ({
           ...playlist,
           name: playlist.name.trim() || (resolveLocale(parsed.locale) === 'en-US' ? 'Untitled playlist' : '\u672a\u547d\u540d\u6b4c\u5355'),
+          cover: typeof (playlist as { cover?: unknown }).cover === 'string' ? (playlist as { cover: string }).cover.trim() || null : null,
           trackIds: playlist.trackIds.filter((id): id is number => typeof id === 'number'),
           tracks: normalizeFavoriteTracks((playlist as { tracks?: unknown }).tracks),
         }))

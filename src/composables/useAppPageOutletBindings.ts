@@ -98,6 +98,7 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
 
   const workspacePageOutletListeners: AppWorkspacePageOutletListeners = {
     'onUpdate:modelValue': (...args) => emit('updatePlayerQuery', ...args),
+    onChangePlaylistCover: (...args) => emit('changePlaylistCover', ...args),
     onOpenArtist: (...args) => emit('openArtistFromTrack', ...args),
     onOpenTrackMenu: (...args) => emit('openTrackContextMenu', ...args),
     onPlayFavoriteTracks: () => emit('playFavoriteTracks'),

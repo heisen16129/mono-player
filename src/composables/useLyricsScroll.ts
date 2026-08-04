@@ -114,9 +114,6 @@ export function useLyricsScroll(options: {
   }
 
   function lyricsBottomInset(panel: HTMLElement) {
-    const wrap = panel.parentElement;
-    if (!wrap?.classList.contains('is-dock-visible')) return 0;
-
     const styles = getComputedStyle(panel);
     const playerHeight = Number.parseFloat(styles.getPropertyValue('--player-height')) || 0;
     return playerHeight + LYRICS_DOCK_CLIP_GAP;

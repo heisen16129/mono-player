@@ -19,7 +19,6 @@ export function useLyricsViewPanelBindings({ actionMenu, searchDialog, stage }: 
     isEmpty: stage.isEmpty(),
     isLyricSyncOpen: stage.isLyricSyncOpen(),
     isLyricsPending: stage.isLyricsPending(),
-    isPlayerDockHidden: stage.isPlayerDockHidden(),
     isScrolling: stage.isScrolling(),
     label: stage.label(),
     lines: stage.lines(),

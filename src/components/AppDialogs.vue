@@ -30,6 +30,14 @@ defineEmits<AppDialogsEmits>();
     @confirm="$emit('saveCoverCrop', $event)"
   />
 
+  <CoverCropDialog
+    v-if="playlistCoverCropImagePath"
+    :image-path="playlistCoverCropImagePath"
+    :saving="isSavingPlaylistCoverCrop"
+    @close="$emit('closePlaylistCoverCropDialog')"
+    @confirm="$emit('savePlaylistCoverCrop', $event)"
+  />
+
   <AddToPlaylistDialog
     v-if="addToPlaylistTrack"
     :locale="locale"
@@ -44,8 +52,11 @@ defineEmits<AppDialogsEmits>();
   <PlaylistDialog
     v-if="isPlaylistDialogOpen"
     :name="newPlaylistName"
+    :cover="newPlaylistCover"
     :editing="Boolean(editingPlaylistId)"
     :locale="locale"
+    @choose-cover="$emit('choosePlaylistCover')"
+    @clear-cover="$emit('clearPlaylistCover')"
     @update:name="$emit('changePlaylistName', $event)"
     @close="$emit('closeCreatePlaylistDialog')"
     @confirm="$emit('confirmCreatePlaylist')"

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { X } from '@lucide/vue';
+import { onBeforeUnmount, ref } from 'vue';
 import type { BaseDialogEmits, BaseDialogProps } from '../types/baseDialog';
+import { shouldSkipWindowDrag } from '../utils/windowDrag';
 
 withDefaults(defineProps<BaseDialogProps>(), {
   closeDisabled: false,
@@ -18,6 +20,42 @@ withDefaults(defineProps<BaseDialogProps>(), {
 });
 
 defineEmits<BaseDialogEmits>();
+
+const dragOffset = ref({ x: 0, y: 0 });
+let dragStart: { pointerId: number; startX: number; startY: number; originX: number; originY: number } | null = null;
+
+function startDialogDrag(event: PointerEvent) {
+  if (event.button !== 0 || shouldSkipWindowDrag(event.target)) return;
+
+  dragStart = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: dragOffset.value.x,
+    originY: dragOffset.value.y,
+  };
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+}
+
+function moveDialog(event: PointerEvent) {
+  if (!dragStart || event.pointerId !== dragStart.pointerId) return;
+  dragOffset.value = {
+    x: dragStart.originX + event.clientX - dragStart.startX,
+    y: dragStart.originY + event.clientY - dragStart.startY,
+  };
+}
+
+function stopDialogDrag(event: PointerEvent) {
+  if (!dragStart || event.pointerId !== dragStart.pointerId) return;
+  if ((event.currentTarget as HTMLElement).hasPointerCapture(event.pointerId)) {
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+  }
+  dragStart = null;
+}
+
+onBeforeUnmount(() => {
+  dragStart = null;
+});
 </script>
 
 <template>
@@ -39,6 +77,8 @@ defineEmits<BaseDialogEmits>();
         '--base-dialog-header-padding': headerPadding,
         '--base-dialog-max-height': maxHeight,
         '--base-dialog-overflow': overflow,
+        '--base-dialog-translate-x': `${dragOffset.x}px`,
+        '--base-dialog-translate-y': `${dragOffset.y}px`,
         '--base-dialog-width': width,
       }"
       role="dialog"
@@ -46,7 +86,13 @@ defineEmits<BaseDialogEmits>();
       :aria-label="label"
       @click.stop
     >
-      <header class="base-dialog-head">
+      <header
+        class="base-dialog-head"
+        @pointerdown="startDialogDrag"
+        @pointermove="moveDialog"
+        @pointerup="stopDialogDrag"
+        @pointercancel="stopDialogDrag"
+      >
         <slot name="header">
           <h2>{{ title }}</h2>
         </slot>
@@ -82,6 +128,7 @@ defineEmits<BaseDialogEmits>();
   border-radius: 8px;
   background: var(--smw-bg-workspace);
   box-shadow: 0 18px 46px rgba(15, 23, 42, 0.14);
+  transform: translate(var(--base-dialog-translate-x, 0), var(--base-dialog-translate-y, 0));
 }
 
 .base-dialog-head {
@@ -92,6 +139,8 @@ defineEmits<BaseDialogEmits>();
   min-height: 64px;
   padding: var(--base-dialog-header-padding, 16px 18px 14px);
   border-bottom: 1px solid var(--smw-border-soft);
+  cursor: move;
+  user-select: none;
 }
 
 .base-dialog-head h2 {
@@ -107,6 +156,7 @@ defineEmits<BaseDialogEmits>();
   margin-right: -4px;
   border-radius: 7px;
   color: var(--smw-text-secondary);
+  cursor: pointer;
 }
 
 .base-dialog-head .icon-button:hover:not(:disabled),

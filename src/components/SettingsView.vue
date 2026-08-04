@@ -5,7 +5,7 @@ import { t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import GeneralSettingsPanel from './settings/GeneralSettingsPanel.vue';
 import LyricsSettingsPanel from './settings/LyricsSettingsPanel.vue';
-import McpSettingsPanel from './settings/McpSettingsPanel.vue';
+import McpServiceSettingsPanel from './settings/McpServiceSettingsPanel.vue';
 import PlaybackSettingsPanel from './settings/PlaybackSettingsPanel.vue';
 import PluginSettingsPanel from './settings/PluginSettingsPanel.vue';
 import SettingsHeader from './settings/SettingsHeader.vue';
@@ -39,7 +39,7 @@ function selectSettingsTab(tab: string | null) {
 
       <LyricsSettingsPanel v-else-if="activeTab === 'lyrics'" />
 
-      <McpSettingsPanel v-else-if="activeTab === 'mcp'" />
+      <McpServiceSettingsPanel v-else-if="activeTab === 'mcp'" />
 
       <PluginSettingsPanel v-else-if="activeTab === 'plugins'" />
 

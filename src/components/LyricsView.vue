@@ -263,7 +263,6 @@ const {
     isEmpty: () => !loadedLyricLines.value.length,
     isLyricSyncOpen: () => isLyricSyncOpen.value,
     isLyricsPending: () => isLyricsPending.value,
-    isPlayerDockHidden: () => props.isPlayerDockHidden,
     isScrolling: () => isLyricsListScrolling.value,
     label: () => lyricsLabel.value,
     lines: () => loadedLyricLines.value,
@@ -306,7 +305,6 @@ const {
     class="lyrics-view"
     :class="{
       'has-cover-background': backgroundCoverUrl,
-      'is-player-dock-hidden': isPlayerDockHidden,
     }"
     :style="lyricsViewStyle"
     @contextmenu.prevent="openActionMenu"

@@ -170,6 +170,7 @@ export interface PlaybackSession {
 export interface UserPlaylist {
   id: string;
   name: string;
+  cover?: string | null;
   trackIds: number[];
   tracks?: Track[];
   createdAt: number;

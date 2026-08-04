@@ -3,6 +3,7 @@ import type { Track } from './music';
 
 export interface WorkspaceViewProps {
   activeCollection: LibraryCollection;
+  activePlaylistId: string | null;
   activeTrack: Track | null;
   error: string | null;
   favoriteTrackIds: number[];
@@ -18,6 +19,7 @@ export interface WorkspaceViewProps {
 }
 
 export interface WorkspaceViewEmits {
+  changePlaylistCover: [playlistId: string];
   openArtist: [artistName: string];
   openTrackMenu: [track: Track, x: number, y: number];
   playFavoriteTracks: [];
@@ -29,6 +31,7 @@ export interface WorkspaceViewEmits {
 }
 
 export interface WorkspaceViewListeners {
+  onChangePlaylistCover: (...args: WorkspaceViewEmits['changePlaylistCover']) => void;
   onOpenArtist: (...args: WorkspaceViewEmits['openArtist']) => void;
   onOpenTrackMenu: (...args: WorkspaceViewEmits['openTrackMenu']) => void;
   onPlayFavoriteTracks: (...args: WorkspaceViewEmits['playFavoriteTracks']) => void;

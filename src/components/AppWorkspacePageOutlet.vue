@@ -10,6 +10,7 @@ const emit = defineEmits<AppWorkspacePageOutletEmits>();
 
 const workspaceViewProps = computed<WorkspaceViewProps>(() => ({
   activeCollection: props.activeCollection,
+  activePlaylistId: props.activePlaylistId,
   activeTrack: props.activeTrack,
   error: props.error,
   favoriteTrackIds: props.favoriteTrackIds,
@@ -26,6 +27,7 @@ const workspaceViewProps = computed<WorkspaceViewProps>(() => ({
 
 const workspaceViewListeners: WorkspaceViewListeners = {
   'onUpdate:modelValue': (...args) => emit('update:modelValue', ...args),
+  onChangePlaylistCover: (...args) => emit('changePlaylistCover', ...args),
   onOpenArtist: (...args) => emit('openArtist', ...args),
   onOpenTrackMenu: (...args) => emit('openTrackMenu', ...args),
   onPlayFavoriteTracks: () => emit('playFavoriteTracks'),

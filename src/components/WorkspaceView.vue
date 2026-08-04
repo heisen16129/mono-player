@@ -16,6 +16,10 @@ const trackListRef = ref<InstanceType<typeof WorkspaceTrackList> | null>(null);
 const player = usePlayerStore();
 
 const locale = computed(() => player.settings.locale);
+const activePlaylistCover = computed(() => {
+  if (!props.isPlaylistView || !props.activePlaylistId) return null;
+  return player.settings.playlists.find((playlist) => playlist.id === props.activePlaylistId)?.cover ?? null;
+});
 const {
   canLocateActiveTrack,
   collectionDate,
@@ -65,6 +69,11 @@ function playAllVisibleTracks() {
   emit('playVisibleTracks');
 }
 
+function changeActivePlaylistCover() {
+  if (!props.activePlaylistId) return;
+  emit('changePlaylistCover', props.activePlaylistId);
+}
+
 async function locateActiveTrack() {
   const activeTrackId = props.activeTrack?.id;
   if (!activeTrackId) return;
@@ -83,6 +92,8 @@ async function locateActiveTrack() {
 
     <CollectionHero
       :id="collectionHeroId"
+      :can-change-cover="Boolean(activePlaylistId)"
+      :cover-url="activePlaylistCover"
       :tracks="tracks"
       :title="collectionTitle"
       :subtitle="collectionSubtitle"
@@ -93,6 +104,7 @@ async function locateActiveTrack() {
       :can-locate="canLocateActiveTrack"
       @play="playAllVisibleTracks"
       @locate="locateActiveTrack"
+      @change-cover="changeActivePlaylistCover"
     />
 
     <WorkspaceTrackList

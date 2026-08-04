@@ -46,6 +46,7 @@ export interface AppMainContentProps {
 
 export interface AppMainContentEmits {
   addDownloadedTrackToPlaylist: [item: DownloadItem];
+  changePlaylistCover: [playlistId: string];
   chooseFolder: [];
   clearDownloadedItemRecord: [item: DownloadItem];
   createPlaylist: [];
@@ -92,6 +93,7 @@ export interface AppMainContentEmits {
 
 export interface AppMainContentListeners {
   onAddDownloadedTrackToPlaylist: (...args: AppMainContentEmits['addDownloadedTrackToPlaylist']) => void;
+  onChangePlaylistCover: (...args: AppMainContentEmits['changePlaylistCover']) => void;
   onChooseFolder: () => void;
   onClearDownloadedItemRecord: (...args: AppMainContentEmits['clearDownloadedItemRecord']) => void;
   onCreatePlaylist: () => void;

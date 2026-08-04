@@ -4,9 +4,11 @@ import CollectionHeroActions from './CollectionHeroActions.vue';
 import CollectionHeroText from './CollectionHeroText.vue';
 import FolderCover from './FolderCover.vue';
 
-defineProps<{
+const props = defineProps<{
   canLocate: boolean;
   canPlay: boolean;
+  canChangeCover?: boolean;
+  coverUrl?: string | null;
   date: string;
   locateLabel: string;
   playLabel: string;
@@ -16,14 +18,20 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
+  changeCover: [];
   locate: [];
   play: [];
 }>();
+
+function handleCoverContextMenu() {
+  if (!props.canChangeCover) return;
+  emit('changeCover');
+}
 </script>
 
 <template>
   <section class="collection-hero">
-    <FolderCover class="collection-hero-cover" :tracks="tracks" tone="night" />
+    <FolderCover class="collection-hero-cover" :cover-url="coverUrl" :tracks="tracks" tone="night" @contextmenu.prevent="handleCoverContextMenu" />
     <div class="collection-hero-copy">
       <CollectionHeroText :date="date" :subtitle="subtitle" :title="title" />
       <CollectionHeroActions

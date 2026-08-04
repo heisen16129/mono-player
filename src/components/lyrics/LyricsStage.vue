@@ -10,7 +10,6 @@ defineProps<{
   isEmpty: boolean;
   isLyricSyncOpen: boolean;
   isLyricsPending: boolean;
-  isPlayerDockHidden: boolean;
   isScrolling: boolean;
   label: string;
   lines: LyricLine[];
@@ -45,7 +44,6 @@ defineEmits<{
       :is-empty="isEmpty"
       :is-lyric-sync-open="isLyricSyncOpen"
       :is-lyrics-pending="isLyricsPending"
-      :is-player-dock-hidden="isPlayerDockHidden"
       :is-scrolling="isScrolling"
       :label="label"
       :lines="lines"

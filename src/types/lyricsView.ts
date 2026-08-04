@@ -51,7 +51,6 @@ export interface LyricsStageProps {
   isEmpty: boolean;
   isLyricSyncOpen: boolean;
   isLyricsPending: boolean;
-  isPlayerDockHidden: boolean;
   isScrolling: boolean;
   label: string;
   lines: LyricLine[];

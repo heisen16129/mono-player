@@ -29,7 +29,7 @@ const emit = defineEmits<{
       type="button"
       @click="emit('addTrack', playlist)"
     >
-      <FolderCover class="add-playlist-cover" :tracks="tracksForPlaylist(playlist)" tone="night" />
+      <FolderCover class="add-playlist-cover" :cover-url="playlist.cover" :tracks="tracksForPlaylist(playlist)" tone="night" />
       <span>{{ playlist.name }}</span>
     </button>
   </div>

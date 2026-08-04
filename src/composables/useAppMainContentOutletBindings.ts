@@ -58,6 +58,7 @@ export function useAppMainContentOutletBindings(props: AppMainContentProps, emit
     onAddDownloadedTrackToPlaylist: (...args: AppMainContentEmits['addDownloadedTrackToPlaylist']) => emit('addDownloadedTrackToPlaylist', ...args),
     onChooseFolder: () => emit('chooseFolder'),
     onClearDownloadedItemRecord: (...args: AppMainContentEmits['clearDownloadedItemRecord']) => emit('clearDownloadedItemRecord', ...args),
+    onChangePlaylistCover: (...args: AppMainContentEmits['changePlaylistCover']) => emit('changePlaylistCover', ...args),
     onDeleteDownloadedItem: (...args: AppMainContentEmits['deleteDownloadedItem']) => emit('deleteDownloadedItem', ...args),
     onDownloadTrack: (...args: AppMainContentEmits['downloadTrack']) => emit('downloadTrack', ...args),
     onNotify: (...args: AppMainContentEmits['notify']) => emit('notify', ...args),

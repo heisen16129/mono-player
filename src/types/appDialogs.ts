@@ -15,11 +15,14 @@ export interface AppDialogsProps {
   isConfirmingScan: boolean;
   isPlaylistDialogOpen: boolean;
   isSavingCoverCrop: boolean;
+  isSavingPlaylistCoverCrop: boolean;
   isSavingTrackMetadata: boolean;
   isScanDialogOpen: boolean;
   locale: Locale;
   metadataEditingTrack: Track | null;
+  newPlaylistCover: string | null;
   newPlaylistName: string;
+  playlistCoverCropImagePath: string;
   playlists: UserPlaylist[];
   scanFolders: ScanFolderSelection[];
   scanProgressText: string;
@@ -32,9 +35,12 @@ export interface AppDialogsEmits {
   addTrackToPlaylist: [track: Track, playlist: UserPlaylist];
   cancelScanFolders: [];
   changePlaylistName: [value: string];
+  choosePlaylistCover: [];
+  clearPlaylistCover: [];
   closeAddToPlaylistDialog: [];
   closeCoverCropDialog: [];
   closeCreatePlaylistDialog: [];
+  closePlaylistCoverCropDialog: [];
   closeScanDialog: [];
   closeTrackMetadataDialog: [];
   confirmCreatePlaylist: [];
@@ -43,6 +49,7 @@ export interface AppDialogsEmits {
   removeScanFolder: [path: string];
   saveTrackMetadata: [value: TrackMetadataFormValue];
   saveCoverCrop: [payload: { x: number; y: number; size: number }];
+  savePlaylistCoverCrop: [payload: { x: number; y: number; size: number }];
   updateScanFolderChecked: [path: string, checked: boolean];
 }
 
@@ -51,9 +58,12 @@ export interface AppDialogsListeners {
   onAddTrackToPlaylist: (...args: AppDialogsEmits['addTrackToPlaylist']) => void;
   onCancelScanFolders: () => void;
   onChangePlaylistName: (...args: AppDialogsEmits['changePlaylistName']) => void;
+  onChoosePlaylistCover: () => void;
+  onClearPlaylistCover: () => void;
   onCloseAddToPlaylistDialog: () => void;
   onCloseCoverCropDialog: () => void;
   onCloseCreatePlaylistDialog: () => void;
+  onClosePlaylistCoverCropDialog: () => void;
   onCloseScanDialog: () => void;
   onCloseTrackMetadataDialog: () => void;
   onConfirmCreatePlaylist: () => void;
@@ -62,5 +72,6 @@ export interface AppDialogsListeners {
   onRemoveScanFolder: (...args: AppDialogsEmits['removeScanFolder']) => void;
   onSaveTrackMetadata: (...args: AppDialogsEmits['saveTrackMetadata']) => void;
   onSaveCoverCrop: (...args: AppDialogsEmits['saveCoverCrop']) => void;
+  onSavePlaylistCoverCrop: (...args: AppDialogsEmits['savePlaylistCoverCrop']) => void;
   onUpdateScanFolderChecked: (...args: AppDialogsEmits['updateScanFolderChecked']) => void;
 }

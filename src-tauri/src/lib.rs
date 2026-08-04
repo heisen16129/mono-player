@@ -7,6 +7,7 @@ mod downloads;
 mod lyrics;
 mod mcp;
 mod mcp_bridge;
+mod mcp_service;
 mod models;
 mod player;
 mod plugins;
@@ -61,12 +62,15 @@ pub fn run() {
             app.manage(AppState { db: Mutex::new(db) });
             mcp_bridge::start(app.handle().clone(), app_data_dir.clone())?;
             let mcp_bridge_file = mcp_bridge::bridge_file_path(&app_data_dir);
+            let mcp_host = "127.0.0.1".to_string();
+            let mcp_port = 17331;
+            let mcp_token = None;
             let mcp_api_worker = if mcp_auto_start_enabled(app.handle()) {
                 match workers::mcp_api::McpApiWorkerState::start(
-                    mcp_bridge_file,
-                    "127.0.0.1".to_string(),
-                    17331,
-                    None,
+                    mcp_bridge_file.clone(),
+                    mcp_host.clone(),
+                    mcp_port,
+                    mcp_token.clone(),
                 ) {
                     Ok(worker) => {
                         match worker.health() {
@@ -84,12 +88,24 @@ pub fn run() {
                     }
                     Err(err) => {
                         eprintln!("Mono MCP API worker auto-start skipped: {err}");
-                        workers::mcp_api::McpApiWorkerState::disabled(Some(err))
+                        workers::mcp_api::McpApiWorkerState::disabled(
+                            mcp_bridge_file.clone(),
+                            mcp_host.clone(),
+                            mcp_port,
+                            mcp_token.clone(),
+                            Some(err),
+                        )
                     }
                 }
             } else {
                 eprintln!("Mono MCP API worker auto-start disabled by settings.");
-                workers::mcp_api::McpApiWorkerState::disabled(None)
+                workers::mcp_api::McpApiWorkerState::disabled(
+                    mcp_bridge_file.clone(),
+                    mcp_host.clone(),
+                    mcp_port,
+                    mcp_token.clone(),
+                    None,
+                )
             };
             app.manage(mcp_api_worker);
             app.manage(player::PlayerState::new(audio_cache_dir.clone()));
@@ -153,6 +169,10 @@ pub fn run() {
             covers::read_cover_thumbnail,
             covers::clear_cover_thumbnail_cache,
             diagnostics::system_worker_health,
+            mcp_service::mcp_service_status,
+            mcp_service::mcp_service_start,
+            mcp_service::mcp_service_stop,
+            mcp_service::mcp_service_restart,
             downloads::enqueue_download_online_track,
             downloads::download_lyrics_file,
             downloads::download_cover_file,

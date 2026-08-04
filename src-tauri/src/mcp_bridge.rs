@@ -381,6 +381,7 @@ fn list_playlists(app: &AppHandle) -> Result<Value, String> {
                 json!({
                     "id": playlist.get("id").and_then(Value::as_str),
                     "name": playlist.get("name").and_then(Value::as_str),
+                    "cover": playlist.get("cover").and_then(Value::as_str),
                     "trackCount": playlist
                         .get("trackIds")
                         .and_then(Value::as_array)
@@ -442,6 +443,7 @@ fn get_playlist(app: &AppHandle, params: Value) -> Result<Value, String> {
         "playlist": {
             "id": playlist.get("id").and_then(Value::as_str),
             "name": playlist.get("name").and_then(Value::as_str),
+            "cover": playlist.get("cover").and_then(Value::as_str),
             "createdAt": playlist.get("createdAt").and_then(Value::as_f64),
             "tracks": playlist_tracks
         }

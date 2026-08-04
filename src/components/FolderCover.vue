@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import { toRef } from 'vue';
+import { computed, ref, toRef, watch } from 'vue';
 import { useFolderCoverUrls } from '../composables/useFolderCoverUrls';
 import type { Track } from '../types/music';
+import { artworkDisplaySrc } from '../utils/artwork';
 import FolderCoverContent from './FolderCoverContent.vue';
 
 const props = defineProps<{
+  coverUrl?: string | null;
   size?: 'default' | 'mini';
   tracks: Track[];
   tone?: 'desk' | 'night' | 'mist' | 'road';
 }>();
 
 const { handleCoverError, shouldUseGrid, visibleCovers } = useFolderCoverUrls(toRef(props, 'tracks'));
+const customCoverFailed = ref(false);
+const customCoverUrl = computed(() => customCoverFailed.value ? '' : artworkDisplaySrc(props.coverUrl));
+
+watch(() => props.coverUrl, () => {
+  customCoverFailed.value = false;
+});
 </script>
 
 <template>
@@ -20,13 +28,14 @@ const { handleCoverError, shouldUseGrid, visibleCovers } = useFolderCoverUrls(to
       tone || 'night',
       size === 'mini' ? 'folder-cover-mini' : '',
       {
-        'is-grid': shouldUseGrid,
-        'has-cover-image': visibleCovers.some(Boolean),
+        'is-grid': !customCoverUrl && shouldUseGrid,
+        'has-cover-image': Boolean(customCoverUrl) || visibleCovers.some(Boolean),
       },
     ]"
     aria-hidden="true"
   >
-    <FolderCoverContent :should-use-grid="shouldUseGrid" :visible-covers="visibleCovers" @cover-error="handleCoverError" />
+    <img v-if="customCoverUrl" class="folder-cover-custom-image" :src="customCoverUrl" alt="" @error="customCoverFailed = true" />
+    <FolderCoverContent v-else :should-use-grid="shouldUseGrid" :visible-covers="visibleCovers" @cover-error="handleCoverError" />
   </span>
 </template>
 
@@ -82,6 +91,13 @@ const { handleCoverError, shouldUseGrid, visibleCovers } = useFolderCoverUrls(to
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 1px;
   background: var(--smw-cover-divider);
+}
+
+.folder-cover-custom-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 </style>

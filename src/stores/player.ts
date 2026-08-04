@@ -177,6 +177,7 @@ export const usePlayerStore = defineStore('player', () => {
     deletePlaylist,
     removeTrackFromPlaylist,
     renamePlaylist,
+    updatePlaylistCover,
   } = createPlayerPlaylistActions({ persistSettings, settings, tracks });
 
   function restorePlaybackSession() {
@@ -323,6 +324,7 @@ export const usePlayerStore = defineStore('player', () => {
     createPlaylist,
     deletePlaylist,
     renamePlaylist,
+    updatePlaylistCover,
     addTrackToPlaylist,
     removeTrackFromPlaylist,
     setCloseAction,

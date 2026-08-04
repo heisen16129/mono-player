@@ -46,6 +46,7 @@ interface UseAppMainContentSurfaceBindingsState {
 
 interface UseAppMainContentSurfaceBindingsActions {
   addDownloadedTrackToPlaylist: AppMainContentListeners['onAddDownloadedTrackToPlaylist'];
+  changePlaylistCover: AppMainContentListeners['onChangePlaylistCover'];
   chooseFolder: AppMainContentListeners['onChooseFolder'];
   clearDownloadedItemRecord: AppMainContentListeners['onClearDownloadedItemRecord'];
   deleteDownloadedItem: AppMainContentListeners['onDeleteDownloadedItem'];
@@ -139,6 +140,7 @@ export function useAppMainContentSurfaceBindings({
     },
     listeners: {
       onAddDownloadedTrackToPlaylist: actions.addDownloadedTrackToPlaylist,
+      onChangePlaylistCover: actions.changePlaylistCover,
       onChooseFolder: actions.chooseFolder,
       onClearDownloadedItemRecord: actions.clearDownloadedItemRecord,
       onCreatePlaylist: actions.openCreatePlaylistDialog,

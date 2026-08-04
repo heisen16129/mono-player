@@ -38,6 +38,7 @@ export interface AppPageOutletProps {
 
 export interface AppPageOutletEmits {
   addDownloadedTrackToPlaylist: [item: DownloadItem];
+  changePlaylistCover: [playlistId: string];
   chooseFolder: [];
   clearDownloadedItemRecord: [item: DownloadItem];
   deleteDownloadedItem: [item: DownloadItem];
@@ -179,6 +180,7 @@ export interface AppWorkspacePageOutletProps {
 
 export interface AppWorkspacePageOutletEmits {
   'update:modelValue': [value: string];
+  changePlaylistCover: [playlistId: string];
   openArtist: [artistName: string];
   openTrackMenu: [track: Track, x: number, y: number];
   playFavoriteTracks: [];
@@ -189,6 +191,7 @@ export interface AppWorkspacePageOutletEmits {
 
 export interface AppWorkspacePageOutletListeners {
   'onUpdate:modelValue': (...args: AppWorkspacePageOutletEmits['update:modelValue']) => void;
+  onChangePlaylistCover: (...args: AppWorkspacePageOutletEmits['changePlaylistCover']) => void;
   onOpenArtist: (...args: AppWorkspacePageOutletEmits['openArtist']) => void;
   onOpenTrackMenu: (...args: AppWorkspacePageOutletEmits['openTrackMenu']) => void;
   onPlayFavoriteTracks: () => void;

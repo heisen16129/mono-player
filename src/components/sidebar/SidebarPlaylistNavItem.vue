@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Music2 } from '@lucide/vue';
 import type { UserPlaylist } from '../../types/music';
+import { artworkDisplaySrc } from '../../utils/artwork';
 
-defineProps<{
+const props = defineProps<{
   active: boolean;
   collapsed: boolean;
   playlist: UserPlaylist;
@@ -16,6 +18,8 @@ const emit = defineEmits<{
 function openPlaylistMenu(playlist: UserPlaylist, event: MouseEvent) {
   emit('openPlaylistMenu', playlist, event.clientX, event.clientY);
 }
+
+const coverUrl = computed(() => artworkDisplaySrc(props.playlist.cover));
 </script>
 
 <template>
@@ -27,7 +31,10 @@ function openPlaylistMenu(playlist: UserPlaylist, event: MouseEvent) {
     @click="emit('openPlaylist', playlist.id)"
     @contextmenu.prevent.stop="openPlaylistMenu(playlist, $event)"
   >
-    <span class="nav-icon"><Music2 :size="21" /></span><span class="sidebar-text">{{ playlist.name }}</span>
+    <span class="nav-icon" :class="{ 'has-cover': coverUrl }">
+      <img v-if="coverUrl" class="playlist-nav-cover" :src="coverUrl" alt="" />
+      <Music2 v-else :size="21" />
+    </span><span class="sidebar-text">{{ playlist.name }}</span>
   </button>
 </template>
 
@@ -91,6 +98,20 @@ function openPlaylistMenu(playlist: UserPlaylist, event: MouseEvent) {
 
 .nav-icon svg {
   flex: 0 0 auto;
+}
+
+.nav-icon.has-cover {
+  width: 58px;
+}
+
+.playlist-nav-cover {
+  display: block;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 6px;
+  object-fit: cover;
+  box-shadow: inset 0 0 0 1px var(--smw-border-soft);
 }
 
 .sidebar-text {

@@ -3,9 +3,11 @@ import { computed } from 'vue';
 import { resolveLocale, t } from '../i18n';
 import type { Locale } from '../types/music';
 import BaseDialog from './BaseDialog.vue';
+import PlaylistCoverPicker from './PlaylistCoverPicker.vue';
 import PlaylistNameField from './PlaylistNameField.vue';
 
 const props = defineProps<{
+  cover: string | null;
   editing: boolean;
   locale: Locale;
   name: string;
@@ -13,11 +15,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:name': [value: string];
+  chooseCover: [];
+  clearCover: [];
   close: [];
   confirm: [];
 }>();
 
 const isEnglish = computed(() => resolveLocale(props.locale) === 'en-US');
+const chooseCoverLabel = computed(() => isEnglish.value ? 'Choose cover' : '\u9009\u62e9\u5c01\u9762');
+const clearCoverLabel = computed(() => isEnglish.value ? 'Remove cover' : '\u79fb\u9664\u5c01\u9762');
 const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist' : '重命名歌单') : (isEnglish.value ? 'Create playlist' : '创建歌单'));
 </script>
 
@@ -26,6 +32,14 @@ const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist
 
       <form class="playlist-dialog-form" @submit.prevent="$emit('confirm')">
         <div class="playlist-dialog-body">
+          <PlaylistCoverPicker
+            v-if="!editing"
+            :choose-label="chooseCoverLabel"
+            :clear-label="clearCoverLabel"
+            :cover="cover"
+            @choose="emit('chooseCover')"
+            @clear="emit('clearCover')"
+          />
           <PlaylistNameField
             :label="isEnglish ? 'Playlist name' : '歌单名称'"
             :name="name"
@@ -48,6 +62,8 @@ const title = computed(() => props.editing ? (isEnglish.value ? 'Rename playlist
 
 <style scoped>
 .playlist-dialog-body {
+  display: grid;
+  gap: 18px;
   padding: 16px 18px 20px;
 }
 
