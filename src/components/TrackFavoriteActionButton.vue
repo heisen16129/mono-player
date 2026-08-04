@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { Heart } from '@lucide/vue';
 
-defineProps<{
+withDefaults(defineProps<{
+  disabled?: boolean;
   isFavorite: boolean;
   label: string;
-}>();
+}>(), {
+  disabled: false,
+});
 
 const emit = defineEmits<{
   toggle: [];
@@ -16,6 +19,7 @@ const emit = defineEmits<{
     class="favorite-icon"
     :class="{ 'is-favorite': isFavorite }"
     type="button"
+    :disabled="disabled"
     :aria-label="label"
     @click.stop="emit('toggle')"
   >
@@ -42,14 +46,19 @@ const emit = defineEmits<{
   color: #e5484d;
 }
 
-.favorite-icon:hover {
+.favorite-icon:hover:not(:disabled) {
   color: #e5484d;
   background: color-mix(in srgb, #e5484d 10%, transparent);
   border-radius: 999px;
 }
 
-.favorite-icon:active {
+.favorite-icon:active:not(:disabled) {
   transform: scale(0.94);
+}
+
+.favorite-icon:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .favorite-icon:focus-visible {
