@@ -107,7 +107,9 @@ defineEmits<{
   align-items: center;
   gap: 8px;
   flex: 1;
+  width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   height: 36px;
   padding: 0 10px;
   border: 1px solid var(--smw-border);

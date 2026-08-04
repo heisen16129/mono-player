@@ -24,6 +24,7 @@ const emit = defineEmits<SidebarPlaylistCreateControlEmits>();
 
 <style scoped>
 .nav-section-break {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 32px;
   gap: 6px;
@@ -31,28 +32,42 @@ const emit = defineEmits<SidebarPlaylistCreateControlEmits>();
   width: var(--sidebar-nav-item-width, 100%);
   height: 34px;
   margin: 5px 0 6px 8px;
-  transition:
-    width 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    margin 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    grid-template-columns 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: none;
 }
 
 .nav-divider {
   display: block;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: calc(100% - 38px);
   height: 1px;
   background: var(--smw-border);
+  transform: translateY(-50%) scaleX(1);
+  transform-origin: left center;
+  transition: transform var(--sidebar-motion-duration, 340ms) var(--sidebar-motion-easing, cubic-bezier(0.22, 0.76, 0.22, 1));
 }
 
 .nav-add-button {
+  z-index: 1;
+  position: absolute;
+  top: 50%;
+  left: calc(100% - 30px);
   display: grid;
   width: 30px;
-  height: 30px;
+  height: 34px;
   place-items: center;
   border: 0;
   border-radius: 8px;
   color: var(--smw-icon-muted);
-  background: transparent;
+  background: var(--smw-bg-sidebar);
   cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    left var(--sidebar-motion-duration, 340ms) var(--sidebar-motion-easing, cubic-bezier(0.22, 0.76, 0.22, 1)),
+    width var(--sidebar-motion-duration, 340ms) var(--sidebar-motion-easing, cubic-bezier(0.22, 0.76, 0.22, 1)),
+    color 160ms ease,
+    background-color 160ms ease;
 }
 
 .nav-add-button:hover {
@@ -66,12 +81,13 @@ const emit = defineEmits<SidebarPlaylistCreateControlEmits>();
 }
 
 .nav-section-break.is-collapsed .nav-divider {
-  display: none;
+  width: 58px;
+  transform: translateY(-50%) scaleX(0);
 }
 
 .nav-section-break.is-collapsed .nav-add-button {
+  left: 0;
   width: 58px;
-  height: 34px;
   margin: 0;
 }
 </style>

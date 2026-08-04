@@ -66,23 +66,19 @@ const sidebarNavListeners: SidebarNavListeners = {
 }
 
 .primary-sidebar {
-  --sidebar-nav-item-width: calc(var(--sidebar-width) - 26px);
+  box-sizing: border-box;
+  --sidebar-nav-item-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 20px;
   padding: 16px 16px 18px 10px;
   overflow: hidden;
   background: var(--smw-bg-sidebar);
-  transition:
-    gap 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    padding 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .primary-sidebar.collapsed {
-  --sidebar-nav-item-width: 58px;
-  align-items: center;
   overflow: visible;
-  padding-inline: 10px;
+  padding: 16px 8px 18px 10px;
 }
 
 </style>

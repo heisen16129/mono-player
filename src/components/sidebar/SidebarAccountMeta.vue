@@ -26,9 +26,8 @@ defineProps<{
   white-space: nowrap;
   transform: translateX(0);
   transition:
-    max-width 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 120ms ease,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    transform 220ms var(--sidebar-motion-easing, cubic-bezier(0.22, 0.76, 0.22, 1));
 }
 
 .account-meta strong,

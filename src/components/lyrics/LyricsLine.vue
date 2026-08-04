@@ -64,6 +64,7 @@ p.can-seek {
 p.can-seek:hover,
 p.can-seek:focus-visible {
   color: var(--smw-lyrics-current);
+  box-shadow: none;
   outline: none;
 }
 

@@ -6,6 +6,7 @@ use crate::{
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use lofty::file::TaggedFileExt;
+use serde::Deserialize;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -16,6 +17,21 @@ use std::time::UNIX_EPOCH;
 use tauri::Url;
 use tauri::{AppHandle, Manager, State};
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CropCoverImageRequest {
+    image_path: String,
+    x: u32,
+    y: u32,
+    size: u32,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CropCoverImageResult {
+    path: String,
+}
+
 #[tauri::command]
 pub(crate) fn read_cover(path: String) -> ApiResponse<Option<CoverImage>> {
     ApiResponse::from_result(read_cover_backend(path))
@@ -24,6 +40,41 @@ pub(crate) fn read_cover(path: String) -> ApiResponse<Option<CoverImage>> {
 pub(crate) fn read_cover_backend(path: String) -> Result<Option<CoverImage>, String> {
     let audio_path = PathBuf::from(path);
     read_cover_uncached(&audio_path)
+}
+
+#[tauri::command]
+pub(crate) fn crop_cover_image(
+    state: State<'_, PlayerState>,
+    request: CropCoverImageRequest,
+) -> ApiResponse<CropCoverImageResult> {
+    ApiResponse::from_result((|| {
+        let image_path = PathBuf::from(request.image_path.trim());
+        let image = image::open(&image_path).map_err(|err| err.to_string())?;
+        let image_width = image.width();
+        let image_height = image.height();
+        if image_width == 0 || image_height == 0 {
+            return Err("Invalid cover image.".to_string());
+        }
+
+        let max_size = image_width.min(image_height);
+        let crop_size = request.size.clamp(1, max_size);
+        let x = request.x.min(image_width.saturating_sub(crop_size));
+        let y = request.y.min(image_height.saturating_sub(crop_size));
+        let cropped = image.crop_imm(x, y, crop_size, crop_size).to_rgb8();
+
+        let output_dir = mono_cache_dir(&state.cache_dir()?).join("cover-edits");
+        fs::create_dir_all(&output_dir).map_err(|err| err.to_string())?;
+        let output_path = output_dir.join(format!("{}.jpg", uuid::Uuid::new_v4()));
+        let file = fs::File::create(&output_path).map_err(|err| err.to_string())?;
+        let mut encoder = JpegEncoder::new_with_quality(file, 92);
+        encoder
+            .encode_image(&cropped)
+            .map_err(|err| err.to_string())?;
+
+        Ok(CropCoverImageResult {
+            path: output_path.to_string_lossy().to_string(),
+        })
+    })())
 }
 
 #[tauri::command]
@@ -152,6 +203,26 @@ pub(crate) fn refresh_cached_cover_original_file_url_in(
         cover_extension(&cover.mime_type)
     ));
     fs::write(&cache_path, &cover.data).map_err(|err| err.to_string())?;
+
+    Ok(cover_file_url(&cache_path))
+}
+
+pub(crate) fn cache_cover_file_url_in(
+    cache_root: &Path,
+    audio_path: &Path,
+    cover_path: &Path,
+) -> Result<Option<String>, String> {
+    let data = fs::read(cover_path).map_err(|err| err.to_string())?;
+    let mime_type = cover_mime_type(cover_path).unwrap_or("image/jpeg");
+    let cache_dir = mono_cache_dir(cache_root).join("cover-originals");
+    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+    let cache_path = cache_dir.join(format!(
+        "{}-edit-{}.{}",
+        cover_cache_key(audio_path),
+        uuid::Uuid::new_v4(),
+        cover_extension(mime_type)
+    ));
+    fs::write(&cache_path, data).map_err(|err| err.to_string())?;
 
     Ok(cover_file_url(&cache_path))
 }

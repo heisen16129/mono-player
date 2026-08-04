@@ -71,7 +71,7 @@ const emit = defineEmits<{
 .account.is-collapsed::before {
   left: 0;
   width: 58px;
-  transition: width 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: width var(--sidebar-motion-duration, 340ms) var(--sidebar-motion-easing, cubic-bezier(0.22, 0.76, 0.22, 1));
 }
 
 .account.is-collapsed:hover::before {
@@ -93,7 +93,7 @@ const emit = defineEmits<{
   opacity: 0;
   background: var(--smw-bg-sidebar);
   transition:
-    width 190ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width var(--sidebar-motion-duration, 340ms) var(--sidebar-motion-easing, cubic-bezier(0.22, 0.76, 0.22, 1)),
     opacity 120ms ease;
 }
 
@@ -118,7 +118,7 @@ const emit = defineEmits<{
   gap: 6px;
   transition:
     opacity 150ms ease,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    transform var(--sidebar-motion-duration, 340ms) var(--sidebar-motion-easing, cubic-bezier(0.22, 0.76, 0.22, 1));
 }
 
 .account.is-collapsed .account-actions {

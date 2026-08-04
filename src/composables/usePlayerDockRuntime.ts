@@ -22,7 +22,7 @@ interface PlayerDockProgressRuntime {
   runtimeDuration: Ref<number>;
   setPlaybackTime: (value: number) => void;
   startSmoothProgress: () => void;
-  stopSmoothProgress: () => void;
+  stopSmoothProgress: (syncExternal?: boolean) => void;
   syncPlaybackTimeFromRust: (position: number, playing: boolean) => void;
   syncSmoothProgressBase: () => void;
 }
@@ -165,15 +165,19 @@ export function usePlayerDockRuntime({
 
     if (isPlaying.value) {
       holdRustPlaybackStoppedState();
-      try {
-        await pauseRustBackend(player.settings.fadePlayback);
-      } catch (error) {
-        onPlaybackError(error);
-        return;
-      }
       isPlaying.value = false;
       progress.stopSmoothProgress();
       onPlaybackStateChange(false);
+      try {
+        await pauseRustBackend(player.settings.fadePlayback);
+      } catch (error) {
+        isPlaying.value = true;
+        progress.syncSmoothProgressBase();
+        progress.startSmoothProgress();
+        onPlaybackStateChange(true);
+        onPlaybackError(error);
+        return;
+      }
       return;
     }
 
@@ -241,18 +245,21 @@ export function usePlayerDockRuntime({
     }
 
     rustBackendActive.value = true;
-    spectrumLevels.value = state.isPlaying ? (state.spectrumLevels ?? []) : [];
+    const isHoldingStoppedState = !isPlaying.value && state.isPlaying && Date.now() < rustPlaybackStateHoldUntil;
+    spectrumLevels.value = state.isPlaying && !isHoldingStoppedState ? (state.spectrumLevels ?? []) : [];
     if (!activeTrack.value?.duration && state.duration && state.duration > 0) {
       progress.runtimeDuration.value = state.duration;
     }
     onSpectrumChange(spectrumLevels.value);
+    if (isHoldingStoppedState) {
+      progress.stopSmoothProgress();
+      return;
+    }
+
     progress.syncPlaybackTimeFromRust(state.position, state.isPlaying);
 
     if (!state.isPlaying) {
       rustPlaybackStateHoldUntil = 0;
-    }
-    if (!isPlaying.value && state.isPlaying && Date.now() < rustPlaybackStateHoldUntil) {
-      return;
     }
 
     if (isPlaying.value !== state.isPlaying) {

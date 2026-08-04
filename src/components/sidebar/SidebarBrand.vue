@@ -37,10 +37,7 @@ const emit = defineEmits<{
   overflow: hidden;
   padding: 0;
   font-size: 17px;
-  transition:
-    grid-template-columns 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    gap 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: none;
 }
 
 .brand :deep(.brand-mark) {
@@ -49,7 +46,7 @@ const emit = defineEmits<{
 
 .brand.is-collapsed {
   align-self: flex-start;
-  grid-template-columns: 58px minmax(0, 0fr) 0;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
   justify-content: start;
   gap: 0;
   padding: 0;
@@ -63,13 +60,11 @@ const emit = defineEmits<{
   white-space: nowrap;
   transform: translateX(0);
   transition:
-    max-width 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 120ms ease,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    opacity 170ms ease,
+    transform 220ms var(--sidebar-motion-easing, cubic-bezier(0.22, 0.76, 0.22, 1));
 }
 
 .brand.is-collapsed .sidebar-text {
-  max-width: 0;
   opacity: 0;
   transform: translateX(-6px);
 }
@@ -78,8 +73,8 @@ const emit = defineEmits<{
   opacity: 1;
   transform: translateX(0);
   transition:
-    opacity 120ms ease,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    opacity 170ms ease,
+    transform 220ms var(--sidebar-motion-easing, cubic-bezier(0.22, 0.76, 0.22, 1));
 }
 
 .brand-collapse-button.is-hidden {

@@ -149,6 +149,7 @@ pub fn run() {
             lyrics::resolve_lyrics_source,
             lyrics::resolve_local_track_lyrics,
             covers::read_cover,
+            covers::crop_cover_image,
             covers::read_cover_thumbnail,
             covers::clear_cover_thumbnail_cache,
             diagnostics::system_worker_health,

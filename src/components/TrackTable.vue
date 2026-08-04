@@ -16,7 +16,9 @@ import type {
 import TrackTableHeader from './TrackTableHeader.vue';
 import TrackTableRow from './TrackTableRow.vue';
 
-const props = defineProps<TrackTableProps>();
+const props = withDefaults(defineProps<TrackTableProps>(), {
+  showFavoriteAction: true,
+});
 
 defineSlots<TrackTableSlots>();
 

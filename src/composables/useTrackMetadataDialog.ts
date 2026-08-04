@@ -1,10 +1,12 @@
-import { ref, type Ref } from 'vue';
+import { ref, watch, type Ref } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
+import { useCoverCropDialog } from './useCoverCropDialog';
 import type { TrackMetadataFormValue } from './useTrackMetadataForm';
-import { clearCoverThumbnailCache, refreshTrackDuration, updateTrackCover, updateTrackMetadata } from '../services/music';
+import { refreshTrackDuration, updateTrackCover, updateTrackMetadata } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
+import { normalizePath } from '../utils/path';
 
 type PlayerStore = ReturnType<typeof usePlayerStore>;
 
@@ -14,6 +16,7 @@ interface TrackMetadataDialogOptions {
   canRefreshTrackDuration: Ref<boolean>;
   closeContextMenus: () => void;
   currentPlaybackTrack: Ref<Track | null>;
+  isAudioPlaying: Ref<boolean>;
   onlineActiveTrack: Ref<Track | null>;
   player: PlayerStore;
   rustPlaybackQueue: Ref<Track[]>;
@@ -56,6 +59,11 @@ function patchTrackCoverRefresh(track: Track, trackId: number): Track {
   return track.id === trackId ? { ...track, artwork: null, coverVersion: Date.now() } : track;
 }
 
+function patchTrackCover(track: Track, trackId: number, artwork?: string | null): Track {
+  if (track.id !== trackId) return track;
+  return { ...track, artwork: artwork ?? null, coverVersion: Date.now() };
+}
+
 function patchTrackDuration(track: Track, trackId: number, duration: number): Track {
   return track.id === trackId ? { ...track, duration } : track;
 }
@@ -66,6 +74,7 @@ export function useTrackMetadataDialog({
   canRefreshTrackDuration,
   closeContextMenus,
   currentPlaybackTrack,
+  isAudioPlaying,
   onlineActiveTrack,
   player,
   rustPlaybackQueue,
@@ -75,6 +84,40 @@ export function useTrackMetadataDialog({
   const metadataEditingTrack = ref<Track | null>(null);
   const isSavingTrackMetadata = ref(false);
   const trackMetadataError = ref<string | null>(null);
+  const pendingCoverEmbeds = new Map<string, { coverPath: string; track: Track }>();
+
+  const coverCropDialog = useCoverCropDialog({
+    applyTrackCoverRefresh,
+    isTrackPlaying,
+    queueTrackCoverEmbed,
+    showToast,
+  });
+
+  function isTrackPlaying(track: Track) {
+    const current = currentPlaybackTrack.value;
+    return Boolean(isAudioPlaying.value && current && (current.id === track.id || normalizePath(current.path) === normalizePath(track.path)));
+  }
+
+  function queueTrackCoverEmbed(track: Track, coverPath: string) {
+    pendingCoverEmbeds.set(normalizePath(track.path), { coverPath, track });
+  }
+
+  async function flushPendingCoverEmbeds() {
+    for (const [key, pending] of [...pendingCoverEmbeds]) {
+      if (isTrackPlaying(pending.track)) continue;
+      pendingCoverEmbeds.delete(key);
+      try {
+        await updateTrackCover({ path: pending.track.path, coverPath: pending.coverPath, embedMetadata: true });
+      } catch (error) {
+        pendingCoverEmbeds.set(key, pending);
+        break;
+      }
+    }
+  }
+
+  watch([currentPlaybackTrack, isAudioPlaying], () => {
+    void flushPendingCoverEmbeds();
+  });
 
   function applyTrackDurationUpdate(trackId: number, duration: number) {
     const patch = (track: Track) => patchTrackDuration(track, trackId, duration);
@@ -126,8 +169,8 @@ export function useTrackMetadataDialog({
     }
   }
 
-  function applyTrackCoverRefresh(trackId: number) {
-    const patch = (track: Track) => patchTrackCoverRefresh(track, trackId);
+  function applyTrackCoverRefresh(trackId: number, artwork?: string | null) {
+    const patch = (track: Track) => artwork === undefined ? patchTrackCoverRefresh(track, trackId) : patchTrackCover(track, trackId, artwork);
 
     player.tracks = player.tracks.map(patch);
     player.queue = player.queue.map(patch);
@@ -218,14 +261,11 @@ export function useTrackMetadataDialog({
       const selected = await open({
         multiple: false,
         directory: false,
-        filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tif', 'tiff'] }],
+        filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'bmp', 'webp'] }],
       });
       if (typeof selected !== 'string') return;
 
-      await clearCoverThumbnailCache(track.path);
-      await updateTrackCover({ path: track.path, coverPath: selected });
-      applyTrackCoverRefresh(track.id);
-      showToast('封面已更新', 'success');
+      coverCropDialog.openCoverCropDialog(track, selected);
     } catch (error) {
       const message = getErrorMessage(error);
       showToast(`封面更新失败：${message}`);
@@ -249,11 +289,16 @@ export function useTrackMetadataDialog({
   return {
     applyTrackCoverRefresh,
     changeTrackCover,
+    closeCoverCropDialog: coverCropDialog.closeCoverCropDialog,
     closeTrackMetadataDialog,
+    coverCropImagePath: coverCropDialog.coverCropImagePath,
+    coverCropTrack: coverCropDialog.coverCropTrack,
+    isSavingCoverCrop: coverCropDialog.isSavingCoverCrop,
     isSavingTrackMetadata,
     metadataEditingTrack,
     openTrackMetadataDialog,
     refreshLocalTrackDuration,
+    saveCoverCrop: coverCropDialog.saveCoverCrop,
     saveTrackMetadata,
     trackMetadataError,
   };

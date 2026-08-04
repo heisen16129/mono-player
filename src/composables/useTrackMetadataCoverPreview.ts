@@ -22,7 +22,7 @@ export function useTrackMetadataCoverPreview() {
     const currentLoadId = ++coverLoadId;
     clearTemporaryCoverUrl();
 
-    const artworkUrl = usableArtworkDisplaySrc(track.associatedArtwork ?? track.artwork);
+    const artworkUrl = usableArtworkDisplaySrc(track.artwork ?? track.associatedArtwork);
     if (artworkUrl) {
       coverPreviewUrl.value = artworkUrl;
       return;

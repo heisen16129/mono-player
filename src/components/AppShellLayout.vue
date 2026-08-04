@@ -49,10 +49,10 @@ defineEmits<{
 
 .mono-window {
   --app-sidebar-width: var(--sidebar-width);
+  --sidebar-motion-duration: 340ms;
+  --sidebar-motion-easing: cubic-bezier(0.22, 0.76, 0.22, 1);
   grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
-  transition:
-    --app-sidebar-width 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    grid-template-columns 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: --app-sidebar-width var(--sidebar-motion-duration) var(--sidebar-motion-easing);
 }
 
 .mono-window.sidebar-collapsed {
@@ -67,6 +67,7 @@ defineEmits<{
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  contain: layout style;
 }
 
 .mono-window.sidebar-collapsed:not(.lyrics-open) .app-shell-menu {
@@ -82,6 +83,7 @@ defineEmits<{
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  contain: layout paint style;
 }
 
 .app-shell-dock {

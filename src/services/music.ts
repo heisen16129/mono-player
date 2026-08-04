@@ -51,6 +51,22 @@ export interface UpdateTrackMetadataResult {
 export interface UpdateTrackCoverRequest {
   path: string;
   coverPath: string;
+  embedMetadata?: boolean;
+}
+
+export interface UpdateTrackCoverResult {
+  artwork: string | null;
+}
+
+export interface CropCoverImageRequest {
+  imagePath: string;
+  x: number;
+  y: number;
+  size: number;
+}
+
+export interface CropCoverImageResult {
+  path: string;
 }
 
 export interface RefreshTrackDurationRequest {
@@ -110,12 +126,20 @@ export function updateTrackMetadata(request: UpdateTrackMetadataRequest): Promis
   return invokeApi<UpdateTrackMetadataResult>('update_track_metadata', { request });
 }
 
-export function updateTrackCover(request: UpdateTrackCoverRequest): Promise<void> {
+export function updateTrackCover(request: UpdateTrackCoverRequest): Promise<UpdateTrackCoverResult> {
   if (!isTauriRuntime()) {
     return Promise.reject(new Error('请在 Tauri 桌面窗口中更换歌曲封面。'));
   }
 
-  return invokeApi<void>('update_track_cover', { request });
+  return invokeApi<UpdateTrackCoverResult>('update_track_cover', { request });
+}
+
+export function cropCoverImage(request: CropCoverImageRequest): Promise<CropCoverImageResult> {
+  if (!isTauriRuntime()) {
+    return Promise.reject(new Error('请在 Tauri 桌面窗口中编辑歌曲封面。'));
+  }
+
+  return invokeApi<CropCoverImageResult>('crop_cover_image', { request });
 }
 
 export function refreshTrackDuration(request: RefreshTrackDurationRequest): Promise<RefreshTrackDurationResult> {

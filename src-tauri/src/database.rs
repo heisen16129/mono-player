@@ -45,6 +45,17 @@ pub(crate) struct UpdateTrackCoverRequest {
     pub(crate) path: String,
     #[serde(rename = "coverPath")]
     pub(crate) cover_path: String,
+    #[serde(rename = "embedMetadata", default = "default_true")]
+    pub(crate) embed_metadata: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct UpdateTrackCoverResult {
+    pub(crate) artwork: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,20 +188,28 @@ pub(crate) fn update_track_cover(
     state: State<'_, AppState>,
     player_state: State<'_, crate::player::PlayerState>,
     request: UpdateTrackCoverRequest,
-) -> ApiResponse<()> {
-    ApiResponse::from_empty_result((|| {
-        write_track_cover_metadata(&request.path, &request.cover_path)?;
-        let artwork = crate::covers::cached_cover_original_file_url_in(
-            &player_state.cache_dir()?,
-            Path::new(&request.path),
-        )?;
+) -> ApiResponse<UpdateTrackCoverResult> {
+    ApiResponse::from_result((|| {
+        let artwork = if request.embed_metadata {
+            write_track_cover_metadata(&request.path, &request.cover_path)?;
+            crate::covers::cached_cover_original_file_url_in(
+                &player_state.cache_dir()?,
+                Path::new(&request.path),
+            )?
+        } else {
+            crate::covers::cache_cover_file_url_in(
+                &player_state.cache_dir()?,
+                Path::new(&request.path),
+                Path::new(&request.cover_path),
+            )?
+        };
         let db = state.db.lock().map_err(|err| err.to_string())?;
         db.execute(
-            "UPDATE tracks SET artwork = ?1, updated_at = CURRENT_TIMESTAMP WHERE path = ?2",
+            "UPDATE tracks SET artwork = ?1 WHERE path = ?2",
             params![artwork, request.path],
         )
         .map_err(|err| err.to_string())?;
-        Ok(())
+        Ok(UpdateTrackCoverResult { artwork })
     })())
 }
 
@@ -322,7 +341,7 @@ pub(crate) fn read_tracks(db: &Connection) -> Result<Vec<Track>, String> {
         .prepare(
             "SELECT id, path, title, artist, album, duration, added_at, scan_id, artwork
              FROM tracks
-             ORDER BY updated_at DESC, id DESC",
+             ORDER BY added_at DESC, id DESC",
         )
         .map_err(|err| err.to_string())?;
 

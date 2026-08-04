@@ -35,10 +35,11 @@ const emit = defineEmits<{
     close-label="关闭"
     close-on-overlay
     grid-template-rows="auto auto minmax(0, 1fr)"
+    header-padding="10px 12px"
     max-height="min(520px, calc(100vh - 80px))"
     overflow="hidden"
     panel-class="lyrics-search-dialog"
-    width="min(560px, calc(100vw - 32px))"
+    width="min(660px, calc(100vw - 32px))"
     :z-index="240"
     @close="emit('close')"
   >

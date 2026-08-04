@@ -29,7 +29,7 @@ export function useLyricsMetadataState(options: LyricsMetadataStateOptions) {
   const hasAssociatedLyrics = computed(() => Boolean(toValue(options.activeTrack)?.associatedLyrics?.lyrics.length));
   const activeArtwork = computed(() => {
     const activeTrack = toValue(options.activeTrack);
-    return activeTrack?.associatedArtwork ?? activeTrack?.artwork ?? null;
+    return activeTrack?.artwork ?? activeTrack?.associatedArtwork ?? null;
   });
   const availableLyricFormats = computed(() => {
     const formats = activeLyrics.value?.lyrics.map((variant) => variant.format) ?? [];

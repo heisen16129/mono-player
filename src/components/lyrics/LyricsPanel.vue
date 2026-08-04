@@ -95,7 +95,6 @@ defineExpose({ panel });
   overflow-y: auto;
   padding: var(--lyrics-anchor-padding-top, 32%) 34px var(--lyrics-anchor-padding-bottom, 42%) 0;
   color: var(--smw-text-secondary);
-  scroll-behavior: smooth;
   text-align: center;
   scrollbar-width: none;
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AddToPlaylistDialog from './AddToPlaylistDialog.vue';
+import CoverCropDialog from './CoverCropDialog.vue';
 import PlaylistDialog from './PlaylistDialog.vue';
 import ScanDialog from './ScanDialog.vue';
 import TrackMetadataDialog from './TrackMetadataDialog.vue';
@@ -19,6 +20,14 @@ defineEmits<AppDialogsEmits>();
     :track="metadataEditingTrack"
     @close="$emit('closeTrackMetadataDialog')"
     @save="$emit('saveTrackMetadata', $event)"
+  />
+
+  <CoverCropDialog
+    v-if="coverCropTrack && coverCropImagePath"
+    :image-path="coverCropImagePath"
+    :saving="isSavingCoverCrop"
+    @close="$emit('closeCoverCropDialog')"
+    @confirm="$emit('saveCoverCrop', $event)"
   />
 
   <AddToPlaylistDialog

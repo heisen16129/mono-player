@@ -55,10 +55,16 @@ export function usePlayerDockProgress({
     }
   }
 
-  function stopSmoothProgress() {
-    if (!smoothProgressFrame) return;
-    window.cancelAnimationFrame(smoothProgressFrame);
+  function stopSmoothProgress(syncExternal = true) {
+    if (smoothProgressFrame) {
+      window.cancelAnimationFrame(smoothProgressFrame);
+    }
     smoothProgressFrame = 0;
+    syncSmoothProgressBase();
+    if (syncExternal) {
+      lastSmoothTimeEmit = smoothProgressBaseTime;
+      onTimeChange(currentTime.value);
+    }
   }
 
   function startSmoothProgress() {

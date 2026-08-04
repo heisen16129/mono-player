@@ -463,11 +463,16 @@ const {
 const {
   applyTrackCoverRefresh,
   changeTrackCover,
+  closeCoverCropDialog,
   closeTrackMetadataDialog,
+  coverCropImagePath,
+  coverCropTrack,
+  isSavingCoverCrop,
   isSavingTrackMetadata,
   metadataEditingTrack,
   openTrackMetadataDialog,
   refreshLocalTrackDuration,
+  saveCoverCrop,
   saveTrackMetadata,
   trackMetadataError,
 } = useTrackMetadataDialog({
@@ -476,6 +481,7 @@ const {
   canRefreshTrackDuration,
   closeContextMenus,
   currentPlaybackTrack,
+  isAudioPlaying,
   onlineActiveTrack,
   player,
   rustPlaybackQueue,
@@ -797,10 +803,13 @@ const {
 const { appDialogsListeners, appDialogsProps } = useAppDialogsBindings({
   props: {
     addToPlaylistTrack: () => addToPlaylistTrack.value,
+    coverCropImagePath: () => coverCropImagePath.value,
+    coverCropTrack: () => coverCropTrack.value,
     editingPlaylistId: () => editingPlaylistId.value,
     isCancelingScan: () => isCancelingScan.value,
     isConfirmingScan: () => isConfirmingScan.value,
     isPlaylistDialogOpen: () => isPlaylistDialogOpen.value,
+    isSavingCoverCrop: () => isSavingCoverCrop.value,
     isSavingTrackMetadata: () => isSavingTrackMetadata.value,
     isScanDialogOpen: () => isScanDialogOpen.value,
     locale: () => player.settings.locale,
@@ -820,6 +829,7 @@ const { appDialogsListeners, appDialogsProps } = useAppDialogsBindings({
       newPlaylistName.value = value;
     },
     onCloseAddToPlaylistDialog: closeAddToPlaylistDialog,
+    onCloseCoverCropDialog: closeCoverCropDialog,
     onCloseCreatePlaylistDialog: closeCreatePlaylistDialog,
     onCloseScanDialog: closeScanDialog,
     onCloseTrackMetadataDialog: closeTrackMetadataDialog,
@@ -828,6 +838,7 @@ const { appDialogsListeners, appDialogsProps } = useAppDialogsBindings({
     onOpenCreatePlaylistFromAddDialog: openCreatePlaylistFromAddDialog,
     onRemoveScanFolder: removeScanFolder,
     onSaveTrackMetadata: saveTrackMetadata,
+    onSaveCoverCrop: saveCoverCrop,
     onUpdateScanFolderChecked: updateScanFolderChecked,
   } satisfies AppDialogsListeners,
 });
