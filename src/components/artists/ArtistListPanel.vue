@@ -102,7 +102,17 @@ watch(
 
 <style scoped>
 .artists-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 18px 20px 20px;
+  overflow: hidden;
+  border-right: 1px solid var(--smw-library-border);
+  background: var(--smw-library-bg);
 }
 
 .artists-list {
@@ -115,5 +125,4 @@ watch(
   margin-right: -12px;
   padding-right: 12px;
 }
-
 </style>

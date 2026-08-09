@@ -7,6 +7,7 @@ interface ReadonlyRefValue<T> {
 
 interface UseNavigationAvailabilityGuardsOptions {
   activeView: ReadonlyRefValue<AppView>;
+  hasMusicSourcePlugin: ReadonlyRefValue<boolean>;
   pluginsEnabled: ReadonlyRefValue<boolean>;
   shouldShowDownloadsMenu: ReadonlyRefValue<boolean>;
   returnToLocalLibrary: () => void;
@@ -14,6 +15,7 @@ interface UseNavigationAvailabilityGuardsOptions {
 
 export function useNavigationAvailabilityGuards({
   activeView,
+  hasMusicSourcePlugin,
   pluginsEnabled,
   shouldShowDownloadsMenu,
   returnToLocalLibrary,
@@ -22,6 +24,14 @@ export function useNavigationAvailabilityGuards({
     () => pluginsEnabled.value,
     (enabled) => {
       if (enabled || !['discover', 'plugins'].includes(activeView.value)) return;
+      returnToLocalLibrary();
+    },
+  );
+
+  watch(
+    () => hasMusicSourcePlugin.value,
+    (available) => {
+      if (available || activeView.value !== 'discover') return;
       returnToLocalLibrary();
     },
   );

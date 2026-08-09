@@ -188,6 +188,7 @@ pub fn run() {
             plugins::read_plugin_metadata_normalized,
             plugins::build_plugin_manifest_from_catalog,
             plugins::build_local_plugin_manifest,
+            plugins::remove_plugin_package,
             plugins::search_plugin,
             plugins::resolve_plugin_playback_plan,
             plugins::resolve_plugin_playback_qualities,

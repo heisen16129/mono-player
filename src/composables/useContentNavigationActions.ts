@@ -5,6 +5,7 @@ interface ReadonlyRefValue<T> {
 }
 
 interface UseContentNavigationActionsOptions {
+  hasMusicSourcePlugin: ReadonlyRefValue<boolean>;
   pluginsEnabled: ReadonlyRefValue<boolean>;
   onlineResolvingTrackKey: Ref<string | null>;
   openDiscoverView: () => void;
@@ -15,6 +16,7 @@ interface UseContentNavigationActionsOptions {
 }
 
 export function useContentNavigationActions({
+  hasMusicSourcePlugin,
   pluginsEnabled,
   onlineResolvingTrackKey,
   openDiscoverView,
@@ -44,12 +46,13 @@ export function useContentNavigationActions({
   }
 
   function openDiscoverMusicView() {
-    if (!pluginsEnabled.value) return;
+    if (!pluginsEnabled.value || !hasMusicSourcePlugin.value) return;
     openDiscoverView();
     clearOnlineNavigationState();
   }
 
   function handleOnlineSearchStarted() {
+    if (!pluginsEnabled.value || !hasMusicSourcePlugin.value) return;
     openDiscoverView();
   }
 

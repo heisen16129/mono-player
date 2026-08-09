@@ -2,6 +2,7 @@ import { computed } from 'vue';
 import { t } from '../i18n';
 import type { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
+import { artistNames } from '../utils/artist';
 import { folderTitle, normalizePath } from '../utils/path';
 import type { LibraryCollection, LibraryFilter } from './useLibraryNavigation';
 
@@ -36,10 +37,14 @@ export function useLibraryCatalog({
     });
 
     for (const track of allVisibleTracks.value) {
-      const artist = track.artist?.trim() || t(player.settings.locale, 'unknownArtist');
+      const names = artistNames(track.artist);
+      const artists = names.length > 0 ? names : [t(player.settings.locale, 'unknownArtist')];
+
+      for (const artist of artists) {
       const tracks = groups.get(artist) ?? [];
       tracks.push(track);
       groups.set(artist, tracks);
+      }
     }
 
     return [...groups.entries()]

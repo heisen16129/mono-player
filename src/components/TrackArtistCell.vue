@@ -1,27 +1,31 @@
 <script setup lang="ts">
 defineProps<{
-  artistName: string;
+  artistNames: string[];
   enableLink?: boolean;
 }>();
 
 defineEmits<{
-  openArtist: [];
+  openArtist: [artistName: string];
 }>();
 </script>
 
 <template>
   <span
     v-if="enableLink"
-    class="track-artist-cell track-artist-link"
-    role="button"
-    tabindex="0"
-    @click.stop="$emit('openArtist')"
-    @keydown.enter.stop.prevent="$emit('openArtist')"
-    @keydown.space.stop.prevent="$emit('openArtist')"
+    class="track-artist-cell track-artist-links"
   >
-    {{ artistName }}
+    <template v-for="(artistName, index) in artistNames" :key="`${artistName}-${index}`">
+      <span v-if="index > 0" class="track-artist-separator">&</span>
+      <button
+        class="track-artist-link"
+        type="button"
+        @click.stop="$emit('openArtist', artistName)"
+      >
+        {{ artistName }}
+      </button>
+    </template>
   </span>
-  <span v-else class="track-artist-cell">{{ artistName }}</span>
+  <span v-else class="track-artist-cell">{{ artistNames.join(' & ') }}</span>
 </template>
 
 <style scoped>
@@ -33,14 +37,30 @@ defineEmits<{
   white-space: nowrap;
 }
 
-.track-artist-link {
+.track-artist-links {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  width: fit-content;
+  gap: 4px;
   max-width: 100%;
+}
+
+.track-artist-separator {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--smw-text-secondary) 72%, transparent);
+}
+
+.track-artist-link {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
   cursor: pointer;
+  font: inherit;
+  overflow: hidden;
   text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .track-artist-link:hover {

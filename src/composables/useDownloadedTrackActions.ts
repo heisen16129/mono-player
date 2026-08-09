@@ -1,4 +1,5 @@
 import type { Ref } from 'vue';
+import type { DownloadTrackOptions } from './useDownloadController';
 import type { DownloadItem, Track } from '../types/music';
 import { createDownloadTrack } from '../utils/downloadedTrack';
 import { dedupePlaybackQueue, isRemoteTrack } from '../utils/playback';
@@ -11,7 +12,8 @@ interface UseDownloadedTrackActionsOptions {
   downloadItems: ReadonlyRefValue<DownloadItem[]>;
   onlineActiveTrack: ReadonlyRefValue<Track | null>;
   rustPlaybackQueue: Ref<Track[]>;
-  downloadTrack: (track: Track) => void;
+  downloadTrack: (track: Track, options?: DownloadTrackOptions) => void;
+  getActiveDownloadOptions: () => DownloadTrackOptions;
   openAddToPlaylistDialog: (track: Track) => void;
   queueTrackNext: (track: Track) => void;
   startRustPlaybackQueue: (tracks: Track[], requestedTrack: Track | null, startPosition?: number) => Promise<boolean>;
@@ -22,6 +24,7 @@ export function useDownloadedTrackActions({
   onlineActiveTrack,
   rustPlaybackQueue,
   downloadTrack,
+  getActiveDownloadOptions,
   openAddToPlaylistDialog,
   queueTrackNext,
   startRustPlaybackQueue,
@@ -44,7 +47,7 @@ export function useDownloadedTrackActions({
 
   function downloadActiveOnlineTrack() {
     if (!onlineActiveTrack.value || !isRemoteTrack(onlineActiveTrack.value)) return;
-    downloadTrack(onlineActiveTrack.value);
+    downloadTrack(onlineActiveTrack.value, getActiveDownloadOptions());
   }
 
   return {

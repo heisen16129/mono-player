@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { t } from '../../i18n';
 import type { Locale, Track } from '../../types/music';
+import { artistLabel } from '../../utils/artist';
 import TrackCoverThumb from '../TrackCoverThumb.vue';
 import PlaybackQueueTrackDuration from './PlaybackQueueTrackDuration.vue';
 import PlaybackQueueTrackInfo from './PlaybackQueueTrackInfo.vue';
@@ -47,7 +48,7 @@ const emit = defineEmits<{
       :loading="isLoading"
       :spectrum-levels="spectrumLevels"
     />
-    <PlaybackQueueTrackInfo :artist="track.artist || t(locale, 'unknownArtist')" :title="track.title" />
+    <PlaybackQueueTrackInfo :artist="artistLabel(track.artist, t(locale, 'unknownArtist'))" :title="track.title" />
     <PlaybackQueueTrackDuration :duration="track.duration" />
   </button>
 </template>

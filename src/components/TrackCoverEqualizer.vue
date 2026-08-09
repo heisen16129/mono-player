@@ -1,60 +1,97 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import type { TrackCoverEqualizerBarOptions, TrackCoverEqualizerBarStyle, TrackCoverEqualizerProps } from '../types/trackCoverEqualizer';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import type { TrackCoverEqualizerBarStyle, TrackCoverEqualizerProps } from '../types/trackCoverEqualizer';
 
-const PLAYING_BAR_HEIGHTS = [8, 12, 17, 12, 8];
-const PAUSED_BAR_HEIGHT = 12;
-const PAUSED_BAR_SCALE = 0.16;
+const BAR_COUNT = 5;
+const BASELINE_SCALE = 2 / 34;
+const MAX_PLAY_SCALE = 1 / 3;
+const ATTACK_SMOOTHING = 0.42;
+const RELEASE_SMOOTHING = 0.16;
+const PAUSE_DECAY = 0.08;
+const FFT_LOG_GAIN = 0;
+const SPECTRUM_RESPONSE_POWER = 2.1;
+const SPECTRUM_ACTIVE_THRESHOLD = 0.015;
+const SPECTRUM_ACTIVE_FLOOR = 0.12;
+const SETTLE_EPSILON = 0.004;
 
 const props = defineProps<TrackCoverEqualizerProps>();
 
-const lastSpectrumDebugAt = ref(0);
+const barScales = ref<number[]>(Array.from({ length: BAR_COUNT }, () => BASELINE_SCALE));
+let animationFrame = 0;
 
 const spectrumBars = computed<TrackCoverEqualizerBarStyle[]>(() => {
-  return createTrackCoverEqualizerBars(props);
+  if (props.loading) return Array.from({ length: BAR_COUNT }, () => ({}));
+  return barScales.value.map((scale) => ({ transform: `scaleY(${scale})` }));
 });
 
-function createTrackCoverEqualizerBars(options: TrackCoverEqualizerBarOptions): TrackCoverEqualizerBarStyle[] {
-  return PLAYING_BAR_HEIGHTS.map((height, index) => createTrackCoverEqualizerBarStyle(options, height, index));
+function normalizeSpectrumLevel(value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  const clamped = Math.max(0, Math.min(1, value));
+  if (FFT_LOG_GAIN <= 0) return clamped;
+  return Math.log1p(clamped * FFT_LOG_GAIN) / Math.log1p(FFT_LOG_GAIN);
 }
 
-function createTrackCoverEqualizerBarStyle(
-  { loading, playing, spectrumLevels }: TrackCoverEqualizerBarOptions,
-  playingBarHeight: number,
-  index: number,
-): TrackCoverEqualizerBarStyle {
-  if (loading) return {};
-  if (!playing) return {};
+function responseLevel(level: number) {
+  if (level <= SPECTRUM_ACTIVE_THRESHOLD) return 0;
+  const audibleLevel = (level - SPECTRUM_ACTIVE_THRESHOLD) / (1 - SPECTRUM_ACTIVE_THRESHOLD);
+  return SPECTRUM_ACTIVE_FLOOR + (1 - SPECTRUM_ACTIVE_FLOOR) * Math.pow(audibleLevel, SPECTRUM_RESPONSE_POWER);
+}
 
-  const fallback = [0.38, 0.72, 0.52, 0.82, 0.42];
-  const value = spectrumLevels?.[index];
-  const level = typeof value === 'number' && Number.isFinite(value)
-    ? Math.max(0.08, Math.min(1, value))
-    : fallback[index];
-  const minScale = (PAUSED_BAR_HEIGHT * PAUSED_BAR_SCALE) / playingBarHeight;
+function targetScale(index: number) {
+  const level = normalizeSpectrumLevel(props.spectrumLevels?.[index]);
+  return BASELINE_SCALE + (MAX_PLAY_SCALE - BASELINE_SCALE) * responseLevel(level);
+}
 
-  return {
-    transform: `scaleY(${Math.min(1, Math.max(minScale, level * 0.5))})`,
-  };
+function isSettledAtBaseline(scales: number[]) {
+  return scales.every((scale) => Math.abs(scale - BASELINE_SCALE) <= SETTLE_EPSILON);
+}
+
+function requestAnimation() {
+  if (animationFrame) return;
+  animationFrame = window.requestAnimationFrame(animateBars);
+}
+
+function animateBars() {
+  animationFrame = 0;
+
+  if (props.loading) return;
+
+  const nextScales = barScales.value.map((current, index) => {
+    if (!props.playing) {
+      if (current <= BASELINE_SCALE + SETTLE_EPSILON) return BASELINE_SCALE;
+      return Math.max(BASELINE_SCALE, current + (BASELINE_SCALE - current) * PAUSE_DECAY);
+    }
+
+    const target = targetScale(index);
+    const smoothing = target > current ? ATTACK_SMOOTHING : RELEASE_SMOOTHING;
+    return Math.max(BASELINE_SCALE, current + (target - current) * smoothing);
+  });
+
+  barScales.value = nextScales;
+
+  if (props.playing || !isSettledAtBaseline(nextScales)) {
+    requestAnimation();
+  }
 }
 
 watch(
-  () => [props.playing, props.spectrumLevels] as const,
-  ([playing, levels]) => {
-    if (!playing) return;
-    const now = window.performance.now();
-    if (now - lastSpectrumDebugAt.value < 1000) return;
-    lastSpectrumDebugAt.value = now;
-    const peak = (levels ?? []).reduce((max, value) => Math.max(max, value), 0);
-    console.debug('[cover-spectrum]', {
-      trackId: props.trackId,
-      title: props.trackTitle,
-      peak,
-      levels: levels ?? [],
-      bars: spectrumBars.value,
-    });
+  () => props.playing,
+  () => requestAnimation(),
+  { immediate: true },
+);
+
+watch(
+  () => props.spectrumLevels,
+  () => {
+    if (props.playing) requestAnimation();
   },
 );
+
+onBeforeUnmount(() => {
+  if (animationFrame) {
+    window.cancelAnimationFrame(animationFrame);
+  }
+});
 </script>
 
 <template>
@@ -71,7 +108,7 @@ watch(
   top: 50%;
   display: inline-flex;
   width: 18px;
-  height: 17px;
+  height: 100%;
   align-items: center;
   justify-content: center;
   gap: 1px;
@@ -81,52 +118,23 @@ watch(
 
 .cover-equalizer i {
   width: 2px;
-  height: 17px;
-  border-radius: 3px;
+  height: 100%;
+  border-radius: 999px;
   background: currentColor;
-  box-shadow: 0 0 8px color-mix(in srgb, currentColor 38%, transparent);
   opacity: 0.96;
   transform-origin: center;
   transition: transform 90ms linear;
 }
 
-.cover-equalizer i:nth-child(1) {
-  height: 8px;
-}
-
-.cover-equalizer i:nth-child(2) {
-  height: 12px;
-}
-
-.cover-equalizer i:nth-child(3) {
-  height: 17px;
-}
-
-.cover-equalizer i:nth-child(4) {
-  height: 12px;
-}
-
-.cover-equalizer i:nth-child(5) {
-  height: 8px;
-}
-
-.cover-equalizer:not(.is-playing):not(.is-loading) i {
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  box-shadow: none;
-  opacity: 1;
-  transform: none;
-}
-
 .cover-equalizer.is-playing i {
-  border-radius: 4px;
+  border-radius: 999px;
   transition-duration: 70ms;
 }
 
 .cover-equalizer.is-loading i {
-  height: 17px;
-  transform: scaleY(0.16);
+  height: 100%;
+  opacity: 0.72;
+  transform: scaleY(0.06);
 }
 
 .cover-equalizer.is-loading i:nth-child(1) {
@@ -150,27 +158,27 @@ watch(
 }
 
 @keyframes cover-loading-wave-1 {
-  0%, 32%, 100% { transform: scaleY(0.16); }
-  16% { transform: scaleY(0.5); }
+  0%, 32%, 100% { transform: scaleY(0.06); }
+  16% { transform: scaleY(0.333333); }
 }
 
 @keyframes cover-loading-wave-2 {
-  0%, 12%, 44%, 100% { transform: scaleY(0.16); }
-  28% { transform: scaleY(0.5); }
+  0%, 12%, 44%, 100% { transform: scaleY(0.06); }
+  28% { transform: scaleY(0.333333); }
 }
 
 @keyframes cover-loading-wave-3 {
-  0%, 24%, 56%, 100% { transform: scaleY(0.16); }
-  40% { transform: scaleY(0.5); }
+  0%, 24%, 56%, 100% { transform: scaleY(0.06); }
+  40% { transform: scaleY(0.333333); }
 }
 
 @keyframes cover-loading-wave-4 {
-  0%, 36%, 68%, 100% { transform: scaleY(0.16); }
-  52% { transform: scaleY(0.5); }
+  0%, 36%, 68%, 100% { transform: scaleY(0.06); }
+  52% { transform: scaleY(0.333333); }
 }
 
 @keyframes cover-loading-wave-5 {
-  0%, 48%, 80%, 100% { transform: scaleY(0.16); }
-  64% { transform: scaleY(0.5); }
+  0%, 48%, 80%, 100% { transform: scaleY(0.06); }
+  64% { transform: scaleY(0.333333); }
 }
 </style>

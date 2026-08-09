@@ -13,6 +13,7 @@ import TrackDurationCell from './TrackDurationCell.vue';
 import TrackIndexCell from './TrackIndexCell.vue';
 import TrackRowActions from './TrackRowActions.vue';
 import TrackTitleCell from './TrackTitleCell.vue';
+import { artistNames } from '../utils/artist';
 
 const props = defineProps<TrackTableRowProps>();
 
@@ -36,6 +37,11 @@ const trackRowActionsListeners: TrackRowActionsListeners = {
   onDownloadTrack: (...args) => emit('downloadTrack', ...args),
   onToggleFavorite: (...args) => emit('toggleFavorite', ...args),
 };
+
+const displayArtistNames = computed(() => {
+  const names = artistNames(props.track.artist);
+  return names.length > 0 ? names : [props.unknownArtistLabel];
+});
 </script>
 
 <template>
@@ -59,7 +65,7 @@ const trackRowActionsListeners: TrackRowActionsListeners = {
       :spectrum-levels="active ? spectrumLevels : []"
       :track="track"
     />
-    <TrackArtistCell :artist-name="track.artist || unknownArtistLabel" :enable-link="enableArtistLinks" @open-artist="$emit('openArtist', track)" />
+    <TrackArtistCell :artist-names="displayArtistNames" :enable-link="enableArtistLinks" @open-artist="$emit('openArtist', $event)" />
     <TrackAlbumCell :album="track.album" :fallback="localMusicLabel" />
     <TrackDurationCell :duration="track.duration" />
     <span v-if="extraColumns" class="track-extra-cells">

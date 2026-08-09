@@ -2,12 +2,19 @@ import { useDownloadState } from './useDownloadState';
 import { deleteDownloadedTrackFile, enqueueDownloadOnlineTrack, openDownloadedTrackInFolder, type DownloadOnlineTrackRequest, type DownloadQueueEvent } from '../services/downloads';
 import { isTauriRuntime } from '../services/music';
 import { usePlayerStore } from '../stores/player';
-import type { DownloadItem, Track } from '../types/music';
+import type { DownloadItem, Track, TrackLyrics } from '../types/music';
+import { artistLabel } from '../utils/artist';
 import { getErrorMessage } from '../utils/error';
 
 interface UseDownloadControllerOptions {
   closeContextMenus: () => void;
   showToast: (message: string, variant?: 'success' | 'error') => void;
+}
+
+export interface DownloadTrackOptions {
+  preferredQuality?: string | null;
+  lyricFormat?: string | null;
+  trackLyrics?: TrackLyrics | null;
 }
 
 export function useDownloadController({ closeContextMenus, showToast }: UseDownloadControllerOptions) {
@@ -43,7 +50,7 @@ export function useDownloadController({ closeContextMenus, showToast }: UseDownl
           lyricsPath: item.lyricsPath,
           downloadDir: player.settings.downloadDir,
           title: item.title,
-          artist: item.artist,
+          artist: artistLabel(item.artist, ''),
         });
       } catch (error) {
         showToast(`删除失败：${getErrorMessage(error)}`);
@@ -71,7 +78,7 @@ export function useDownloadController({ closeContextMenus, showToast }: UseDownl
         lyricsPath: item.lyricsPath,
         downloadDir: player.settings.downloadDir,
         title: item.title,
-        artist: item.artist,
+        artist: artistLabel(item.artist, ''),
       });
     } catch (error) {
       player.error = getErrorMessage(error);
@@ -111,7 +118,7 @@ export function useDownloadController({ closeContextMenus, showToast }: UseDownl
     await enqueueDownloadItemRequest(item, '继续下载');
   }
 
-  function downloadTrack(track: Track) {
+  function downloadTrack(track: Track, options: DownloadTrackOptions = {}) {
     const sourceName = track.sourceName ?? '本地';
     const sourceId = track.sourceId ?? String(track.id);
     const itemId = getDownloadTrackKey(track);
@@ -153,15 +160,18 @@ export function useDownloadController({ closeContextMenus, showToast }: UseDownl
     }
 
     showToast(`已添加到下载队列：${track.title}`, 'success');
-    void prepareAndEnqueueDownload(track, item);
+    void prepareAndEnqueueDownload(track, item, options);
   }
 
-  async function prepareAndEnqueueDownload(track: Track, item: DownloadItem) {
+  async function prepareAndEnqueueDownload(track: Track, item: DownloadItem, options: DownloadTrackOptions) {
     try {
       const downloadRequest: DownloadOnlineTrackRequest = {
         taskId: item.id,
         downloadDir: player.settings.downloadDir,
+        preferredQuality: options.preferredQuality ?? null,
         qualityFallback: player.settings.qualityFallback,
+        lyricFormat: options.lyricFormat ?? null,
+        trackLyrics: options.trackLyrics ?? null,
         track,
       };
       updateDownloadItem(item.id, { downloadRequest });

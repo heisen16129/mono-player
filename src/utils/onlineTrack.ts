@@ -1,12 +1,13 @@
 import type { Track, TrackLyrics } from '../types/music';
 import type { PluginSearchTrack } from '../types/plugin';
+import { artistNames, type TrackArtistValue } from './artist';
 import { pluginSearchTrackId, pluginSearchTrackKey } from './trackKey';
 
 interface OnlinePlaybackSource {
   url?: string;
   path?: string;
   title?: string;
-  artist?: string;
+  artist?: TrackArtistValue;
   album?: string;
   duration?: number | null;
   artwork?: string | null;
@@ -47,7 +48,7 @@ export function createOnlineQueueTrack(track: PluginSearchTrack, source?: Online
     id: pluginSearchTrackId(track),
     path: source?.path ?? source?.url ?? `plugin://${track.providerId}/${encodeURIComponent(track.id)}`,
     title: source?.title ?? track.title,
-    artist: source?.artist ?? track.artist,
+    artist: artistNames(source?.artist ?? track.artist),
     album: source?.album ?? track.album,
     duration: source?.duration ?? track.duration,
     artwork: source?.artwork ?? track.artwork ?? null,
@@ -87,7 +88,7 @@ export function findPluginTrackForQueueTrack(track: Track, candidates: OnlineTra
     providerId: track.sourceProviderId,
     providerName: track.sourceName ?? track.sourceProviderId,
     title: track.title,
-    artist: track.artist ?? '',
+    artist: track.artist ?? [],
     album: track.album ?? '',
     duration: track.duration,
     artwork: track.artwork ?? null,

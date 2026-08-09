@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { FolderOpen, ListPlus, PauseCircle, PlayCircle, RotateCcw, Trash2, XCircle } from '@lucide/vue';
 import type { DownloadItemContextMenuEmits, DownloadItemContextMenuProps } from '../types/downloadManager';
+import { artistLabel } from '../utils/artist';
 import BaseContextMenu from './BaseContextMenu.vue';
 import ContextMenuAction from './ContextMenuAction.vue';
 import TrackContextMenuMeta from './TrackContextMenuMeta.vue';
@@ -15,7 +16,7 @@ const emit = defineEmits<DownloadItemContextMenuEmits>();
   <BaseContextMenu :x="menu.x" :y="menu.y">
     <TrackContextMenuMeta
       :album-label="menu.item.album || '本地下载'"
-      :artist-label="menu.item.artist || '未知作者'"
+      :artist-label="artistLabel(menu.item.artist, '未知作者')"
       :source-id="menu.item.sourceId"
       :source-label="menu.item.sourceName"
     />

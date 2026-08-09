@@ -3,6 +3,7 @@ import { CheckCircle2, Clock3, Download, FolderOpen, Heart, ImagePlus, ListPlus,
 import { resolveLocale, t } from '../i18n';
 import type { TrackContextMenuEmits, TrackContextMenuProps } from '../types/appContextMenus';
 import type { Track } from '../types/music';
+import { artistLabel } from '../utils/artist';
 import BaseContextMenu from './BaseContextMenu.vue';
 import ContextMenuAction from './ContextMenuAction.vue';
 import TrackContextMenuMeta from './TrackContextMenuMeta.vue';
@@ -35,7 +36,7 @@ function pluginIdFromPath(path: string) {
   <BaseContextMenu :x="menu.x" :y="menu.y">
     <TrackContextMenuMeta
       :album-label="menu.track.album || t(locale, 'localMusic')"
-      :artist-label="menu.track.artist || t(locale, 'unknownArtist')"
+      :artist-label="artistLabel(menu.track.artist, t(locale, 'unknownArtist'))"
       :source-id="getTrackSourceId(menu.track)"
       :source-label="getTrackSourceLabel(menu.track)"
     />

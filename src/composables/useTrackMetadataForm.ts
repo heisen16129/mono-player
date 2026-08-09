@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import type { Track } from '../types/music';
+import { artistLabel } from '../utils/artist';
 
 export interface TrackMetadataFormValue {
   title: string;
@@ -24,7 +25,7 @@ export function useTrackMetadataForm(track: Track) {
 
   function resetForm(nextTrack: Track) {
     title.value = nextTrack.title ?? '';
-    artist.value = nextTrack.artist ?? '';
+    artist.value = artistLabel(nextTrack.artist, '');
     album.value = nextTrack.album ?? '';
     year.value = nextTrack.year ? String(nextTrack.year) : '';
     genre.value = nextTrack.genre ?? '';

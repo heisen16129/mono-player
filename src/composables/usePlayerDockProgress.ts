@@ -3,6 +3,9 @@ import { seekRustBackend } from '../services/playerBackend';
 import type { Track } from '../types/music';
 import { formatDuration } from '../utils/format';
 
+const SEEK_SETTLE_TOLERANCE_SECONDS = 0.75;
+const SEEK_STALE_POSITION_HOLD_MS = 1800;
+
 interface PlayerDockProgressOptions {
   activeTrack: ComputedRef<Track | null>;
   isPlaying: Ref<boolean>;
@@ -31,6 +34,8 @@ export function usePlayerDockProgress({
   let smoothProgressBaseTime = 0;
   let smoothProgressBasePosition = 0;
   let lastSmoothTimeEmit = 0;
+  let pendingSeekTarget: number | null = null;
+  let pendingSeekStartedAt = 0;
 
   const totalDuration = computed(() => activeTrack.value?.duration || runtimeDuration.value || 0);
   const hasTotalDuration = computed(() => totalDuration.value > 0);
@@ -67,6 +72,33 @@ export function usePlayerDockProgress({
     }
   }
 
+  function beginPendingSeek(target: number) {
+    pendingSeekTarget = Math.max(0, target);
+    pendingSeekStartedAt = window.performance.now();
+  }
+
+  function clearPendingSeek() {
+    pendingSeekTarget = null;
+    pendingSeekStartedAt = 0;
+  }
+
+  function shouldIgnoreRustSeekPosition(position: number) {
+    if (pendingSeekTarget === null) return false;
+
+    const now = window.performance.now();
+    if (Math.abs(position - pendingSeekTarget) <= SEEK_SETTLE_TOLERANCE_SECONDS) {
+      clearPendingSeek();
+      return false;
+    }
+
+    if (now - pendingSeekStartedAt <= SEEK_STALE_POSITION_HOLD_MS) {
+      return true;
+    }
+
+    clearPendingSeek();
+    return false;
+  }
+
   function startSmoothProgress() {
     if (!canAdvancePlaybackTime.value) return;
     if (smoothProgressFrame) return;
@@ -100,6 +132,12 @@ export function usePlayerDockProgress({
     }
 
     const nextPosition = Math.max(0, position);
+    if (shouldIgnoreRustSeekPosition(nextPosition)) {
+      currentTime.value = pendingSeekTarget ?? currentTime.value;
+      syncSmoothProgressBase();
+      return;
+    }
+
     const now = window.performance.now();
     const estimatedPosition = smoothProgressBasePosition + ((now - smoothProgressBaseTime) / 1000) * playbackRate.value;
 
@@ -127,17 +165,20 @@ export function usePlayerDockProgress({
 
   async function commitSeekAudio() {
     if (!totalDuration.value) return;
+    const seekTime = currentTime.value;
     isScrubbingProgress.value = false;
-    onTimeChange(currentTime.value);
+    beginPendingSeek(seekTime);
+    onTimeChange(seekTime);
     if (!rustBackendActive.value) return;
 
     try {
-      await seekRustBackend(currentTime.value);
-      syncSmoothProgressBase();
+      await seekRustBackend(seekTime);
+      setPlaybackTime(seekTime, false);
       if (isPlaying.value) {
         startSmoothProgress();
       }
     } catch (error) {
+      clearPendingSeek();
       onError(error);
     }
   }
@@ -151,9 +192,11 @@ export function usePlayerDockProgress({
     }
 
     try {
+      beginPendingSeek(seconds);
       await seekRustBackend(seconds);
       setPlaybackTime(seconds);
     } catch (error) {
+      clearPendingSeek();
       onError(error);
     }
   }

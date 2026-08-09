@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -6,6 +6,7 @@ pub(crate) struct Track {
     pub(crate) id: i64,
     pub(crate) path: String,
     pub(crate) title: String,
+    #[serde(default, deserialize_with = "deserialize_artist_string")]
     pub(crate) artist: Option<String>,
     pub(crate) album: Option<String>,
     pub(crate) duration: Option<u64>,
@@ -32,6 +33,38 @@ pub(crate) struct Track {
     pub(crate) source_provider_id: Option<String>,
     #[serde(rename = "sourceRaw")]
     pub(crate) source_raw: Option<serde_json::Value>,
+}
+
+pub(crate) fn deserialize_artist_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(normalize_artist_value(value.as_ref()))
+}
+
+fn normalize_artist_value(value: Option<&serde_json::Value>) -> Option<String> {
+    match value? {
+        serde_json::Value::String(artist) => non_empty_artist(artist),
+        serde_json::Value::Array(artists) => {
+            let names = artists
+                .iter()
+                .filter_map(|artist| artist.as_str())
+                .filter_map(non_empty_artist)
+                .collect::<Vec<_>>();
+            (!names.is_empty()).then(|| names.join(" & "))
+        }
+        _ => None,
+    }
+}
+
+fn non_empty_artist(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

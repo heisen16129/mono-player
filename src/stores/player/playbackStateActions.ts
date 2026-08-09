@@ -2,6 +2,7 @@ import { computed, type Ref } from 'vue';
 import { resolveLocale } from '../../i18n';
 import { toAudioSource } from '../../services/music';
 import type { PlaybackMode, PlayerSettings, Track } from '../../types/music';
+import { artistLabel } from '../../utils/artist';
 
 interface PlayerPlaybackStateActionsOptions {
   currentTrack: Ref<Track | null>;
@@ -25,7 +26,7 @@ export function createPlayerPlaybackStateActions({
     if (!needle) return tracks.value;
 
     return tracks.value.filter((track) => {
-      return [track.title, track.artist]
+      return [track.title, artistLabel(track.artist, '')]
         .filter(Boolean)
         .some((value) => value!.toLocaleLowerCase().includes(needle));
     });

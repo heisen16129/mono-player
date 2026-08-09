@@ -2,6 +2,7 @@ import { watch } from 'vue';
 import { isTauriRuntime } from '../services/music';
 import { clearSystemMedia, updateSystemMedia } from '../services/systemMedia';
 import type { Track } from '../types/music';
+import { artistLabel } from '../utils/artist';
 
 interface ReadonlyRefValue<T> {
   readonly value: T;
@@ -34,7 +35,7 @@ export function useSystemMediaSync({
     const syncKey = [
       track.id,
       track.title,
-      track.artist ?? '',
+      artistLabel(track.artist, ''),
       track.album ?? '',
       track.artwork ?? '',
       track.duration ?? '',
@@ -49,7 +50,7 @@ export function useSystemMediaSync({
 
     await updateSystemMedia({
       title: track.title || 'Mono Player',
-      artist: track.artist,
+      artist: artistLabel(track.artist, ''),
       album: track.album,
       artwork: normalizeSystemMediaArtwork(track.artwork),
       trackPath: track.path,

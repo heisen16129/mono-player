@@ -65,7 +65,7 @@ pub struct PluginSearchTrack {
     provider_id: String,
     provider_name: String,
     title: String,
-    artist: String,
+    artist: Vec<String>,
     album: String,
     duration: Option<u64>,
     artwork: Option<String>,
@@ -287,12 +287,14 @@ pub fn read_plugin_metadata_normalized(
 
 #[tauri::command]
 pub fn build_plugin_manifest_from_catalog(
+    app: AppHandle,
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     item: PluginCatalogItem,
     installed_at: String,
     enabled: bool,
 ) -> ApiResponse<PluginManifest> {
     ApiResponse::from_result(build_plugin_manifest_from_catalog_inner(
+        &app,
         worker,
         item,
         installed_at,
@@ -301,6 +303,7 @@ pub fn build_plugin_manifest_from_catalog(
 }
 
 fn build_plugin_manifest_from_catalog_inner(
+    app: &AppHandle,
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     item: PluginCatalogItem,
     installed_at: String,
@@ -312,13 +315,15 @@ fn build_plugin_manifest_from_catalog_inner(
         read_plugin_metadata_backend(&worker, item.entry.clone(), Some(item.permissions.clone()))?;
 
     let capabilities = required_metadata_list(metadata.capabilities, "capabilities")?;
+    let id = required_metadata_field(metadata.id, "id")?;
+    let entry = install_plugin_wasm_package(app, &id, &item.entry)?;
     Ok(PluginManifest {
-        id: required_metadata_field(metadata.id, "id")?,
+        id,
         name: required_metadata_field(metadata.name, "name")?,
         version: required_metadata_field(metadata.version, "version")?,
         kind: required_metadata_field(metadata.kind, "kind")?,
         runtime: "wasm".to_string(),
-        entry: item.entry,
+        entry,
         author: required_metadata_field(metadata.author, "author")?,
         description: required_metadata_field(metadata.description, "description")?,
         icon: metadata.icon,
@@ -337,12 +342,14 @@ fn build_plugin_manifest_from_catalog_inner(
 
 #[tauri::command]
 pub fn build_local_plugin_manifest(
+    app: AppHandle,
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     file_path: String,
     installed_at: String,
     enabled: bool,
 ) -> ApiResponse<PluginManifest> {
     ApiResponse::from_result(build_local_plugin_manifest_inner(
+        &app,
         worker,
         file_path,
         installed_at,
@@ -351,6 +358,7 @@ pub fn build_local_plugin_manifest(
 }
 
 fn build_local_plugin_manifest_inner(
+    app: &AppHandle,
     worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     file_path: String,
     installed_at: String,
@@ -363,13 +371,15 @@ fn build_local_plugin_manifest_inner(
     let metadata = read_plugin_metadata_backend(&worker, file_path.clone(), None)?;
 
     let capabilities = required_metadata_list(metadata.capabilities, "capabilities")?;
+    let id = required_metadata_field(metadata.id, "id")?;
+    let entry = install_plugin_wasm_package(app, &id, &file_path)?;
     Ok(PluginManifest {
-        id: required_metadata_field(metadata.id, "id")?,
+        id,
         name: required_metadata_field(metadata.name, "name")?,
         version: required_metadata_field(metadata.version, "version")?,
         kind: required_metadata_field(metadata.kind, "kind")?,
         runtime: "wasm".to_string(),
-        entry: file_path.clone(),
+        entry,
         author: required_metadata_field(metadata.author, "author")?,
         description: required_metadata_field(metadata.description, "description")?,
         icon: metadata.icon,
@@ -384,6 +394,56 @@ fn build_local_plugin_manifest_inner(
         installed_at,
         enabled,
     })
+}
+
+#[tauri::command]
+pub fn remove_plugin_package(app: AppHandle, plugin_id: String) -> ApiResponse<()> {
+    ApiResponse::from_empty_result((|| {
+        let path = plugin_package_dir(&app, &plugin_id)?;
+        if path.is_dir() {
+            fs::remove_dir_all(path).map_err(|err| err.to_string())?;
+        }
+        Ok(())
+    })())
+}
+
+fn install_plugin_wasm_package(
+    app: &AppHandle,
+    plugin_id: &str,
+    source_entry: &str,
+) -> Result<String, String> {
+    let package_dir = plugin_package_dir(app, plugin_id)?;
+    fs::create_dir_all(&package_dir).map_err(|err| err.to_string())?;
+    let wasm_path = package_dir.join("plugin.wasm");
+    let bytes = read_plugin_wasm_bytes_backend(source_entry.to_string(), None, true)?;
+    fs::write(&wasm_path, bytes).map_err(|err| err.to_string())?;
+    Ok(wasm_path.to_string_lossy().to_string())
+}
+
+fn plugin_package_dir(app: &AppHandle, plugin_id: &str) -> Result<PathBuf, String> {
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|err| err.to_string())?
+        .join("plugins")
+        .join(sanitize_plugin_package_id(plugin_id)))
+}
+
+fn sanitize_plugin_package_id(plugin_id: &str) -> String {
+    let id = plugin_id
+        .chars()
+        .map(|character| match character {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => character,
+            _ => '_',
+        })
+        .collect::<String>()
+        .trim_matches('.')
+        .to_string();
+    if id.is_empty() {
+        "unknown-plugin".to_string()
+    } else {
+        id
+    }
 }
 
 #[tauri::command]
@@ -548,7 +608,7 @@ where
         .entry
         .clone()
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
-    let plugin_track = track.get("raw").cloned().unwrap_or(track);
+    let plugin_track = track;
     let request = json!({
         "action": "qualities",
         "track": plugin_track,
@@ -646,7 +706,7 @@ where
         .entry
         .clone()
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
-    let plugin_track = track.get("raw").cloned().unwrap_or(track);
+    let plugin_track = track;
     let mut last_error = None;
     let qualities = resolve_playback_quality_attempts(
         &worker,
@@ -837,7 +897,7 @@ pub(crate) fn resolve_plugin_cover_metadata_backend(
     let entry = plugin
         .entry
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
-    let plugin_track = track.get("raw").cloned().unwrap_or(track);
+    let plugin_track = track;
     let request = json!({
         "action": "cover",
         "track": plugin_track,
@@ -882,7 +942,7 @@ where
     let entry = plugin
         .entry
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
-    let plugin_track = track.get("raw").cloned().unwrap_or(track);
+    let plugin_track = track;
     let request = json!({
         "action": "lyrics",
         "track": plugin_track,
@@ -937,9 +997,7 @@ fn normalize_plugin_playback_source(
     let title = json_string_field(track, &["title", "name"])
         .unwrap_or("")
         .to_string();
-    let artist = json_string_field(track, &["artist", "singer", "author"])
-        .unwrap_or("")
-        .to_string();
+    let artist = json_artist_names(track).join(" / ");
     let album = json_string_field(track, &["album", "albumName"])
         .unwrap_or("")
         .to_string();
@@ -1060,7 +1118,9 @@ fn normalize_plugin_search_track(
         provider_id: plugin.id.clone(),
         provider_name: plugin.name.clone(),
         title,
-        artist: json_search_artist(&track).unwrap_or_else(|| "Unknown Artist".to_string()),
+        artist: json_search_artist_names(&track)
+            .filter(|artists| !artists.is_empty())
+            .unwrap_or_else(|| vec!["Unknown Artist".to_string()]),
         album: json_string_field(&track, &["album", "albumName"])
             .unwrap_or("")
             .to_string(),
@@ -1084,12 +1144,10 @@ fn json_search_id(value: &serde_json::Value) -> Option<String> {
         .filter(|value| !value.trim().is_empty())
 }
 
-fn json_search_artist(value: &serde_json::Value) -> Option<String> {
-    if let Some(artist) = json_string_field(value, &["artist", "singer", "author"])
-        .map(str::trim)
-        .filter(|artist| !artist.is_empty())
-    {
-        return Some(artist.to_string());
+fn json_search_artist_names(value: &serde_json::Value) -> Option<Vec<String>> {
+    let names = json_artist_names(value);
+    if !names.is_empty() {
+        return Some(names);
     }
 
     let artists = value.get("artists")?.as_array()?;
@@ -1100,14 +1158,47 @@ fn json_search_artist(value: &serde_json::Value) -> Option<String> {
                 .as_str()
                 .or_else(|| artist.get("name").and_then(serde_json::Value::as_str))
         })
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
+        .flat_map(split_artist_name)
         .collect::<Vec<_>>();
     if names.is_empty() {
         None
     } else {
-        Some(names.join(", "))
+        Some(names)
     }
+}
+
+fn json_artist_names(value: &serde_json::Value) -> Vec<String> {
+    ["artist", "singer", "author"]
+        .iter()
+        .find_map(|key| value.get(*key))
+        .map(json_artist_value_names)
+        .unwrap_or_default()
+}
+
+fn json_artist_value_names(value: &serde_json::Value) -> Vec<String> {
+    if let Some(artist) = value.as_str() {
+        return split_artist_name(artist).collect();
+    }
+
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|artist| {
+            artist
+                .as_str()
+                .or_else(|| artist.get("name").and_then(serde_json::Value::as_str))
+        })
+        .flat_map(split_artist_name)
+        .collect()
+}
+
+fn split_artist_name(value: &str) -> impl Iterator<Item = String> + '_ {
+    value
+        .split(|character| matches!(character, '/' | ',' | '&'))
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
 }
 
 fn json_search_duration_seconds(value: &serde_json::Value) -> Option<u64> {
@@ -1311,6 +1402,9 @@ fn normalize_catalog_item_value(value: Value) -> Option<PluginCatalogItem> {
 fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
     let entry = string_field(&value, &["entry"])?;
     if !is_direct_plugin_url(&entry) {
+        return None;
+    }
+    if !entry.starts_with("http://") && !entry.starts_with("https://") && !Path::new(&entry).is_file() {
         return None;
     }
     let name = string_field(&value, &["name"])?;

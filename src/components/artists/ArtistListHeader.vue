@@ -15,6 +15,19 @@ defineProps<{
 </template>
 
 <style scoped>
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-title h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
 .artists-list-head h1 {
   display: flex;
   align-items: baseline;

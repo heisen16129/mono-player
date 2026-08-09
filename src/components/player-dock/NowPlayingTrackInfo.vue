@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { t } from '../../i18n';
 import type { Locale, Track } from '../../types/music';
+import { artistLabel } from '../../utils/artist';
 
 defineProps<{
   activeTrack: Track | null;
@@ -13,7 +14,7 @@ defineProps<{
   <Transition name="info-roll" mode="out-in">
     <span v-if="!lyricsOpen" key="track" class="track-info" :class="{ 'is-empty': !activeTrack }">
       <strong>{{ activeTrack?.title || t(locale, 'noMusic') }}</strong>
-      <small>{{ activeTrack ? (activeTrack.artist || t(locale, 'unknownArtist')) : '' }}</small>
+      <small>{{ activeTrack ? artistLabel(activeTrack.artist, t(locale, 'unknownArtist')) : '' }}</small>
     </span>
     <span v-else key="blank" class="track-info track-info-lyrics-open">
       <span aria-hidden="true"></span>

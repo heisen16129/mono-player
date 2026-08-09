@@ -5,6 +5,7 @@ import type { TrackMetadataFormValue } from './useTrackMetadataForm';
 import { refreshTrackDuration, updateTrackCover, updateTrackMetadata } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
+import { artistNames } from '../utils/artist';
 import { getErrorMessage } from '../utils/error';
 import { normalizePath } from '../utils/path';
 
@@ -236,7 +237,7 @@ export function useTrackMetadataDialog({
 
       applyTrackMetadataUpdate(track.id, {
         title: result.title,
-        artist: result.artist,
+        artist: artistNames(result.artist),
         album: result.album,
         year: result.year,
         genre: result.genre,

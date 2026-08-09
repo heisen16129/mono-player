@@ -3,6 +3,7 @@ import { downloadCoverFile, downloadLyricsFile } from '../services/downloads';
 import { clearCoverThumbnailCache } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
 import type { Track, TrackLyrics } from '../types/music';
+import { artistLabel } from '../utils/artist';
 import { getErrorMessage } from '../utils/error';
 import { normalizeTrackLyrics, selectTrackLyricVariant } from '../utils/trackLyrics';
 
@@ -32,7 +33,7 @@ function localTrackFolder(path: string) {
 
 function lyricsDownloadTitle(track: Track) {
   const title = track.title.trim();
-  const artist = track.artist?.trim();
+  const artist = artistLabel(track.artist, '').trim();
   if (!artist || title.endsWith(` - ${artist}`)) {
     return title;
   }
@@ -117,7 +118,7 @@ export function useLyricsDownload({ activeLyricFormats, activeTrack, closeMenu, 
         downloadDir: player.settings.downloadDir,
         trackPath: track.path,
         title: track.title,
-        artist: track.artist,
+        artist: artistLabel(track.artist, ''),
         artworkUrl: track.associatedArtwork ?? null,
         mimeType: null,
         data: null,

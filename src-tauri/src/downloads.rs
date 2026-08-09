@@ -23,8 +23,14 @@ pub(crate) struct DownloadTrackRequest {
     #[serde(rename = "downloadDir")]
     pub(crate) download_dir: String,
     pub(crate) track: Track,
+    #[serde(rename = "preferredQuality")]
+    pub(crate) preferred_quality: Option<String>,
     #[serde(rename = "qualityFallback")]
     pub(crate) quality_fallback: Option<String>,
+    #[serde(rename = "lyricFormat")]
+    pub(crate) lyric_format: Option<String>,
+    #[serde(rename = "trackLyrics")]
+    pub(crate) track_lyrics: Option<TrackLyrics>,
     pub(crate) plugins: Vec<crate::plugins::PluginPlaybackPlanPlugin>,
 }
 
@@ -468,6 +474,12 @@ fn resolve_download_track_request(
 ) -> Result<ResolvedDownloadTrackRequest, String> {
     let mut track = request.track;
     let mut url = track.path.trim().to_string();
+    let preferred_quality = request
+        .preferred_quality
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
     let quality_fallback = request
         .quality_fallback
         .as_deref()
@@ -475,6 +487,9 @@ fn resolve_download_track_request(
         .filter(|value| !value.is_empty())
         .unwrap_or("standard")
         .to_string();
+    if request.track_lyrics.is_some() {
+        track.lyrics = request.track_lyrics.clone();
+    }
 
     if !is_http_url(&url) {
         let provider_id = track
@@ -498,7 +513,7 @@ fn resolve_download_track_request(
             &worker,
             provider_id,
             plugin_track,
-            None,
+            preferred_quality,
             quality_fallback,
             true,
             request.plugins.clone(),
@@ -543,7 +558,7 @@ fn resolve_download_track_request(
         }
     }
 
-    let lyric_variant = track_lyrics_variant(&track.lyrics);
+    let lyric_variant = track_lyrics_variant(&track.lyrics, request.lyric_format.as_deref());
     let lyrics = lyric_variant
         .as_ref()
         .map(|variant| variant.content.clone());
@@ -571,37 +586,41 @@ fn is_http_url(value: &str) -> bool {
 }
 
 fn track_lyrics_raw(lyrics: &Option<TrackLyrics>) -> Option<String> {
-    track_lyrics_variant(lyrics).map(|variant| variant.content)
+    track_lyrics_variant(lyrics, None).map(|variant| variant.content)
 }
 
-fn track_lyrics_variant(lyrics: &Option<TrackLyrics>) -> Option<TrackLyricVariant> {
+fn track_lyrics_variant(
+    lyrics: &Option<TrackLyrics>,
+    preferred_format: Option<&str>,
+) -> Option<TrackLyricVariant> {
     let lyrics = lyrics.as_ref()?;
+    let preferred_format = preferred_format
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase());
     let default_format = lyrics.default_format.as_deref();
     lyrics
         .lyrics
         .iter()
-        .find(|variant| Some(variant.format.as_str()) == default_format)
+        .find(|variant| {
+            preferred_format
+                .as_deref()
+                .map(|format| variant.format.trim().eq_ignore_ascii_case(format))
+                .unwrap_or(false)
+        })
+        .or_else(|| {
+            lyrics
+                .lyrics
+                .iter()
+                .find(|variant| Some(variant.format.as_str()) == default_format)
+        })
         .or_else(|| lyrics.lyrics.first())
         .filter(|variant| !variant.content.trim().is_empty())
         .cloned()
 }
 
 fn plugin_track_value(track: &Track) -> serde_json::Value {
-    track.source_raw.clone().unwrap_or_else(|| {
-        serde_json::json!({
-            "id": track.source_id.as_deref().unwrap_or_default(),
-            "providerId": track.source_provider_id.as_deref().unwrap_or_default(),
-            "providerName": track.source_name.as_deref().unwrap_or_default(),
-            "title": track.title.clone(),
-            "artist": track.artist.clone(),
-            "album": track.album.clone(),
-            "duration": track.duration,
-            "artwork": track.artwork.clone(),
-            "year": track.year,
-            "genre": track.genre.clone(),
-            "trackNumber": track.track_number,
-        })
-    })
+    serde_json::to_value(track).unwrap_or_else(|_| serde_json::json!({}))
 }
 
 fn resolve_missing_track_lyrics(

@@ -34,6 +34,7 @@ import { useLocalPlaybackActions } from './composables/useLocalPlaybackActions';
 import { useLocalLibraryQueuePruning } from './composables/useLocalLibraryQueuePruning';
 import { useLyricsDockAutoHide } from './composables/useLyricsDockAutoHide';
 import { useLyricsViewVisibility } from './composables/useLyricsViewVisibility';
+import { useMusicSourcePluginAvailability } from './composables/useMusicSourcePluginAvailability';
 import { useNavigationAvailabilityGuards } from './composables/useNavigationAvailabilityGuards';
 import { useOnlinePlaybackController } from './composables/useOnlinePlaybackController';
 import { useOnlinePlaybackLookup } from './composables/useOnlinePlaybackLookup';
@@ -240,6 +241,7 @@ const {
   showToast: showOnlineToast,
 });
 const shouldShowDownloadsMenu = computed(() => player.settings.enablePlugins || downloadItems.value.length > 0);
+const { hasMusicSourcePlugin } = useMusicSourcePluginAvailability(computed(() => player.settings.enablePlugins));
 
 const {
   activeTrack,
@@ -270,6 +272,7 @@ const {
   openRecentAddedFromPanel,
   returnToLocalLibrary,
 } = useContentNavigationActions({
+  hasMusicSourcePlugin,
   pluginsEnabled: computed(() => player.settings.enablePlugins),
   onlineResolvingTrackKey,
   openDiscoverView,
@@ -281,6 +284,7 @@ const {
 
 useNavigationAvailabilityGuards({
   activeView,
+  hasMusicSourcePlugin,
   pluginsEnabled: computed(() => player.settings.enablePlugins),
   returnToLocalLibrary,
   shouldShowDownloadsMenu,
@@ -330,6 +334,11 @@ const {
 } = useDownloadedTrackActions({
   downloadItems,
   downloadTrack,
+  getActiveDownloadOptions: () => ({
+    preferredQuality: onlinePlaybackQuality.value || null,
+    lyricFormat: playbackLyricFormat.value || null,
+    trackLyrics: playbackLyricMetadata.value ?? onlineActiveTrack.value?.associatedLyrics ?? onlineActiveTrack.value?.lyrics ?? null,
+  }),
   onlineActiveTrack,
   openAddToPlaylistDialog,
   queueTrackNext,
@@ -640,6 +649,7 @@ const appMenuSurfaceProps = computed<AppSidebarOutletProps>(() => ({
   activeView: activeView.value,
   collapsed: isSidebarCollapsed.value,
   enablePlugins: player.settings.enablePlugins,
+  hasMusicSourcePlugin: hasMusicSourcePlugin.value,
   isLibraryPanelMode: isLibraryPanelMode.value,
   playlists: player.settings.playlists ?? [],
   showDownloads: shouldShowDownloadsMenu.value,

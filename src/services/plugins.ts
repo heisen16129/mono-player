@@ -171,6 +171,9 @@ export async function readPluginTheme(manifest: PluginManifest): Promise<PluginT
 export async function uninstallPlugin(pluginId: string): Promise<PluginManifest[]> {
   const installed = await listInstalledPlugins();
   const nextInstalled = installed.filter((plugin) => plugin.id !== pluginId);
+  if (isTauriRuntime()) {
+    await invokeApi<void>('remove_plugin_package', { pluginId });
+  }
   await markPluginDeleted(pluginId);
   await saveInstalledPlugins(nextInstalled);
   const cachedPlugins = await listCachedPluginCatalog();

@@ -12,7 +12,7 @@ const emit = defineEmits<SidebarMainNavLinksEmits>();
 <template>
   <div class="main-nav-links" :class="{ 'is-collapsed': collapsed }">
     <SidebarMainNavLink
-      v-if="enablePlugins"
+      v-if="enablePlugins && hasMusicSourcePlugin"
       :collapsed="collapsed"
       href="#discover"
       :is-active="activeView === 'discover'"

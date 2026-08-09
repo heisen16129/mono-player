@@ -18,7 +18,7 @@ export interface Track {
   id: number;
   path: string;
   title: string;
-  artist: string | null;
+  artist: string[] | null;
   album: string | null;
   duration: number | null;
   addedAt?: string | null;
@@ -40,7 +40,7 @@ export interface Track {
 export interface DownloadItem {
   id: string;
   title: string;
-  artist: string | null;
+  artist: string[] | null;
   album: string | null;
   duration: number | null;
   sourceName: string;
@@ -53,7 +53,10 @@ export interface DownloadItem {
     taskId?: string;
     downloadDir: string;
     track: Track;
+    preferredQuality?: string | null;
     qualityFallback?: string | null;
+    lyricFormat?: string | null;
+    trackLyrics?: TrackLyrics | null;
   } | null;
   filePath?: string | null;
   lyricsPath?: string | null;

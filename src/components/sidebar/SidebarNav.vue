@@ -27,6 +27,7 @@ const sidebarMainNavLinksProps = computed<SidebarMainNavLinksProps>(() => ({
   activeView: props.activeView,
   collapsed: props.collapsed,
   enablePlugins: props.enablePlugins,
+  hasMusicSourcePlugin: props.hasMusicSourcePlugin,
   locale: props.locale,
   showDownloads: props.showDownloads,
 }));

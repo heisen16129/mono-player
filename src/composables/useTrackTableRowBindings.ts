@@ -21,7 +21,7 @@ interface UseTrackTableRowBindingsOptions {
   isFavoriteTrack: (track: Track) => boolean;
   isPendingDownloadTrack: (track: Track) => boolean;
   localMusicLabel: ComputedRef<string>;
-  openTrackArtist: (track: Track) => void;
+  openTrackArtist: (artistName: string) => void;
   props: TrackTableProps;
   setTrackRowRef: (trackId: number, element: Element | ComponentPublicInstance | null) => void;
   showTrackCovers: () => boolean;

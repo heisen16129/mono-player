@@ -14,6 +14,7 @@ const primarySidebarProps = computed<PrimarySidebarProps>(() => ({
   activeView: props.activeView,
   collapsed: props.collapsed,
   enablePlugins: props.enablePlugins,
+  hasMusicSourcePlugin: props.hasMusicSourcePlugin,
   playlists: props.playlists,
   showDownloads: props.showDownloads,
 }));

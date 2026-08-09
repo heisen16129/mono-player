@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PluginSearchTrack } from '../../types/plugin';
+import { artistLabel } from '../../utils/artist';
 import LyricsSearchResultCover from './LyricsSearchResultCover.vue';
 import LyricsSearchResultMeta from './LyricsSearchResultMeta.vue';
 
@@ -21,7 +22,7 @@ const emit = defineEmits<{
     @click="emit('apply', track)"
   >
     <LyricsSearchResultCover :artwork="track.artwork" />
-    <LyricsSearchResultMeta :artist="track.artist" :provider-name="track.providerName" :title="track.title" />
+    <LyricsSearchResultMeta :artist="artistLabel(track.artist, '')" :provider-name="track.providerName" :title="track.title" />
     <small v-if="isResolving" class="lyrics-search-resolving">读取中</small>
   </button>
 </template>

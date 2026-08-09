@@ -1,14 +1,17 @@
 import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
 import { listInstalledPlugins } from './plugins';
-import type { Track } from '../types/music';
+import type { Track, TrackLyrics } from '../types/music';
 import type { PluginManifest } from '../types/plugin';
 
 export interface DownloadOnlineTrackRequest {
   taskId?: string;
   downloadDir: string;
   track: Track;
+  preferredQuality?: string | null;
   qualityFallback?: string | null;
+  lyricFormat?: string | null;
+  trackLyrics?: TrackLyrics | null;
   plugins?: PluginManifest[];
 }
 

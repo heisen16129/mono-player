@@ -96,7 +96,7 @@ export interface TrackTableRowEmits {
   click: [event: MouseEvent, track: Track];
   contextMenu: [event: MouseEvent, track: Track];
   downloadTrack: [track: Track];
-  openArtist: [track: Track];
+  openArtist: [artistName: string];
   toggleFavorite: [track: Track];
 }
 

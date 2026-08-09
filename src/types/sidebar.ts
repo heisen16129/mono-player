@@ -8,6 +8,7 @@ export interface PrimarySidebarProps {
   activeView: AppView;
   collapsed: boolean;
   enablePlugins: boolean;
+  hasMusicSourcePlugin: boolean;
   playlists: UserPlaylist[];
   showDownloads: boolean;
 }
@@ -92,6 +93,7 @@ export interface SidebarMainNavLinksProps {
   activeView: AppView;
   collapsed: boolean;
   enablePlugins: boolean;
+  hasMusicSourcePlugin: boolean;
   locale: Locale;
   showDownloads: boolean;
 }

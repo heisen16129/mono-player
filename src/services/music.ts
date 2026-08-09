@@ -1,5 +1,6 @@
 ﻿import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import type { CoverImage, LyricLine, SystemThemeState, Track, TrackLyrics } from '../types/music';
+import { artistNames } from '../utils/artist';
 import { invokeApi } from './api';
 
 export interface WorkerDiagnostic {
@@ -99,7 +100,7 @@ export function listTracks(): Promise<Track[]> {
     return Promise.resolve([]);
   }
 
-  return invokeApi<Track[]>('list_tracks');
+  return invokeApi<Track[]>('list_tracks').then(normalizeTracks);
 }
 
 export function listLatestAddedTracks(): Promise<Track[]> {
@@ -107,7 +108,7 @@ export function listLatestAddedTracks(): Promise<Track[]> {
     return Promise.resolve([]);
   }
 
-  return invokeApi<Track[]>('list_latest_added_tracks');
+  return invokeApi<Track[]>('list_latest_added_tracks').then(normalizeTracks);
 }
 
 export function removeMusicDir(path: string): Promise<Track[]> {
@@ -115,7 +116,7 @@ export function removeMusicDir(path: string): Promise<Track[]> {
     return Promise.resolve([]);
   }
 
-  return invokeApi<Track[]>('remove_music_dir', { path });
+  return invokeApi<Track[]>('remove_music_dir', { path }).then(normalizeTracks);
 }
 
 export function updateTrackMetadata(request: UpdateTrackMetadataRequest): Promise<UpdateTrackMetadataResult> {
@@ -173,14 +174,25 @@ export async function scanMusicDir(path: string): Promise<ScanMusicDirResult> {
 
   const result = await invokeApi<RawScanMusicDirResult>('scan_music_dir', { path });
   if (Array.isArray(result)) {
-    return { tracks: result, addedTracks: [], addedTrackIds: [] };
+    return { tracks: normalizeTracks(result), addedTracks: [], addedTrackIds: [] };
   }
 
   return {
-    tracks: Array.isArray(result.tracks) ? result.tracks : [],
-    addedTracks: Array.isArray(result.addedTracks) ? result.addedTracks : [],
+    tracks: normalizeTracks(Array.isArray(result.tracks) ? result.tracks : []),
+    addedTracks: normalizeTracks(Array.isArray(result.addedTracks) ? result.addedTracks : []),
     addedTrackIds: Array.isArray(result.addedTrackIds) ? result.addedTrackIds : [],
   };
+}
+
+function normalizeTrack(track: Track): Track {
+  return {
+    ...track,
+    artist: artistNames(track.artist),
+  };
+}
+
+function normalizeTracks(tracks: Track[]) {
+  return tracks.map(normalizeTrack);
 }
 
 export function cancelScanMusicDir(): Promise<boolean> {

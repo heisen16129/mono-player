@@ -19,6 +19,7 @@ const sidebarNavProps = computed<SidebarNavProps>(() => ({
   activeView: props.activeView,
   collapsed: props.collapsed,
   enablePlugins: props.enablePlugins,
+  hasMusicSourcePlugin: props.hasMusicSourcePlugin,
   locale: player.settings.locale,
   playlists: props.playlists,
   showDownloads: props.showDownloads,

@@ -22,8 +22,8 @@ export function useTrackTableInteractions(options: TrackTableInteractionOptions)
     options.onSelectTrack(track);
   }
 
-  function openTrackArtist(track: Track) {
-    options.onOpenArtist(track.artist?.trim() || t(options.getLocale(), 'unknownArtist'));
+  function openTrackArtist(artistName: string) {
+    options.onOpenArtist(artistName.trim() || t(options.getLocale(), 'unknownArtist'));
   }
 
   function handleTrackContextMenu(event: MouseEvent, track: Track) {

@@ -105,7 +105,7 @@ export interface PluginSearchTrack {
   providerId: string;
   providerName: string;
   title: string;
-  artist: string;
+  artist: string[];
   album: string;
   duration: number | null;
   artwork?: string | null;

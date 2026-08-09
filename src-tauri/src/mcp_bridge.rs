@@ -816,8 +816,14 @@ fn download_track(app: &AppHandle, params: Value) -> Result<Value, String> {
         task_id: Some(task_id.clone()),
         download_dir,
         track,
+        preferred_quality: string_arg(&params, "preferredQuality")
+            .or_else(|| string_arg(&params, "quality")),
         quality_fallback: string_arg(&params, "qualityFallback")
             .or_else(|| string_arg(&params, "quality")),
+        lyric_format: string_arg(&params, "lyricFormat"),
+        track_lyrics: params
+            .get("trackLyrics")
+            .and_then(|value| serde_json::from_value::<TrackLyrics>(value.clone()).ok()),
         plugins: read_download_plugins(app)?,
     };
 
