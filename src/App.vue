@@ -155,7 +155,6 @@ const {
 const {
   hasThemeBackground,
   shouldShowLibraryResizeHandle,
-  startupLoadingText,
 } = useAppShellState({
   activeCollection,
   activeView,
@@ -917,7 +916,7 @@ function requestAppClose() {
     <template #overlays>
       <WindowControls class="floating-window-controls" @request-close="handleAppCloseRequest" />
 
-      <AppStartupLoading v-if="!isAppReady" :text="startupLoadingText" />
+      <AppStartupLoading v-if="!isAppReady" />
 
       <template v-else>
         <PlaylistContextMenu
