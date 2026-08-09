@@ -24,7 +24,7 @@ function createTrackCoverEqualizerBarStyle(
   index: number,
 ): TrackCoverEqualizerBarStyle {
   if (loading) return {};
-  if (!playing) return { transform: 'scaleY(0.16)' };
+  if (!playing) return {};
 
   const fallback = [0.38, 0.72, 0.52, 0.82, 0.42];
   const value = spectrumLevels?.[index];
@@ -111,7 +111,12 @@ watch(
 }
 
 .cover-equalizer:not(.is-playing):not(.is-loading) i {
-  height: 12px;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  box-shadow: none;
+  opacity: 1;
+  transform: none;
 }
 
 .cover-equalizer.is-playing i {
