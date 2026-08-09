@@ -113,15 +113,10 @@ fn search_request(request: &Value) -> Value {
 
 fn lyrics_request(request: &Value) -> Value {
     let track = request.get("track").unwrap_or(&Value::Null);
-    let raw = track.get("raw").unwrap_or(track);
-    let id = raw
-        .get("id")
-        .or_else(|| track.get("id"))
-        .and_then(value_to_string);
-    let mid = raw
+    let id = track.get("id").and_then(value_to_string);
+    let mid = track
         .get("mid")
-        .or_else(|| raw.get("songmid"))
-        .or_else(|| track.get("mid"))
+        .or_else(|| track.get("songmid"))
         .and_then(value_to_string);
     let query = if let Some(id) = id {
         format!("id={}", url_encode(&id))

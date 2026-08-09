@@ -113,11 +113,7 @@ fn search_request(request: &Value) -> Value {
 
 fn lyrics_request(request: &Value) -> Value {
     let track = request.get("track").unwrap_or(&Value::Null);
-    let raw = track.get("raw").unwrap_or(track);
-    let Some(id) = raw
-        .get("id")
-        .or_else(|| track.get("id"))
-        .and_then(value_to_string)
+    let Some(id) = track.get("id").and_then(value_to_string)
     else {
         return json!({ "error": "lyrics track missing id" });
     };
