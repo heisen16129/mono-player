@@ -2,6 +2,8 @@ use serde_json::{json, Value};
 use std::cell::Cell;
 
 const PROVIDER_ID: &str = "mono-native-wasm-xiaoqiu";
+const AQ_API_BASE: &str = "https://api.vkeys.cn/v2/music/tencent";
+const DEFAULT_QUALITY: &str = "320k";
 const PROVIDER_NAME: &str = "小秋音乐";
 
 thread_local! { static LAST_LEN: Cell<usize> = const { Cell::new(0) }; }
@@ -46,7 +48,7 @@ fn handle_request(request: Value) -> Value {
         Some("search") => search_request(&request),
         Some("play") => play_request(&request),
         Some("lyrics") => lyrics_request(&request),
-        Some("qualities") => qualities_response(),
+        Some("qualities") => qualities_response(&request),
         Some("host_response") => host_response(&request),
         action => json!({"error":format!("unsupported action: {:?}",action)}),
     }
@@ -73,7 +75,20 @@ fn metadata_response() -> Value {
         "updatedAt": "2026-07-23",
         "capabilities": ["search", "play", "lyrics"],
         "highlights": ["支持在线搜索", "支持播放解析", "支持歌词 metadata"],
-        "permissions": ["network"]
+        "permissions": ["network"],
+        "configSchema": {
+            "fields": [{
+                "key": "defaultQuality",
+                "label": "\u{9ed8}\u{8ba4}\u{97f3}\u{8d28}",
+                "type": "select",
+                "defaultValue": DEFAULT_QUALITY,
+                "options": [
+                    { "label": "\u{6807}\u{51c6}\u{97f3}\u{8d28}", "value": "128k" },
+                    { "label": "\u{9ad8}\u{54c1}\u{97f3}\u{8d28}", "value": "320k" },
+                    { "label": "\u{65e0}\u{635f}\u{97f3}\u{8d28}", "value": "flac" }
+                ]
+            }]
+        }
     })
 }
 fn search_request(request: &Value) -> Value {
@@ -95,14 +110,19 @@ fn search_request(request: &Value) -> Value {
         .and_then(Value::as_u64)
         .unwrap_or(30)
         .clamp(1, 100);
-    host_get_or_post("POST","https://u.y.qq.com/cgi-bin/musicu.fcg".to_string(),headers(&[("Content-Type","application/json"),("Referer","https://y.qq.com"),("Cookie","uin="),("User-Agent",browser_user_agent())]),Some(json!({"req_1":{"method":"DoSearchForQQMusicDesktop","module":"music.search.SearchCgiService","param":{"num_per_page":page_size,"page_num":page,"query":keyword,"search_type":0}}}).to_string()))
+    host_get(
+        &format!("{AQ_API_BASE}/search/song?word={}&page={page}&num={page_size}", url_encode(keyword, false)),
+        aq_headers(),
+    )
 }
 fn play_request(request: &Value) -> Value {
     let track = request.get("track").unwrap_or(&Value::Null);
-    let quality = request.get("quality").and_then(Value::as_str).unwrap_or("");
-    if quality.is_empty() {
-        return json!({"error":"play request missing quality"});
-    }
+    let quality = request
+        .get("quality")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| configured_default_quality(request));
     let Some(songmid) = value_to_string(track.get("songmid").or_else(|| track.get("mid"))) else {
         return json!({"error":"QQ track has no playable songmid."});
     };
@@ -119,52 +139,83 @@ fn lyrics_request(request: &Value) -> Value {
     if let Some(raw) = pick_raw_lyrics(track) {
         return lyrics_response(Some(raw), request);
     }
-    let Some(songmid) = value_to_string(track.get("songmid").or_else(|| track.get("mid"))) else {
-        return json!({"error":"QQ lyrics track missing songmid."});
+    let id = value_to_string(track.get("id"));
+    let mid = track
+        .get("mid")
+        .or_else(|| track.get("songmid"))
+        .and_then(|value| value_to_string(Some(value)));
+    let query = if let Some(id) = id {
+        format!("id={}", url_encode(&id, false))
+    } else if let Some(mid) = mid {
+        format!("mid={}", url_encode(&mid, false))
+    } else {
+        return json!({"error":"QQ lyrics track missing id or mid."});
     };
-    host_get(&format!("https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid={}&pcachetime=0&g_tk=5381&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0",url_encode(&songmid,true)),headers(&[("Referer","https://y.qq.com/portal/player.html"),("Cookie","uin=0"),("User-Agent",browser_user_agent())]))
+    host_get(&format!("{AQ_API_BASE}/lyric?{query}"), aq_headers())
 }
 fn parse_search_response(request: &Value, body: &str) -> Value {
     let Ok(payload) = serde_json::from_str::<Value>(body) else {
         return json!({"error":format!("{} search response is not JSON",PROVIDER_NAME)});
     };
-    let songs = payload
-        .pointer("/req_1/data/body/song/list")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let total = payload
-        .pointer("/req_1/data/meta/sum")
-        .and_then(Value::as_u64)
-        .unwrap_or(songs.len() as u64);
-    let tracks=songs.into_iter().map(|item|{let album=item.get("album").cloned().unwrap_or(Value::Null); let songmid=value_to_string(item.get("mid").or_else(||item.get("songmid"))); let albummid=value_to_string(item.get("albummid").or_else(||album.get("mid"))); let artist=item.get("singer").and_then(Value::as_array).map(|i|join_names(i)).unwrap_or_else(||"Unknown Artist".to_string()); let raw=json!({"id":item.get("id").or_else(||item.get("songid")).cloned().unwrap_or(Value::Null),"songmid":songmid,"title":item.get("title").or_else(||item.get("songname")).cloned().unwrap_or(Value::Null),"artist":artist,"album":item.get("albumname").or_else(||album.get("title")).cloned().unwrap_or(Value::Null),"albumid":item.get("albumid").or_else(||album.get("id")).cloned().unwrap_or(Value::Null),"albummid":albummid,"interval":item.get("interval").cloned().unwrap_or(Value::Null),"artwork":albummid.as_ref().map(|v|format!("https://y.gtimg.cn/music/photo_new/T002R800x800M000{v}.jpg"))}); let id=value_to_string(raw.get("id")).unwrap_or_default(); normalized_track(id,raw)}).collect::<Vec<_>>();
-    paged_tracks(request, tracks, total)
-}
-fn parse_lyrics_response(request: &Value, body: &str) -> Value {
-    let payload = parse_qq_jsonp(body).unwrap_or(Value::Null);
-    let raw = payload
-        .get("lyric")
-        .and_then(Value::as_str)
-        .and_then(decode_base64_utf8);
-    lyrics_response(raw, request)
-}
-fn qualities_response() -> Value {
-    json!({"qualities":[{"id":"128k","name":"标准音质","available":true},{"id":"320k","name":"高品音质","available":true},{"id":"flac","name":"无损音质","available":true}],"defaultQuality":"320k"})
-}
-fn parse_qq_jsonp(response: &str) -> Option<Value> {
-    let mut text = response.trim();
-    for prefix in ["callback(", "MusicJsonCallback(", "jsonCallback("] {
-        if let Some(rest) = text.strip_prefix(prefix) {
-            text = rest;
-            break;
-        }
+    if payload.get("code").and_then(Value::as_i64) != Some(200) {
+        let message = payload
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("search failed");
+        return json!({"error":format!("search failed: {message}")});
     }
-    if let Some(rest) = text.strip_suffix(')') {
-        text = rest;
+    let songs = payload.get("data").and_then(Value::as_array).cloned().unwrap_or_default();
+    let tracks = songs.iter().map(normalize_aq_search_track).collect::<Vec<_>>();
+    let page_size = request.get("pageSize").and_then(Value::as_u64).unwrap_or(30).clamp(1, 100) as usize;
+    json!({"tracks":tracks,"isEnd":tracks.len()<page_size})
+}
+fn parse_lyrics_response(_request: &Value, body: &str) -> Value {
+    let Ok(payload) = serde_json::from_str::<Value>(body) else {
+        return json!({"error":format!("{} lyrics response is not JSON",PROVIDER_NAME)});
+    };
+    if payload.get("code").and_then(Value::as_i64) != Some(200) {
+        let message = payload
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("lyrics failed");
+        return json!({"error":format!("lyrics failed: {message}")});
     }
-    serde_json::from_str(text).ok()
+    let data = payload.get("data").unwrap_or(&Value::Null);
+    let lrc = lyric_text(data, "lrc");
+    let trans = lyric_text(data, "trans");
+    let yrc = lyric_text(data, "yrc");
+    if lrc.is_none() && trans.is_none() && yrc.is_none() {
+        return json!({"error":"lyrics response has no lyrics"});
+    }
+    let default_format = if yrc.is_some() { "yrc" } else if lrc.is_some() { "lrc" } else { "trans" };
+    let mut lyrics = Vec::new();
+    if let Some(content) = lrc { lyrics.push(json!({"format":"lrc","content":content})); }
+    if let Some(content) = trans { lyrics.push(json!({"format":"trans","content":content})); }
+    if let Some(content) = yrc { lyrics.push(json!({"format":"yrc","content":content})); }
+    json!({"defaultFormat":default_format,"lyrics":lyrics})
+}
+fn qualities_response(request: &Value) -> Value {
+    json!({"qualities":[{"id":"128k","name":"标准音质","available":true},{"id":"320k","name":"高品音质","available":true},{"id":"flac","name":"无损音质","available":true}],"defaultQuality":configured_default_quality(request)})
 }
 
+fn configured_default_quality(request: &Value) -> &'static str {
+    let quality = request
+        .get("config")
+        .and_then(|config| config.get("defaultQuality"))
+        .and_then(Value::as_str)
+        .or_else(|| request.get("defaultQuality").and_then(Value::as_str))
+        .unwrap_or(DEFAULT_QUALITY);
+    normalize_quality(quality)
+}
+
+fn normalize_quality(quality: &str) -> &'static str {
+    match quality.trim() {
+        "128k" => "128k",
+        "320k" => "320k",
+        "flac" => "flac",
+        _ => DEFAULT_QUALITY,
+    }
+}
 fn host_response(request: &Value) -> Value {
     let original = request.get("request").unwrap_or(&Value::Null);
     let status = request
@@ -194,27 +245,50 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         return json!({"error":format!("{} did not return a playable url.",PROVIDER_NAME)});
     };
     let track = request.get("track").unwrap_or(&Value::Null);
-    let quality = request.get("quality").and_then(Value::as_str).unwrap_or("");
+    let quality = request
+        .get("quality")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| configured_default_quality(request));
     json!({"url":url,"path":url,"title":track.get("title").cloned().unwrap_or(Value::Null),"artist":track.get("artist").cloned().unwrap_or(Value::Null),"album":track.get("album").cloned().unwrap_or(Value::Null),"duration":normalize_seconds(track.get("duration")),"artwork":track.get("artwork").cloned().unwrap_or(Value::Null),"quality":quality,"lyrics":play_lyrics_metadata(track),"sourceId":track.get("id").cloned().unwrap_or(Value::Null),"sourceName":PROVIDER_NAME,"sourceProviderId":PROVIDER_ID,"sourceRaw":track})
 }
 
 fn normalized_track(id: String, raw: Value) -> Value {
     json!({"id":id,"providerId":PROVIDER_ID,"providerName":PROVIDER_NAME,"title":raw.get("title").and_then(Value::as_str).unwrap_or("Unknown Track"),"artist":raw.get("artist").and_then(Value::as_str).unwrap_or("Unknown Artist"),"album":raw.get("album").and_then(Value::as_str).unwrap_or(""),"duration":normalize_seconds(raw.get("duration").or_else(||raw.get("interval"))),"artwork":raw.get("artwork").cloned().unwrap_or(Value::Null),"raw":raw})
 }
-fn paged_tracks(request: &Value, tracks: Vec<Value>, total: u64) -> Value {
-    let page = request.get("page").and_then(Value::as_u64).unwrap_or(1);
-    let page_size = request
-        .get("pageSize")
-        .and_then(Value::as_u64)
-        .unwrap_or(30)
-        .clamp(1, 100);
-    json!({"tracks":tracks,"isEnd":total<=page*page_size || tracks.len()<page_size as usize})
+fn normalize_aq_search_track(item: &Value) -> Value {
+    let id = value_to_string(item.get("id")).unwrap_or_else(|| {
+        value_to_string(item.get("mid")).unwrap_or_default()
+    });
+    let mid = value_to_string(item.get("mid"));
+    let duration = value_to_string(item.get("interval")).and_then(|value| parse_duration(&value));
+    let raw = json!({
+        "id": id,
+        "songmid": mid,
+        "mid": mid,
+        "title": item.get("song").or_else(|| item.get("title")).cloned().unwrap_or(Value::Null),
+        "artist": item.get("singer").cloned().unwrap_or(Value::String("Unknown Artist".to_string())),
+        "album": item.get("album").cloned().unwrap_or(Value::Null),
+        "interval": duration,
+        "artwork": item.get("cover").cloned().unwrap_or(Value::Null),
+        "rawLrc": item.get("lrc").cloned().unwrap_or(Value::Null),
+        "lyric": item.get("lrc").cloned().unwrap_or(Value::Null),
+    });
+    normalized_track(id, raw)
 }
 fn lyrics_response(raw_lyrics: Option<String>, _request: &Value) -> Value {
     let lyrics = raw_lyrics
         .map(|content| vec![json!({"format":"lrc","content":content})])
         .unwrap_or_default();
     json!({"defaultFormat":"lrc","lyrics":lyrics})
+}
+fn lyric_text(data: &Value, key: &str) -> Option<String> {
+    data.get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 fn play_lyrics_metadata(track: &Value) -> Value {
     match pick_raw_lyrics(track) {
@@ -240,6 +314,13 @@ fn headers(items: &[(&str, &str)]) -> Value {
 fn browser_user_agent() -> &'static str {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
+fn aq_headers() -> Value {
+    headers(&[
+        ("Accept", "application/json,text/plain,*/*"),
+        ("Accept-Language", "zh-CN,zh;q=0.9"),
+        ("User-Agent", browser_user_agent()),
+    ])
+}
 fn value_to_string(value: Option<&Value>) -> Option<String> {
     match value? {
         Value::String(v) if !v.trim().is_empty() => Some(v.clone()),
@@ -256,6 +337,26 @@ fn normalize_seconds(value: Option<&Value>) -> Value {
     };
     let seconds = if raw > 1000.0 { raw / 1000.0 } else { raw };
     json!(seconds.round() as u64)
+}
+fn parse_duration(value: &str) -> Option<u64> {
+    let value = value.trim();
+    if let Some((minutes, seconds)) = value.split_once(':') {
+        let minutes = minutes.trim().parse::<u64>().ok()?;
+        let seconds = seconds.trim().parse::<u64>().ok()?;
+        return Some(minutes * 60 + seconds);
+    }
+    if let Ok(seconds) = value.parse::<f64>() {
+        return Some(seconds.round() as u64);
+    }
+    let parts = value
+        .split(|character: char| !character.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<u64>().ok())
+        .collect::<Vec<_>>();
+    match parts.as_slice() {
+        [minutes, seconds, ..] => Some(minutes * 60 + seconds),
+        _ => None,
+    }
 }
 fn pick_raw_lyrics(track: &Value) -> Option<String> {
     ["rawLrc", "rawLrcTxt", "lyric", "lyrics", "lrc"]
@@ -283,46 +384,3 @@ fn url_encode(value: &str, plus_space: bool) -> String {
         .collect()
 }
 
-fn join_names(items: &[Value]) -> String {
-    let v = items
-        .iter()
-        .filter_map(|i| i.get("name").and_then(Value::as_str))
-        .filter(|n| !n.is_empty())
-        .collect::<Vec<_>>()
-        .join(", ");
-    if v.is_empty() {
-        "Unknown Artist".to_string()
-    } else {
-        v
-    }
-}
-
-fn decode_base64_utf8(value: &str) -> Option<String> {
-    let bytes = decode_base64(value)?;
-    String::from_utf8(bytes).ok()
-}
-fn decode_base64(value: &str) -> Option<Vec<u8>> {
-    let mut out = Vec::new();
-    let mut buf: u32 = 0;
-    let mut bits = 0;
-    for b in value.bytes().filter(|b| !b.is_ascii_whitespace()) {
-        if b == b'=' {
-            break;
-        }
-        let d = match b {
-            b'A'..=b'Z' => b - b'A',
-            b'a'..=b'z' => b - b'a' + 26,
-            b'0'..=b'9' => b - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            _ => return None,
-        };
-        buf = (buf << 6) | u32::from(d);
-        bits += 6;
-        while bits >= 8 {
-            bits -= 8;
-            out.push(((buf >> bits) & 0xff) as u8);
-        }
-    }
-    Some(out)
-}

@@ -427,6 +427,76 @@ Host 会强制拆 `ApiResponse`：`code !== 1` 会被当成插件调用失败，
 | `trackNumber` | 否 | 曲序。 |
 | `raw` | 强烈建议 | 原始平台数据。播放、歌词和下载时 Host 会优先把 `raw` 传回插件。 |
 
+## 插件配置表单
+
+插件可以在 `metadata` 返回的 `configSchema` 中声明配置表单。Host 只负责渲染表单、保存用户配置，并在调用插件 action 时把配置放进请求的 `config` 字段；具体配置含义由插件自己解释。
+
+示例：
+
+```json
+{
+  "configSchema": {
+    "fields": [
+      {
+        "key": "apiKey",
+        "label": "API Key",
+        "type": "password",
+        "required": false,
+        "placeholder": "可选 API Key"
+      },
+      {
+        "key": "defaultQuality",
+        "label": "默认音质",
+        "type": "select",
+        "defaultValue": "p",
+        "options": [
+          { "label": "流畅", "value": "s" },
+          { "label": "标准", "value": "h" },
+          { "label": "高品质", "value": "p" },
+          { "label": "无损", "value": "ff" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `configSchema.fields` | 否 | 配置表单字段数组。缺失时插件没有设置项。 |
+| `fields[].key` | 是 | 配置键名。Host 会保存到 `plugins.configs[pluginId][key]`。 |
+| `fields[].label` | 是 | 设置页显示名。 |
+| `fields[].type` | 是 | 支持 `text/password/number/select/radio/checkbox/switch`。 |
+| `fields[].required` | 否 | 是否必填。当前主要用于 UI 提示，插件仍应自己校验。 |
+| `fields[].placeholder` | 否 | 输入框或选择框占位文案。 |
+| `fields[].defaultValue` | 否 | 默认值。Host 会和用户保存的配置合并后传给插件。 |
+| `fields[].options` | 否 | `select/radio/checkbox` 的选项数组，格式为 `{ "label", "value" }`。 |
+
+调用插件时，Host 会把默认值和用户保存值合并为 `config`：
+
+```json
+{
+  "action": "qualities",
+  "track": { "id": "123" },
+  "config": {
+    "apiKey": "...",
+    "defaultQuality": "ff"
+  }
+}
+```
+
+注意：Host 不会替插件解释业务配置。例如 `defaultQuality` 只是音乐插件推荐使用的约定字段；插件需要自己读取 `request.config.defaultQuality`，并在 `qualities` / `play` 中决定如何使用。
+
+音乐插件默认音质建议：
+
+- 在 `configSchema.fields` 中声明 `key: "defaultQuality"`。
+- `options[].value` 必须和 `qualities[].id` 保持一致。
+- `qualities` 返回时，根据 `config.defaultQuality` 设置响应里的 `defaultQuality`。
+- `play` 收到 `quality` 时优先使用请求的 `quality`；没有 `quality` 时再使用 `config.defaultQuality`；仍没有时使用插件内置默认值。
+- 如果用户配置的默认音质不在可用列表中，插件应回退到自己的内置默认音质或第一个可用音质。
+
 ## qualities
 
 调用时机：播放前、在线歌曲成为当前播放项后、用户打开或刷新音质选项时。Host 会先筛选已启用且包含 `play` 能力的插件。
@@ -473,6 +543,50 @@ Host 会强制拆 `ApiResponse`：`code !== 1` 会被当成插件调用失败，
 | `qualities[].reason` | 否 | 不可用原因。 |
 
 如果插件没有返回有效音质，Host 会认为该插件无法解析播放音质。
+
+音质变化流程：
+
+1. 当前在线歌曲变化时，Host 调用插件 `qualities` 获取音质菜单。
+2. 前端优先采用插件返回的 `defaultQuality`，前提是它存在于 `qualities` 且 `available: true`。
+3. 用户手动切换同一首歌的音质后，前端会保留这个当前选择；换歌后重新使用插件返回的默认音质。
+4. 点击播放、切换音质、下载前，Host 调用 `play`，并把当前选择作为 `quality` 传给插件。
+5. `qualities[].id` 是协议值，不是显示名；它会原样作为 `play` 请求中的 `quality`。UI 显示使用 `qualities[].name`。
+
+示例：接口返回 `{ "level": "ff", "name": "无损" }` 时，插件应该映射为 `{ "id": "ff", "name": "无损" }`。播放时 Host 传给插件的是 `quality: "ff"`，不是 `name: "无损"`。
+
+推荐实现片段：
+
+```rust
+fn qualities_response(request: &Value) -> Value {
+    let default_quality = request
+        .get("config")
+        .and_then(|config| config.get("defaultQuality"))
+        .and_then(Value::as_str)
+        .filter(|quality| matches!(*quality, "standard" | "high"))
+        .unwrap_or("standard");
+
+    json!({
+        "qualities": [
+            { "id": "standard", "name": "标准", "available": true },
+            { "id": "high", "name": "高品质", "available": true }
+        ],
+        "defaultQuality": default_quality
+    })
+}
+
+fn play_response(request: &Value) -> Value {
+    let quality = request
+        .get("quality")
+        .and_then(Value::as_str)
+        .or_else(|| request.get("config").and_then(|config| config.get("defaultQuality")).and_then(Value::as_str))
+        .unwrap_or("standard");
+
+    json!({
+        "url": "https://example.com/demo.mp3",
+        "quality": quality
+    })
+}
+```
 
 ## play
 
@@ -759,7 +873,7 @@ fn handle_request(request: Value) -> Value {
     match request.get("action").and_then(Value::as_str) {
         Some("metadata") => metadata_response(),
         Some("search") => search_response(&request),
-        Some("qualities") => qualities_response(),
+        Some("qualities") => qualities_response(&request),
         Some("play") => play_response(&request),
         Some("lyrics") => lyrics_response(&request),
         Some("host_response") => host_response(&request),

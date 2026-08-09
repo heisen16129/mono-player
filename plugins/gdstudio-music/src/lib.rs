@@ -5,6 +5,7 @@ const PROVIDER_ID: &str = "mono-native-wasm-gdstudio";
 const PROVIDER_NAME: &str = "GD音乐台";
 const API_BASE: &str = "https://music-api.gdstudio.xyz/api.php";
 const DEFAULT_SOURCE: &str = "netease";
+const DEFAULT_QUALITY: &str = "320";
 
 thread_local! { static LAST_LEN: Cell<usize> = const { Cell::new(0) }; }
 
@@ -49,7 +50,7 @@ fn handle_request(request: Value) -> Value {
     match request.get("action").and_then(Value::as_str) {
         Some("metadata") => metadata_response(),
         Some("search") => search_request(&request),
-        Some("qualities") => qualities_response(),
+        Some("qualities") => qualities_response(&request),
         Some("play") => play_request(&request),
         Some("lyrics") => lyrics_request(&request),
         Some("host_response") => host_response(&request),
@@ -83,7 +84,22 @@ fn metadata_response() -> Value {
         "updatedAt": "2026-07-24",
         "capabilities": ["search", "play", "lyrics"],
         "highlights": ["支持 GD音乐台搜索", "搜索列表不预取封面", "支持 LRC 与翻译歌词"],
-        "permissions": ["network"]
+        "permissions": ["network"],
+        "configSchema": {
+            "fields": [{
+                "key": "defaultQuality",
+                "label": "\u{9ed8}\u{8ba4}\u{97f3}\u{8d28}",
+                "type": "select",
+                "defaultValue": DEFAULT_QUALITY,
+                "options": [
+                    { "label": "\u{6807}\u{51c6}\u{97f3}\u{8d28}", "value": "128" },
+                    { "label": "\u{8f83}\u{9ad8}\u{97f3}\u{8d28}", "value": "192" },
+                    { "label": "\u{9ad8}\u{97f3}\u{8d28}", "value": "320" },
+                    { "label": "\u{65e0}\u{635f}\u{97f3}\u{8d28}", "value": "740" },
+                    { "label": "\u{6700}\u{9ad8}\u{97f3}\u{8d28}", "value": "999" }
+                ]
+            }]
+        }
     })
 }
 
@@ -112,7 +128,7 @@ fn search_request(request: &Value) -> Value {
     host_get(&url)
 }
 
-fn qualities_response() -> Value {
+fn qualities_response(request: &Value) -> Value {
     json!({
         "qualities": [
             { "id": "128", "name": "标准音质", "available": true },
@@ -121,7 +137,7 @@ fn qualities_response() -> Value {
             { "id": "740", "name": "无损音质", "available": true },
             { "id": "999", "name": "最高音质", "available": true }
         ],
-        "defaultQuality": "320"
+        "defaultQuality": configured_default_quality(request)
     })
 }
 
@@ -131,7 +147,14 @@ fn play_request(request: &Value) -> Value {
         return json!({ "error": "GD track missing id." });
     };
     let source = track_source(track).unwrap_or_else(|| request_source(request));
-    let quality = quality_to_br(request.get("quality").and_then(Value::as_str).unwrap_or("320"));
+    let quality = quality_to_br(
+        request
+            .get("quality")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| configured_default_quality(request)),
+    );
     let url = format!(
         "{API_BASE}?types=url&source={}&id={}&br={quality}",
         url_encode(&source, false),
@@ -204,7 +227,7 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
     let quality = payload
         .get("br")
         .and_then(|value| value_to_string(Some(value)))
-        .unwrap_or_else(|| quality_to_br(request.get("quality").and_then(Value::as_str).unwrap_or("320")));
+        .unwrap_or_else(|| quality_to_br(configured_default_quality(request)));
     json!({
         "url": url,
         "path": url,
@@ -361,13 +384,34 @@ fn value_to_string(value: Option<&Value>) -> Option<String> {
 }
 
 fn quality_to_br(quality: &str) -> String {
-    match quality.trim().to_lowercase().as_str() {
+    match normalize_quality(quality) {
         "128" | "128k" => "128".to_string(),
         "192" | "192k" => "192".to_string(),
         "320" | "320k" => "320".to_string(),
         "740" | "flac" | "lossless" => "740".to_string(),
         "999" | "hires" | "high" => "999".to_string(),
         _ => "320".to_string(),
+    }
+}
+
+fn configured_default_quality(request: &Value) -> &'static str {
+    let quality = request
+        .get("config")
+        .and_then(|config| config.get("defaultQuality"))
+        .and_then(Value::as_str)
+        .or_else(|| request.get("defaultQuality").and_then(Value::as_str))
+        .unwrap_or(DEFAULT_QUALITY);
+    normalize_quality(quality)
+}
+
+fn normalize_quality(quality: &str) -> &'static str {
+    match quality.trim().to_lowercase().as_str() {
+        "128" | "128k" => "128",
+        "192" | "192k" => "192",
+        "320" | "320k" => "320",
+        "740" | "flac" | "lossless" => "740",
+        "999" | "hires" | "high" => "999",
+        _ => DEFAULT_QUALITY,
     }
 }
 

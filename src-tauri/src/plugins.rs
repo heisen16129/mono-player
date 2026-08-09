@@ -32,6 +32,65 @@ pub struct PluginPlaybackPlanPlugin {
     capabilities: Vec<String>,
     entry: Option<String>,
     permissions: Option<Vec<String>>,
+    #[serde(default)]
+    config: Option<Value>,
+    #[serde(default)]
+    config_schema: Option<Value>,
+}
+
+pub(crate) fn playback_plugins_from_values(
+    plugins: Value,
+    configs: Option<Value>,
+) -> Result<Vec<PluginPlaybackPlanPlugin>, String> {
+    let mut plugins = serde_json::from_value::<Vec<PluginPlaybackPlanPlugin>>(plugins)
+        .map_err(|err| err.to_string())?;
+    attach_plugin_configs(&mut plugins, configs.as_ref().unwrap_or(&Value::Null));
+    Ok(plugins)
+}
+
+fn attach_plugin_configs(plugins: &mut [PluginPlaybackPlanPlugin], configs: &Value) {
+    for plugin in plugins {
+        let mut config = default_config_from_schema(plugin.config_schema.as_ref());
+        merge_config_value(&mut config, plugin.config.as_ref());
+        merge_config_value(&mut config, configs.get(&plugin.id));
+        plugin.config = if config.as_object().map(|object| object.is_empty()).unwrap_or(true) {
+            None
+        } else {
+            Some(config)
+        };
+    }
+}
+
+fn default_config_from_schema(schema: Option<&Value>) -> Value {
+    let mut config = serde_json::Map::new();
+    for field in schema
+        .and_then(|schema| schema.get("fields"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(key) = field.get("key").and_then(Value::as_str).map(str::trim).filter(|key| !key.is_empty()) else {
+            continue;
+        };
+        if let Some(value) = field.get("defaultValue").and_then(normalize_config_default_value) {
+            config.insert(key.to_string(), value);
+        }
+    }
+    Value::Object(config)
+}
+
+fn merge_config_value(target: &mut Value, source: Option<&Value>) {
+    let Some(source) = source.and_then(Value::as_object) else {
+        return;
+    };
+    let Some(target) = target.as_object_mut() else {
+        return;
+    };
+    for (key, value) in source {
+        if !key.trim().is_empty() && !value.is_null() {
+            target.insert(key.clone(), value.clone());
+        }
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -159,6 +218,8 @@ pub struct PluginCatalogItem {
     permissions: Vec<String>,
     source_url: String,
     source_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    config_schema: Option<Value>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -186,6 +247,8 @@ pub struct PluginManifest {
     source_kind: String,
     installed_at: String,
     enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    config_schema: Option<Value>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -203,6 +266,7 @@ pub struct PluginMetadata {
     highlights: Option<Vec<String>>,
     screenshots: Option<Vec<String>>,
     permissions: Option<Vec<String>>,
+    config_schema: Option<Value>,
 }
 
 #[tauri::command]
@@ -286,25 +350,24 @@ pub fn read_plugin_metadata_normalized(
 }
 
 #[tauri::command]
-pub fn build_plugin_manifest_from_catalog(
+pub async fn build_plugin_manifest_from_catalog(
     app: AppHandle,
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     item: PluginCatalogItem,
     installed_at: String,
     enabled: bool,
-) -> ApiResponse<PluginManifest> {
-    ApiResponse::from_result(build_plugin_manifest_from_catalog_inner(
-        &app,
-        worker,
-        item,
-        installed_at,
-        enabled,
-    ))
+) -> Result<ApiResponse<PluginManifest>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
+        build_plugin_manifest_from_catalog_inner(&app, &worker, item, installed_at, enabled)
+    })
+    .await
+    .map_err(|err| err.to_string())?;
+    Ok(ApiResponse::from_result(result))
 }
 
 fn build_plugin_manifest_from_catalog_inner(
     app: &AppHandle,
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    worker: &crate::workers::plugin::PluginWorkerState,
     item: PluginCatalogItem,
     installed_at: String,
     enabled: bool,
@@ -333,6 +396,7 @@ fn build_plugin_manifest_from_catalog_inner(
         screenshots: metadata.screenshots.unwrap_or_default(),
         capabilities,
         permissions: metadata.permissions.unwrap_or_default(),
+        config_schema: metadata.config_schema,
         source_url: Some(item.source_url),
         source_kind: item.source_kind,
         installed_at,
@@ -341,25 +405,24 @@ fn build_plugin_manifest_from_catalog_inner(
 }
 
 #[tauri::command]
-pub fn build_local_plugin_manifest(
+pub async fn build_local_plugin_manifest(
     app: AppHandle,
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
     file_path: String,
     installed_at: String,
     enabled: bool,
-) -> ApiResponse<PluginManifest> {
-    ApiResponse::from_result(build_local_plugin_manifest_inner(
-        &app,
-        worker,
-        file_path,
-        installed_at,
-        enabled,
-    ))
+) -> Result<ApiResponse<PluginManifest>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
+        build_local_plugin_manifest_inner(&app, &worker, file_path, installed_at, enabled)
+    })
+    .await
+    .map_err(|err| err.to_string())?;
+    Ok(ApiResponse::from_result(result))
 }
 
 fn build_local_plugin_manifest_inner(
     app: &AppHandle,
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+    worker: &crate::workers::plugin::PluginWorkerState,
     file_path: String,
     installed_at: String,
     enabled: bool,
@@ -389,6 +452,7 @@ fn build_local_plugin_manifest_inner(
         screenshots: metadata.screenshots.unwrap_or_default(),
         capabilities,
         permissions: metadata.permissions.unwrap_or_default(),
+        config_schema: metadata.config_schema,
         source_url: Some(file_path),
         source_kind: "local".to_string(),
         installed_at,
@@ -487,12 +551,12 @@ fn search_plugin_backend(
 
     let response = worker.invoke_plugin(
         entry,
-        json!({
+        plugin_request(&plugin, json!({
             "action": "search",
             "keyword": query,
             "page": page.max(1),
             "pageSize": page_size.clamp(1, 100),
-        }),
+        })),
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
     )?;
@@ -609,10 +673,10 @@ where
         .clone()
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
     let plugin_track = track;
-    let request = json!({
+    let request = plugin_request(&plugin, json!({
         "action": "qualities",
         "track": plugin_track,
-    });
+    }));
 
     let response = invoke_playback_plugin(
         worker,
@@ -719,18 +783,18 @@ where
     )?;
 
     for quality in qualities {
-        let request = json!({
+        let request = plugin_request(&plugin, json!({
             "action": "play",
             "track": plugin_track.clone(),
             "quality": quality,
             "includeMetadata": include_metadata,
-        });
+        }));
         log_plugin_playback(
             "resolve_plugin_playback_source request",
             json!({
                 "providerId": plugin.id,
                 "entry": entry,
-                "request": request.clone(),
+                "request": redact_plugin_request(&request),
             }),
         );
 
@@ -896,12 +960,13 @@ pub(crate) fn resolve_plugin_cover_metadata_backend(
 
     let entry = plugin
         .entry
+        .clone()
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
     let plugin_track = track;
-    let request = json!({
+    let request = plugin_request(&plugin, json!({
         "action": "cover",
         "track": plugin_track,
-    });
+    }));
     let response = worker.invoke_plugin(
         entry,
         request,
@@ -941,12 +1006,13 @@ where
 
     let entry = plugin
         .entry
+        .clone()
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
     let plugin_track = track;
-    let request = json!({
+    let request = plugin_request(&plugin, json!({
         "action": "lyrics",
         "track": plugin_track,
-    });
+    }));
 
     should_continue()?;
     let response = worker.invoke_plugin(
@@ -1049,10 +1115,10 @@ fn resolve_playback_lyrics_metadata(
         return Err("Plugin does not support lyrics.".to_string());
     }
 
-    let request = json!({
+    let request = plugin_request(plugin, json!({
         "action": "lyrics",
         "track": track,
-    });
+    }));
     let response = worker.invoke_plugin(
         entry.to_string(),
         request,
@@ -1396,6 +1462,7 @@ fn normalize_catalog_item_value(value: Value) -> Option<PluginCatalogItem> {
         .ok()?,
         source_url,
         source_kind,
+        config_schema: normalize_config_schema(value.get("configSchema").or_else(|| value.get("config_schema")).cloned()),
     })
 }
 
@@ -1447,6 +1514,7 @@ fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        config_schema: normalize_config_schema(value.get("configSchema").or_else(|| value.get("config_schema")).cloned()),
     })
 }
 
@@ -1476,6 +1544,7 @@ fn build_plugin_catalog_item_from_entry(
         permissions: metadata.permissions.unwrap_or_default(),
         source_kind,
         source_url,
+        config_schema: metadata.config_schema,
     })
 }
 
@@ -1555,6 +1624,7 @@ fn normalize_plugin_metadata(metadata: PluginMetadata) -> Result<PluginMetadata,
         permissions: Some(normalize_permissions(
             metadata.permissions.unwrap_or_default(),
         )?),
+        config_schema: normalize_config_schema(metadata.config_schema),
     })
 }
 
@@ -1587,6 +1657,94 @@ fn normalize_text_list(values: Vec<String>) -> Vec<String> {
 
 fn normalize_screenshot_list(values: Vec<String>) -> Vec<String> {
     normalize_text_list(values).into_iter().take(5).collect()
+}
+
+fn normalize_config_schema(value: Option<Value>) -> Option<Value> {
+    let value = value?;
+    let fields = value
+        .get("fields")
+        .and_then(Value::as_array)?
+        .iter()
+        .filter_map(normalize_config_field)
+        .collect::<Vec<_>>();
+    if fields.is_empty() {
+        None
+    } else {
+        Some(json!({ "fields": fields }))
+    }
+}
+
+fn normalize_config_field(value: &Value) -> Option<Value> {
+    let key = string_field(value, &["key"])?;
+    let label = string_field(value, &["label"])?;
+    let field_type = normalize_config_field_type(string_field(value, &["type"])?)?;
+    let options = normalize_config_options(value.get("options"));
+    if matches!(field_type.as_str(), "select" | "radio" | "checkbox") && options.is_empty() {
+        return None;
+    }
+
+    let mut field = serde_json::Map::new();
+    field.insert("key".to_string(), Value::String(key));
+    field.insert("label".to_string(), Value::String(label));
+    field.insert("type".to_string(), Value::String(field_type));
+    if let Some(placeholder) = string_field(value, &["placeholder"]) {
+        field.insert("placeholder".to_string(), Value::String(placeholder));
+    }
+    if let Some(required) = value.get("required").and_then(Value::as_bool) {
+        field.insert("required".to_string(), Value::Bool(required));
+    }
+    if let Some(default_value) = value.get("defaultValue").or_else(|| value.get("default_value")).and_then(normalize_config_default_value) {
+        field.insert("defaultValue".to_string(), default_value);
+    }
+    if !options.is_empty() {
+        field.insert("options".to_string(), Value::Array(options));
+    }
+    Some(Value::Object(field))
+}
+
+fn normalize_config_field_type(field_type: String) -> Option<String> {
+    match field_type.trim() {
+        "text" | "password" | "number" | "select" | "radio" | "checkbox" | "switch" => {
+            Some(field_type.trim().to_string())
+        }
+        _ => None,
+    }
+}
+
+fn normalize_config_options(value: Option<&Value>) -> Vec<Value> {
+    value
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|option| {
+            let label = string_field(option, &["label"])?;
+            let value = option.get("value").and_then(json_value_to_string)?;
+            Some(json!({ "label": label, "value": value }))
+        })
+        .fold(Vec::<Value>::new(), |mut items, option| {
+            let value = option.get("value").and_then(Value::as_str).unwrap_or("");
+            if !items.iter().any(|item| item.get("value").and_then(Value::as_str) == Some(value)) {
+                items.push(option);
+            }
+            items
+        })
+}
+
+fn normalize_config_default_value(value: &Value) -> Option<Value> {
+    match value {
+        Value::String(text) if !text.trim().is_empty() => Some(Value::String(text.trim().to_string())),
+        Value::Number(number) => Some(Value::Number(number.clone())),
+        Value::Bool(value) => Some(Value::Bool(*value)),
+        Value::Array(values) => {
+            let values = values
+                .iter()
+                .filter_map(json_value_to_string)
+                .map(Value::String)
+                .collect::<Vec<_>>();
+            (!values.is_empty()).then_some(Value::Array(values))
+        }
+        _ => None,
+    }
 }
 
 fn normalize_runtime(runtime: Option<String>) -> Option<String> {
@@ -1949,6 +2107,53 @@ where
     }
 }
 
+fn plugin_request(plugin: &PluginPlaybackPlanPlugin, mut request: Value) -> Value {
+    if let Some(config) = plugin.config.as_ref().filter(|config| !config.is_null()) {
+        if let Some(object) = request.as_object_mut() {
+            object.insert("config".to_string(), config.clone());
+        }
+    }
+    request
+}
+
+fn redact_plugin_request(request: &Value) -> Value {
+    let mut redacted = request.clone();
+    if let Some(object) = redacted.as_object_mut() {
+        if let Some(config) = object.get("config").cloned() {
+            object.insert("config".to_string(), redact_secret_value(&config));
+        }
+        for key in ["key", "apiKey", "api_key", "token", "secret"] {
+            if object.contains_key(key) {
+                object.insert(key.to_string(), Value::String("***".to_string()));
+            }
+        }
+    }
+    redacted
+}
+
+fn redact_secret_value(value: &Value) -> Value {
+    let Some(object) = value.as_object() else {
+        return Value::String("***".to_string());
+    };
+    Value::Object(
+        object
+            .iter()
+            .map(|(key, value)| {
+                let key_lower = key.to_ascii_lowercase();
+                let next_value = if key_lower.contains("key")
+                    || key_lower.contains("token")
+                    || key_lower.contains("secret")
+                {
+                    Value::String("***".to_string())
+                } else {
+                    value.clone()
+                };
+                (key.clone(), next_value)
+            })
+            .collect(),
+    )
+}
+
 fn resolve_playback_quality_attempts<F>(
     worker: &crate::workers::plugin::PluginWorkerState,
     entry: &str,
@@ -1961,10 +2166,10 @@ fn resolve_playback_quality_attempts<F>(
 where
     F: FnMut() -> Result<(), String>,
 {
-    let request = json!({
+    let request = plugin_request(plugin, json!({
         "action": "qualities",
         "track": track,
-    });
+    }));
     let response = invoke_playback_plugin(
         worker,
         entry.to_string(),
@@ -2170,8 +2375,8 @@ pub(crate) fn plugin_http_request_backend(
         "plugin_http_request_backend request",
         json!({
             "method": method,
-            "url": url,
-            "headers": headers,
+            "url": redact_sensitive_url(&url),
+            "headers": redact_http_headers(headers.as_ref()),
             "bodyBytes": data.as_ref().map(|value| value.len()).unwrap_or(0),
         }),
     );
@@ -2235,4 +2440,57 @@ pub(crate) fn plugin_http_request_backend(
         headers,
         body,
     })
+}
+
+fn redact_http_headers(headers: Option<&HashMap<String, String>>) -> Value {
+    Value::Object(
+        headers
+            .into_iter()
+            .flat_map(|headers| headers.iter())
+            .map(|(name, value)| {
+                let redacted = if is_sensitive_header(name) {
+                    "***".to_string()
+                } else {
+                    value.clone()
+                };
+                (name.clone(), Value::String(redacted))
+            })
+            .collect(),
+    )
+}
+
+fn redact_sensitive_url(url: &str) -> String {
+    let Some((base, query)) = url.split_once('?') else {
+        return url.to_string();
+    };
+    let redacted_query = query
+        .split('&')
+        .map(|part| {
+            let Some((name, value)) = part.split_once('=') else {
+                return part.to_string();
+            };
+            if is_sensitive_query_name(name) {
+                format!("{name}=***")
+            } else {
+                format!("{name}={value}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{base}?{redacted_query}")
+}
+
+fn is_sensitive_query_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name == "key" || name.contains("apikey") || name.contains("api_key") || name.contains("token") || name.contains("secret")
+}
+
+fn is_sensitive_header(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name == "authorization"
+        || name == "cookie"
+        || name == "set-cookie"
+        || name.contains("api-key")
+        || name.contains("token")
+        || name.contains("secret")
 }

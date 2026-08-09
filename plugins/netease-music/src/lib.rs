@@ -3,7 +3,7 @@ use std::cell::Cell;
 
 const PROVIDER_ID: &str = "mono-native-wasm-netease";
 const PROVIDER_NAME: &str = "网易云音乐";
-const API_BASE: &str = "https://api.qijieya.cn/meting/";
+const API_BASE: &str = "https://api.bugpk.com/api/163_music";
 const DEFAULT_QUALITY: &str = "jymaster";
 
 thread_local! { static LAST_LEN: Cell<usize> = const { Cell::new(0) }; }
@@ -49,7 +49,7 @@ fn handle_request(request: Value) -> Value {
     match request.get("action").and_then(Value::as_str) {
         Some("metadata") => metadata_response(),
         Some("search") => search_request(&request),
-        Some("qualities") => qualities_response(),
+        Some("qualities") => qualities_response(&request),
         Some("play") => play_request(&request),
         Some("lyrics") => lyrics_request(&request),
         Some("host_response") => host_response(&request),
@@ -78,7 +78,24 @@ fn metadata_response() -> Value {
         "updatedAt": "2026-08-10",
         "capabilities": ["search", "play", "lyrics"],
         "highlights": ["默认 jymaster 音质", "支持搜索和歌词", "播放时按当前音质解析"],
-        "permissions": ["network"]
+        "permissions": ["network"],
+        "configSchema": {
+            "fields": [{
+                "key": "defaultQuality",
+                "label": "\u{9ed8}\u{8ba4}\u{97f3}\u{8d28}",
+                "type": "select",
+                "defaultValue": DEFAULT_QUALITY,
+                "options": [
+                    { "label": "\u{6807}\u{51c6}\u{97f3}\u{8d28}", "value": "standard" },
+                    { "label": "\u{6781}\u{9ad8}\u{97f3}\u{8d28}", "value": "exhigh" },
+                    { "label": "\u{65e0}\u{635f}\u{97f3}\u{8d28}", "value": "lossless" },
+                    { "label": "Hi-Res", "value": "hires" },
+                    { "label": "\u{9ad8}\u{6e05}\u{73af}\u{7ed5}\u{58f0}", "value": "jyeffect" },
+                    { "label": "\u{6c89}\u{6d78}\u{73af}\u{7ed5}\u{58f0}", "value": "sky" },
+                    { "label": "\u{8d85}\u{6e05}\u{6bcd}\u{5e26}", "value": "jymaster" }
+                ]
+            }]
+        }
     })
 }
 
@@ -91,12 +108,12 @@ fn search_request(request: &Value) -> Value {
     let page_size = request.get("pageSize").and_then(Value::as_u64).unwrap_or(20).clamp(1, 100);
     let offset = (page.saturating_sub(1)).saturating_mul(page_size);
     host_get(&format!(
-        "{API_BASE}?type=search&s={}&limit={page_size}&offset={offset}",
+        "{API_BASE}?type=search&keywords={}&limit={page_size}&offset={offset}",
         url_encode(keyword)
     ))
 }
 
-fn qualities_response() -> Value {
+fn qualities_response(request: &Value) -> Value {
     json!({
         "qualities": [
             { "id": "standard", "name": "标准音质", "available": true },
@@ -107,7 +124,7 @@ fn qualities_response() -> Value {
             { "id": "sky", "name": "沉浸环绕声", "available": true },
             { "id": "jymaster", "name": "超清母带", "available": true }
         ],
-        "defaultQuality": DEFAULT_QUALITY
+        "defaultQuality": configured_default_quality(request)
     })
 }
 
@@ -116,8 +133,13 @@ fn play_request(request: &Value) -> Value {
     let Some(id) = track_id(track) else {
         return json!({ "error": "NetEase track missing id." });
     };
-    let quality = request.get("quality").and_then(Value::as_str).unwrap_or(DEFAULT_QUALITY).trim();
-    let level = if quality.is_empty() { DEFAULT_QUALITY } else { quality };
+    let level = request
+        .get("quality")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(normalize_quality)
+        .unwrap_or_else(|| configured_default_quality(request));
     host_get(&format!(
         "{API_BASE}?type=url&id={}&level={}",
         url_encode(&id),
@@ -159,8 +181,15 @@ fn parse_search_response(request: &Value, body: &str) -> Value {
         payload.get("data").and_then(Value::as_array).cloned().unwrap_or_default()
     });
     let tracks = songs.iter().filter_map(normalized_track).collect::<Vec<_>>();
-    let page_size = request.get("pageSize").and_then(Value::as_u64).unwrap_or(20).clamp(1, 100) as usize;
-    json!({ "tracks": tracks, "isEnd": tracks.len() < page_size })
+    let page = request.get("page").and_then(Value::as_u64).unwrap_or(1).max(1);
+    let page_size = request.get("pageSize").and_then(Value::as_u64).unwrap_or(20).clamp(1, 100);
+    let offset = page.saturating_sub(1).saturating_mul(page_size);
+    let is_end = payload
+        .pointer("/data/total")
+        .and_then(Value::as_u64)
+        .map(|total| total <= offset.saturating_add(page_size))
+        .unwrap_or_else(|| tracks.len() < page_size as usize);
+    json!({ "tracks": tracks, "isEnd": is_end })
 }
 
 fn parse_play_response(request: &Value, body: &str) -> Value {
@@ -180,9 +209,8 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         url = format!("{API_BASE}?type=url&id={}", url_encode(&id));
     }
     let track = request.get("track").unwrap_or(&Value::Null);
-    let quality = string_field(source, &["level", "quality"]).unwrap_or_else(|| {
-        request.get("quality").and_then(Value::as_str).unwrap_or(DEFAULT_QUALITY).to_string()
-    });
+    let quality = string_field(source, &["level", "quality"])
+        .unwrap_or_else(|| configured_default_quality(request).to_string());
     json!({
         "url": url,
         "path": url,
@@ -274,6 +302,29 @@ fn api_message(payload: &Value, fallback: &str) -> String {
 fn track_id(track: &Value) -> Option<String> {
     string_field(track, &["id", "sourceId"])
         .or_else(|| track.get("raw").and_then(|raw| string_field(raw, &["id", "sourceId"])))
+}
+
+fn configured_default_quality(request: &Value) -> &'static str {
+    let quality = request
+        .get("config")
+        .and_then(|config| config.get("defaultQuality"))
+        .and_then(Value::as_str)
+        .or_else(|| request.get("defaultQuality").and_then(Value::as_str))
+        .unwrap_or(DEFAULT_QUALITY);
+    normalize_quality(quality)
+}
+
+fn normalize_quality(quality: &str) -> &'static str {
+    match quality.trim() {
+        "standard" => "standard",
+        "exhigh" => "exhigh",
+        "lossless" => "lossless",
+        "hires" => "hires",
+        "jyeffect" => "jyeffect",
+        "sky" => "sky",
+        "jymaster" => "jymaster",
+        _ => DEFAULT_QUALITY,
+    }
 }
 
 fn artist_names(item: &Value) -> Vec<String> {

@@ -838,13 +838,14 @@ fn download_track(app: &AppHandle, params: Value) -> Result<Value, String> {
 fn read_download_plugins(
     app: &AppHandle,
 ) -> Result<Vec<crate::plugins::PluginPlaybackPlanPlugin>, String> {
-    serde_json::from_value(
-        read_store(app)?
+    let store = read_store(app)?;
+    crate::plugins::playback_plugins_from_values(
+        store
             .get("plugins.installed")
             .cloned()
             .unwrap_or_else(|| json!([])),
+        store.get("plugins.configs").cloned(),
     )
-    .map_err(|err| err.to_string())
 }
 
 fn list_resources() -> Result<Value, String> {

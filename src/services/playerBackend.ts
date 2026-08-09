@@ -222,12 +222,18 @@ export function playRustBackendPrevious(): Promise<RustQueueSnapshot> {
   return invokeApi<RustQueueSnapshot>('player_previous');
 }
 
-export function changeRustBackendQueueTrackQuality(quality: string, startPosition: number): Promise<RustQueueSnapshot> {
+export function changeRustBackendQueueTrackQuality(
+  quality: string,
+  startPosition: number,
+  providerId?: string | null,
+  sourceId?: string | null,
+  track?: Track | null,
+): Promise<RustQueueSnapshot> {
   if (!isTauriRuntime()) {
     return Promise.resolve(emptyQueueSnapshot());
   }
 
-  return invokeApi<RustQueueSnapshot>('player_change_queue_track_quality', { quality, startPosition });
+  return invokeApi<RustQueueSnapshot>('player_change_queue_track_quality', { quality, startPosition, providerId, sourceId, track });
 }
 
 export function insertRustBackendQueueNext(track: Track): Promise<RustQueueSnapshot> {

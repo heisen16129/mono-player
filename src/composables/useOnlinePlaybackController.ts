@@ -23,7 +23,13 @@ interface UseOnlinePlaybackControllerOptions {
   onlinePlaybackQuality: Ref<PluginPlaybackQuality>;
   onlinePlaybackQualityOptions: ReadonlyRefValue<PluginPlaybackQualityOption[]>;
   buildOnlinePlaybackQueue: (sourceTrack: PluginSearchTrack, playbackTrack: Track, queueTracks?: Track[]) => Track[];
-  changeRustQueueTrackQuality: (quality: PluginPlaybackQuality, startPosition: number) => Promise<RustQueueSnapshot>;
+  changeRustQueueTrackQuality: (
+    quality: PluginPlaybackQuality,
+    startPosition: number,
+    providerId?: string | null,
+    sourceId?: string | null,
+    track?: Track | null,
+  ) => Promise<RustQueueSnapshot>;
   clearOnlineSearchError: () => void;
   clearPreparingPlaybackState: () => void;
   findNextOnlineSearchTrack: (track: PluginSearchTrack) => PluginSearchTrack | null;
@@ -125,10 +131,14 @@ export function useOnlinePlaybackController({
     }
 
     const track = onlineActivePluginTrack.value;
-    const trackKey = getOnlineTrackKey(track);
-    onlineResolvingTrackKey.value = trackKey;
     try {
-      handleRustQueueSnapshot(await changeRustQueueTrackQuality(quality, playbackTime.value));
+      handleRustQueueSnapshot(await changeRustQueueTrackQuality(
+        quality,
+        playbackTime.value,
+        track.providerId,
+        track.id,
+        onlineActiveTrack.value,
+      ));
     } catch (error) {
       console.warn('[plugin-playback] change online quality failed', {
         providerId: track.providerId,
@@ -142,10 +152,6 @@ export function useOnlinePlaybackController({
       const message = normalizeOnlineErrorMessage(error, resolveLocale(player.settings.locale) === 'en-US' ? 'Failed to switch quality.' : '切换音质失败', player.settings.locale);
       setOnlineSearchError(message);
       await handleOnlinePlaybackFailure(track, message);
-    } finally {
-      if (onlineResolvingTrackKey.value === trackKey) {
-        onlineResolvingTrackKey.value = null;
-      }
     }
   }
 

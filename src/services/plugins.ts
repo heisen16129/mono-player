@@ -1,4 +1,6 @@
 import type {
+  PluginConfig,
+  PluginConfigMap,
   PluginCatalogItem,
   PluginManifest,
   PluginSubscription,
@@ -10,6 +12,7 @@ import { readPersistentValue, writePersistentValue } from './persistentStore';
 
 const INSTALLED_PLUGINS_KEY = 'plugins.installed';
 const PLUGIN_SUBSCRIPTIONS_KEY = 'plugins.subscriptions';
+const PLUGIN_CONFIGS_KEY = 'plugins.configs';
 const DELETED_PLUGINS_KEY = 'plugins.deleted';
 const PLUGIN_CATALOG_CACHE_KEY = 'plugins.catalog.cache';
 let pluginMutationQueue: Promise<void> = Promise.resolve();
@@ -67,11 +70,71 @@ export async function listInstalledPlugins(): Promise<PluginManifest[]> {
   if (JSON.stringify(storedPlugins) !== JSON.stringify(normalizedPlugins)) {
     await saveInstalledPlugins(normalizedPlugins);
   }
-  return normalizedPlugins;
+  const configs = await listPluginConfigs();
+  return normalizedPlugins.map((plugin) => ({
+    ...plugin,
+    config: { ...defaultPluginConfig(plugin), ...(configs[plugin.id] ?? {}) },
+  }));
 }
 
 export async function saveInstalledPlugins(plugins: PluginManifest[]): Promise<void> {
   await writePersistentValue(INSTALLED_PLUGINS_KEY, await normalizeManifests(plugins));
+}
+
+function normalizePluginConfig(value: unknown): PluginConfig {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return Object.fromEntries(
+    Object.entries(source)
+      .map(([key, configValue]) => [key.trim(), normalizePluginConfigValue(configValue)] as const)
+      .filter(([key, configValue]) => key && configValue !== undefined && configValue !== null && configValue !== '' && (!Array.isArray(configValue) || configValue.length > 0)),
+  );
+}
+
+function normalizePluginConfigValue(value: unknown): PluginConfig[string] {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'boolean') return value;
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim());
+  }
+  return undefined;
+}
+
+function normalizePluginConfigMap(value: unknown): PluginConfigMap {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return Object.fromEntries(
+    Object.entries(source)
+      .map(([pluginId, config]) => [pluginId, normalizePluginConfig(config)] as const)
+      .filter(([pluginId, config]) => pluginId.trim() && Object.keys(config).length > 0),
+  );
+}
+
+function defaultPluginConfig(plugin: PluginManifest): PluginConfig {
+  return Object.fromEntries(
+    (plugin.configSchema?.fields ?? [])
+      .filter((field) => field.defaultValue !== undefined && field.defaultValue !== null)
+      .map((field) => [field.key, normalizePluginConfigValue(field.defaultValue)] as const)
+      .filter(([key, value]) => key.trim() && value !== undefined),
+  );
+}
+
+export async function listPluginConfigs(): Promise<PluginConfigMap> {
+  return normalizePluginConfigMap(await readPersistentValue<PluginConfigMap>(PLUGIN_CONFIGS_KEY));
+}
+
+export async function savePluginConfig(pluginId: string, config: PluginConfig): Promise<PluginConfigMap> {
+  const normalizedPluginId = pluginId.trim();
+  if (!normalizedPluginId) return listPluginConfigs();
+  const configs = await listPluginConfigs();
+  const normalizedConfig = normalizePluginConfig(config);
+  const nextConfigs = { ...configs };
+  if (Object.keys(normalizedConfig).length > 0) {
+    nextConfigs[normalizedPluginId] = normalizedConfig;
+  } else {
+    delete nextConfigs[normalizedPluginId];
+  }
+  await writePersistentValue(PLUGIN_CONFIGS_KEY, nextConfigs);
+  return nextConfigs;
 }
 
 export async function listDeletedPluginIds(): Promise<string[]> {
@@ -187,6 +250,7 @@ export async function uninstallPlugin(pluginId: string): Promise<PluginManifest[
   }
   await markPluginDeleted(pluginId);
   await saveInstalledPlugins(nextInstalled);
+  await savePluginConfig(pluginId, {});
   const cachedPlugins = await listCachedPluginCatalog();
   await saveCachedPluginCatalog(cachedPlugins.filter((plugin) => plugin.id !== pluginId));
   return nextInstalled;

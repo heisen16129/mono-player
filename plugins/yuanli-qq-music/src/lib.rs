@@ -2,6 +2,7 @@ use serde_json::{json, Value};
 use std::cell::Cell;
 
 const PROVIDER_ID: &str = "mono-native-wasm-yuanli-qq";
+const DEFAULT_QUALITY: &str = "320k";
 const PROVIDER_NAME: &str = "元力QQ";
 
 thread_local! { static LAST_LEN: Cell<usize> = const { Cell::new(0) }; }
@@ -46,7 +47,7 @@ fn handle_request(request: Value) -> Value {
         Some("search") => search_request(&request),
         Some("play") => play_request(&request),
         Some("lyrics") => lyrics_request(&request),
-        Some("qualities") => qualities_response(),
+        Some("qualities") => qualities_response(&request),
         Some("host_response") => host_response(&request),
         action => json!({"error":format!("unsupported action: {:?}",action)}),
     }
@@ -73,7 +74,22 @@ fn metadata_response() -> Value {
         "updatedAt": "2026-07-23",
         "capabilities": ["search", "play", "lyrics"],
         "highlights": ["支持多音质播放", "返回多格式歌词", "可用于在线歌曲下载"],
-        "permissions": ["network"]
+        "permissions": ["network"],
+        "configSchema": {
+            "fields": [
+                {
+                    "key": "defaultQuality",
+                    "label": "\u{9ed8}\u{8ba4}\u{97f3}\u{8d28}",
+                    "type": "select",
+                    "defaultValue": DEFAULT_QUALITY,
+                    "options": [
+                        { "label": "\u{6807}\u{51c6}\u{97f3}\u{8d28}", "value": "128k" },
+                        { "label": "\u{9ad8}\u{54c1}\u{97f3}\u{8d28}", "value": "320k" },
+                        { "label": "\u{65e0}\u{635f}\u{97f3}\u{8d28}", "value": "flac" }
+                    ]
+                }
+            ]
+        }
     })
 }
 fn search_request(request: &Value) -> Value {
@@ -99,10 +115,12 @@ fn search_request(request: &Value) -> Value {
 }
 fn play_request(request: &Value) -> Value {
     let track = request.get("track").unwrap_or(&Value::Null);
-    let quality = request.get("quality").and_then(Value::as_str).unwrap_or("");
-    if quality.is_empty() {
-        return json!({"error":"play request missing quality"});
-    }
+    let quality = request
+        .get("quality")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| configured_default_quality(request));
     let Some(songmid) = value_to_string(track.get("songmid").or_else(|| track.get("mid"))) else {
         return json!({"error":"QQ track has no playable songmid."});
     };
@@ -142,8 +160,27 @@ fn parse_lyrics_response(request: &Value, body: &str) -> Value {
         .and_then(decode_base64_utf8);
     lyrics_response(raw, request)
 }
-fn qualities_response() -> Value {
-    json!({"qualities":[{"id":"128k","name":"标准音质","available":true},{"id":"320k","name":"高品音质","available":true},{"id":"flac","name":"无损音质","available":true}],"defaultQuality":"320k"})
+fn qualities_response(request: &Value) -> Value {
+    json!({"qualities":[{"id":"128k","name":"标准音质","available":true},{"id":"320k","name":"高品音质","available":true},{"id":"flac","name":"无损音质","available":true}],"defaultQuality":configured_default_quality(request)})
+}
+
+fn configured_default_quality(request: &Value) -> &'static str {
+    let quality = request
+        .get("config")
+        .and_then(|config| config.get("defaultQuality"))
+        .and_then(Value::as_str)
+        .or_else(|| request.get("defaultQuality").and_then(Value::as_str))
+        .unwrap_or(DEFAULT_QUALITY);
+    normalize_quality(quality)
+}
+
+fn normalize_quality(quality: &str) -> &'static str {
+    match quality.trim() {
+        "128k" => "128k",
+        "320k" => "320k",
+        "flac" => "flac",
+        _ => DEFAULT_QUALITY,
+    }
 }
 fn parse_qq_jsonp(response: &str) -> Option<Value> {
     let mut text = response.trim();
@@ -188,7 +225,12 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         return json!({"error":format!("{} did not return a playable url.",PROVIDER_NAME)});
     };
     let track = request.get("track").unwrap_or(&Value::Null);
-    let quality = request.get("quality").and_then(Value::as_str).unwrap_or("");
+    let quality = request
+        .get("quality")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| configured_default_quality(request));
     json!({"url":url,"path":url,"title":track.get("title").cloned().unwrap_or(Value::Null),"artist":track.get("artist").cloned().unwrap_or(Value::Null),"album":track.get("album").cloned().unwrap_or(Value::Null),"duration":normalize_seconds(track.get("duration")),"artwork":track.get("artwork").cloned().unwrap_or(Value::Null),"quality":quality,"lyrics":play_lyrics_metadata(track),"sourceId":track.get("id").cloned().unwrap_or(Value::Null),"sourceName":PROVIDER_NAME,"sourceProviderId":PROVIDER_ID,"sourceRaw":track})
 }
 

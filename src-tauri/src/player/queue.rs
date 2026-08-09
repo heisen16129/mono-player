@@ -318,6 +318,10 @@ pub(super) fn queue_track_source_key(track: &QueueTrack) -> String {
         return track.path.clone();
     }
 
+    queue_track_plugin_source_key(track).unwrap_or_else(|| track.path.clone())
+}
+
+pub(super) fn queue_track_plugin_source_key(track: &QueueTrack) -> Option<String> {
     match (
         track.source_provider_id.as_deref(),
         track.source_id.as_deref(),
@@ -325,9 +329,9 @@ pub(super) fn queue_track_source_key(track: &QueueTrack) -> String {
         (Some(provider_id), Some(source_id))
             if !provider_id.trim().is_empty() && !source_id.trim().is_empty() =>
         {
-            format!("plugin://{}/{}", provider_id.trim(), source_id.trim())
+            Some(format!("plugin://{}/{}", provider_id.trim(), source_id.trim()))
         }
-        _ => track.path.clone(),
+        _ => None,
     }
 }
 
@@ -383,8 +387,107 @@ pub(super) fn queue_track_for_source(backend: &PlayerBackend, source: &str) -> O
     backend
         .queue_tracks
         .iter()
-        .find(|track| queue_track_source_key(track) == source || track.path == source)
+        .find(|track| {
+            queue_track_source_key(track) == source
+                || track.path == source
+                || queue_track_plugin_source_key(track).as_deref() == Some(source)
+        })
         .cloned()
+}
+
+pub(super) fn plugin_queue_source_for_identity(
+    backend: &PlayerBackend,
+    provider_id: &str,
+    source_id: &str,
+) -> Option<(String, Option<usize>)> {
+    let provider_id = provider_id.trim();
+    let source_id = source_id.trim();
+    if provider_id.is_empty() || source_id.is_empty() {
+        return None;
+    }
+
+    let plugin_source = format!("plugin://{provider_id}/{source_id}");
+    let track = backend.queue_tracks.iter().find(|track| {
+        track.source_provider_id.as_deref().map(str::trim) == Some(provider_id)
+            && track.source_id.as_deref().map(str::trim) == Some(source_id)
+    })?;
+    let track_key = queue_track_source_key(track);
+    let queue_index = backend
+        .queue_sources
+        .iter()
+        .position(|item| item == &plugin_source || item == &track_key || item == &track.path);
+
+    Some((plugin_source, queue_index))
+}
+
+pub(super) fn ensure_plugin_queue_track_for_backend(
+    backend: &mut PlayerBackend,
+    track: QueueTrack,
+) -> Option<(String, Option<usize>)> {
+    let plugin_source = queue_track_plugin_source_key(&track)?;
+    if let Some((source, queue_index)) = plugin_queue_source_for_identity(
+        backend,
+        track.source_provider_id.as_deref().unwrap_or(""),
+        track.source_id.as_deref().unwrap_or(""),
+    ) {
+        return Some((source, queue_index));
+    }
+
+    backend.queue_tracks.push(track);
+    backend.queue_sources.push(plugin_source.clone());
+    Some((
+        plugin_source,
+        backend.queue_sources.len().checked_sub(1),
+    ))
+}
+
+pub(super) fn current_plugin_queue_source_for_backend(
+    backend: &PlayerBackend,
+) -> Option<(String, Option<usize>)> {
+    let current_source = backend.current_source.as_deref()?.trim();
+    if current_source.is_empty() {
+        return None;
+    }
+
+    let queue_source = queue_source_key_for_source(&backend.queue_tracks, current_source)
+        .unwrap_or_else(|| current_source.to_string());
+    if is_plugin_queue_source(&queue_source) {
+        let queue_index = backend
+            .queue_sources
+            .iter()
+            .position(|item| item == &queue_source)
+            .or(backend.queue_index);
+        return Some((queue_source, queue_index));
+    }
+
+    if let Some(source) = queue_track_for_source(backend, current_source)
+        .and_then(|track| queue_track_plugin_source_key(&track))
+    {
+        let queue_index = backend
+            .queue_sources
+            .iter()
+            .position(|item| item == &queue_source || item == current_source)
+            .or(backend.queue_index);
+        return Some((source, queue_index));
+    }
+
+    let queue_index = backend.queue_index?;
+    let indexed_source = backend.queue_sources.get(queue_index)?;
+    let indexed_queue_source = queue_source_key_for_source(&backend.queue_tracks, indexed_source)
+        .unwrap_or_else(|| indexed_source.clone());
+    if is_plugin_queue_source(&indexed_queue_source) {
+        return Some((indexed_queue_source, Some(queue_index)));
+    }
+
+    queue_track_for_source(backend, indexed_source)
+        .and_then(|track| queue_track_plugin_source_key(&track))
+        .or_else(|| {
+            backend
+                .queue_tracks
+                .get(queue_index)
+                .and_then(queue_track_plugin_source_key)
+        })
+        .map(|source| (source, Some(queue_index)))
 }
 
 fn queue_source_exists_for_backend(backend: &PlayerBackend, source: &str) -> bool {
@@ -639,5 +742,23 @@ mod tests {
     fn plugin_queue_tracks_without_source_identity_are_filtered() {
         assert!(normalize_queue_track(plugin_track(None, Some("provider"))).is_none());
         assert!(normalize_queue_track(plugin_track(Some("song-1"), None)).is_none());
+    }
+
+    #[test]
+    fn current_plugin_queue_source_falls_back_to_queue_index() {
+        let track = plugin_track(Some("song-1"), Some("provider"));
+        let plugin_source = queue_track_source_key(&track);
+        let backend = PlayerBackend {
+            current_source: Some("https://cdn.example.test/song-1.mp3".to_string()),
+            queue_tracks: vec![track],
+            queue_sources: vec![plugin_source.clone()],
+            queue_index: Some(0),
+            ..PlayerBackend::default()
+        };
+
+        assert_eq!(
+            current_plugin_queue_source_for_backend(&backend),
+            Some((plugin_source, Some(0)))
+        );
     }
 }

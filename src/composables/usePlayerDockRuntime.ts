@@ -92,6 +92,14 @@ export function usePlayerDockRuntime({
     return snapshot ? resolveRustQueueSnapshotTrack(snapshot, snapshot.tracks) : null;
   }
 
+  function playbackTrackIdentity(track: Track | null | undefined) {
+    if (!track) return '';
+    const providerId = track.sourceProviderId?.trim();
+    const sourceId = track.sourceId?.trim();
+    if (providerId && sourceId) return `plugin:${providerId}:${sourceId}`;
+    return `${track.id}:${track.path}`;
+  }
+
   function isActiveRustPath(path: string | null | undefined) {
     const normalizedPath = normalizedBackendPath(path);
     return normalizedPath === normalizedBackendPath(activeTrack.value?.path)
@@ -278,7 +286,7 @@ export function usePlayerDockRuntime({
   );
 
   watch(
-    () => [activeTrack.value?.id, activeTrack.value?.path] as const,
+    () => playbackTrackIdentity(activeTrack.value),
     () => {
       progress.runtimeDuration.value = 0;
       progress.setPlaybackTime(0);

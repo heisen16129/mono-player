@@ -140,10 +140,11 @@ fn queue_track_plugin_value(track: &QueueTrack) -> Value {
 fn read_installed_playback_plugins(
     app: &AppHandle,
 ) -> Result<Vec<crate::plugins::PluginPlaybackPlanPlugin>, String> {
-    let value = crate::store::read_value(app, "plugins.installed")
+    let plugins = crate::store::read_value(app, "plugins.installed")
         .map_err(|err| err.to_string())?
         .unwrap_or_else(|| Value::Array(Vec::new()));
-    serde_json::from_value(value).map_err(|err| err.to_string())
+    let configs = crate::store::read_value(app, "plugins.configs").ok().flatten();
+    crate::plugins::playback_plugins_from_values(plugins, configs)
 }
 
 fn read_quality_fallback(app: &AppHandle) -> String {
@@ -177,8 +178,12 @@ pub(crate) fn player_set_cache_dir(
         };
 
         fs::create_dir_all(&next_cache_dir).map_err(|err| err.to_string())?;
-        cleanup_online_audio_cache_files(&next_cache_dir, None);
         let mut current_cache_dir = state.cache_dir.lock().map_err(|err| err.to_string())?;
+        if *current_cache_dir == next_cache_dir {
+            return Ok(CacheDirSnapshot {
+                cache_dir: next_cache_dir.to_string_lossy().to_string(),
+            });
+        }
         *current_cache_dir = next_cache_dir.clone();
         audio_worker.set_cache_dir(online_audio_cache_dir(&next_cache_dir))?;
         Ok(CacheDirSnapshot {
@@ -394,6 +399,9 @@ pub(crate) async fn player_change_queue_track_quality(
     app: AppHandle,
     quality: String,
     start_position: f64,
+    provider_id: Option<String>,
+    source_id: Option<String>,
+    track: Option<QueueTrack>,
 ) -> Result<ApiResponse<QueueSnapshot>, String> {
     let state = Arc::clone(&state.inner);
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -404,20 +412,19 @@ pub(crate) async fn player_change_queue_track_quality(
 
         let (source, queue_index, generation) = {
             let mut backend = state.lock().map_err(|err| err.to_string())?;
-            let current_source = backend
-                .current_source
+            let explicit_source = provider_id
+                .as_deref()
+                .zip(source_id.as_deref())
+                .and_then(|(provider_id, source_id)| {
+                    plugin_queue_source_for_identity(&backend, provider_id, source_id)
+                });
+            let track_source = track
                 .clone()
-                .ok_or_else(|| "No active queue source.".to_string())?;
-            let queue_source = queue_source_key_for_source(&backend.queue_tracks, &current_source)
-                .unwrap_or(current_source);
-            if !is_plugin_queue_source(&queue_source) {
-                return Err("Current queue track is not an online track.".to_string());
-            }
-            let queue_index = backend
-                .queue_sources
-                .iter()
-                .position(|item| item == &queue_source)
-                .or(backend.queue_index);
+                .and_then(|track| ensure_plugin_queue_track_for_backend(&mut backend, track));
+            let (queue_source, queue_index) = current_plugin_queue_source_for_backend(&backend)
+                .or(explicit_source)
+                .or(track_source)
+                .ok_or_else(|| "Current queue track is not an online track.".to_string())?;
             let generation = next_playback_generation(&mut backend);
             (queue_source, queue_index, generation)
         };
@@ -655,11 +662,9 @@ pub(crate) fn is_current_plugin_queue_track(
 
     let state = app.state::<PlayerState>();
     let backend = state.inner.lock().map_err(|err| err.to_string())?;
-    let Some(current_source) = backend.current_source.as_deref() else {
+    let Some((current_source, _)) = current_plugin_queue_source_for_backend(&backend) else {
         return Ok(false);
     };
-    let current_source = queue_source_key_for_source(&backend.queue_tracks, current_source)
-        .unwrap_or_else(|| current_source.to_string());
     Ok(current_source == format!("plugin://{provider_id}/{source_id}"))
 }
 

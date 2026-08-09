@@ -61,7 +61,36 @@ export interface PluginManifest {
   sourceKind: PluginSourceKind;
   installedAt: string;
   enabled: boolean;
+  config?: PluginConfig;
+  configSchema?: PluginConfigSchema | null;
 }
+
+export type PluginConfigValue = string | number | boolean | string[] | null | undefined;
+
+export type PluginConfig = Record<string, PluginConfigValue>;
+
+export type PluginConfigFieldType = 'text' | 'password' | 'number' | 'select' | 'radio' | 'checkbox' | 'switch';
+
+export interface PluginConfigOption {
+  label: string;
+  value: string;
+}
+
+export interface PluginConfigField {
+  key: string;
+  label: string;
+  type: PluginConfigFieldType;
+  required?: boolean;
+  placeholder?: string;
+  defaultValue?: PluginConfigValue;
+  options?: PluginConfigOption[];
+}
+
+export interface PluginConfigSchema {
+  fields: PluginConfigField[];
+}
+
+export type PluginConfigMap = Record<string, PluginConfig>;
 
 export interface PluginThemePayload {
   id?: string;
@@ -91,6 +120,7 @@ export interface PluginCatalogItem {
   permissions: PluginPermission[];
   sourceUrl: string;
   sourceKind: PluginSourceKind;
+  configSchema?: PluginConfigSchema | null;
 }
 
 export interface PluginSubscription {

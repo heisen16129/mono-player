@@ -223,6 +223,18 @@ Rust 不做业务推断：
 
 详细字段见 [wasm-plugin-development.md](wasm-plugin-development.md)。
 
+## 插件配置与默认音质
+
+- 插件配置表单由 `metadata.configSchema.fields` 声明，Host 只负责渲染、保存，并在调用插件时传入 `request.config`。
+- 配置字段含义由插件自己解释，Host 不应硬编码插件业务规则。
+- 表单字段类型支持 `text/password/number/select/radio/checkbox/switch`。
+- `select/radio/checkbox` 字段用 `options: [{ "label", "value" }]` 声明选项。
+- 音乐插件推荐使用 `defaultQuality` 作为默认音质配置字段。
+- `defaultQuality` 的选项值必须和 `qualities[].id` 一致。
+- `qualities` 应读取 `request.config.defaultQuality` 并返回对应 `defaultQuality`；没有配置时使用插件内置默认值。
+- `play` 应优先使用请求里的 `quality`；没有 `quality` 时再使用 `request.config.defaultQuality`；仍没有时使用插件内置默认值。
+- 音质切换时 Host 传给 `play` 的是 `qualities[].id`，UI 显示名来自 `qualities[].name`。
+
 ## 网络权限
 
 插件不能直接访问系统网络。网络请求必须走 `hostRequest`：

@@ -115,7 +115,10 @@ export function useRustQueueSnapshotController({
     const track = resolveRustQueueSnapshotTrack(snapshot, mergedTracks);
     if (track) {
       const pluginTrack = findPluginTrackForQueueTrack(track);
-      if (markPreparing && pluginTrack && currentSource.startsWith('plugin://')) {
+      const isSamePlaybackTrack = currentPlaybackTrack.value
+        ? isSameQueueSource(currentPlaybackTrack.value, track)
+        : false;
+      if (markPreparing && pluginTrack && currentSource.startsWith('plugin://') && !isSamePlaybackTrack) {
         queueSwitchingTrackKey.value = getOnlineTrackKey(pluginTrack);
         playbackTime.value = 0;
         isAudioPlaying.value = false;
