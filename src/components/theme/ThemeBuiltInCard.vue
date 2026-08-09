@@ -90,35 +90,6 @@ const emit = defineEmits<{
     linear-gradient(135deg, #ffffff 0%, #f5f5f7 58%, #eaf3ff 100%);
 }
 
-.theme-card-preview.wallpaper-tone.system-light {
-  --system-preview-base: #fbfbfd;
-  --system-preview-accent: #dfe4f2;
-  --cover-page: color-mix(in srgb, var(--system-preview-base), black 0%);
-  --cover-sidebar: color-mix(in srgb, var(--system-preview-base), var(--system-preview-accent) 34%);
-  --cover-border: color-mix(in srgb, var(--system-preview-base), var(--system-preview-accent) 58%);
-  --cover-selected: color-mix(in srgb, var(--system-preview-base), var(--system-preview-accent) 46%);
-  --cover-line: #2f2f2f;
-  --cover-line-soft: color-mix(in srgb, var(--system-preview-base), var(--system-preview-accent) 58%);
-  color: #2f2f2f;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--cover-border) 46%, transparent) 1px, transparent 1px) 0 0 / 18px 18px,
-    linear-gradient(135deg, var(--cover-page), color-mix(in srgb, var(--system-preview-base), var(--system-preview-accent) 32%));
-}
-
-.theme-card-preview.wallpaper-tone.system-dark {
-  --system-preview-base: #0f0f10;
-  --cover-page: var(--system-preview-base);
-  --cover-sidebar: color-mix(in srgb, var(--system-preview-base), white 6%);
-  --cover-border: color-mix(in srgb, var(--system-preview-base), white 18%);
-  --cover-selected: color-mix(in srgb, var(--system-preview-base), white 16%);
-  --cover-line: #e8e8e8;
-  --cover-line-soft: color-mix(in srgb, var(--system-preview-base), white 24%);
-  color: #e8e8e8;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--cover-border) 42%, transparent) 1px, transparent 1px) 0 0 / 18px 18px,
-    linear-gradient(135deg, var(--cover-page), color-mix(in srgb, var(--system-preview-base), white 7%));
-}
-
 .theme-card-preview {
   color: transparent;
   background: var(--cover-page, var(--smw-bg-panel));

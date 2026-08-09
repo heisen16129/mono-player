@@ -1,5 +1,5 @@
 ﻿import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import type { CoverImage, LyricLine, SystemThemeState, Track, TrackLyrics } from '../types/music';
+import type { CoverImage, LyricLine, Track, TrackLyrics } from '../types/music';
 import { artistNames } from '../utils/artist';
 import { invokeApi } from './api';
 
@@ -251,14 +251,6 @@ export function clearCoverThumbnailCache(path: string): Promise<void> {
   }
 
   return invokeApi<void>('clear_cover_thumbnail_cache', { path });
-}
-
-export function getSystemThemeState(): Promise<SystemThemeState> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve({ mode: 'light', appsUseLightTheme: true, systemUsesLightTheme: true, wallpaperColor: null });
-  }
-
-  return invokeApi<SystemThemeState>('get_system_theme_state');
 }
 
 export function openTrackInFolder(path: string): Promise<void> {

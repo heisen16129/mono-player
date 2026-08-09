@@ -173,9 +173,12 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
     let Some(source) = playback_item(&payload) else {
         return json!({ "error": format!("{} did not return a playable url.", PROVIDER_NAME) });
     };
-    let Some(url) = string_field(source, &["url", "playUrl", "src"]).filter(|value| is_http_url(value)) else {
+    let Some(mut url) = string_field(source, &["url", "playUrl", "src"]).filter(|value| is_http_url(value)) else {
         return json!({ "error": format!("{} did not return a playable url.", PROVIDER_NAME) });
     };
+    if let Some(id) = netease_outer_url_id(&url) {
+        url = format!("{API_BASE}?type=url&id={}", url_encode(&id));
+    }
     let track = request.get("track").unwrap_or(&Value::Null);
     let quality = string_field(source, &["level", "quality"]).unwrap_or_else(|| {
         request.get("quality").and_then(Value::as_str).unwrap_or(DEFAULT_QUALITY).to_string()
@@ -195,6 +198,19 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         "sourceProviderId": PROVIDER_ID,
         "sourceRaw": track
     })
+}
+
+fn netease_outer_url_id(url: &str) -> Option<String> {
+    if !url.contains("music.163.com/song/media/outer/url") {
+        return None;
+    }
+    let raw_id = url.split("id=").nth(1)?.split('&').next()?.trim();
+    let id = raw_id.strip_suffix(".mp3").unwrap_or(raw_id).trim();
+    if id.is_empty() || !id.bytes().all(|byte| byte.is_ascii_digit()) {
+        None
+    } else {
+        Some(id.to_string())
+    }
 }
 
 fn parse_lyrics_response(body: &str) -> Value {

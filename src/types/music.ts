@@ -80,23 +80,9 @@ export interface CoverImage {
   data: number[];
 }
 
-export interface WallpaperThemeColor {
-  r: number;
-  g: number;
-  b: number;
-  path: string | null;
-}
-
-export interface SystemThemeState {
-  mode: 'light' | 'dark';
-  appsUseLightTheme: boolean;
-  systemUsesLightTheme: boolean;
-  wallpaperColor?: WallpaperThemeColor | null;
-}
-
 export type AppLocale = 'zh-CN' | 'en-US';
 export type Locale = 'system' | AppLocale;
-export type BuiltInTheme = 'dark' | 'light' | 'blueWhite' | 'wallpaperTone' | 'desktopGlass';
+export type BuiltInTheme = 'blueWhite';
 export type CustomThemeId = `custom:${string}`;
 export type AppTheme = BuiltInTheme | CustomThemeId;
 export type ShortcutAction =

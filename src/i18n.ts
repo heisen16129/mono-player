@@ -16,7 +16,6 @@ type MessageKey =
   | 'closeAction'
   | 'collapseSidebar'
   | 'confirm'
-  | 'darkTheme'
   | 'blueWhiteTheme'
   | 'emptyArtists'
   | 'emptyFavorites'
@@ -32,7 +31,6 @@ type MessageKey =
   | 'fontColor'
   | 'highQuality'
   | 'language'
-  | 'lightTheme'
   | 'localFolder'
   | 'localFolders'
   | 'localLibrary'
@@ -102,7 +100,6 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     closeAction: '单击退出按钮时',
     collapseSidebar: '收起侧边栏',
     confirm: '确认',
-    darkTheme: '深色主题',
     blueWhiteTheme: '蓝白主题',
     emptyArtists: '还没有艺术家',
     emptyFavorites: '还没有收藏歌曲',
@@ -118,7 +115,6 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     fontColor: '字体颜色',
     highQuality: '高音质',
     language: '语言',
-    lightTheme: '灰白主题',
     localFolder: '本地文件夹',
     localFolders: '本地文件夹',
     localLibrary: '本地音乐库',
@@ -187,7 +183,6 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     closeAction: 'When clicking close',
     collapseSidebar: 'Collapse sidebar',
     confirm: 'Confirm',
-    darkTheme: 'Dark theme',
     blueWhiteTheme: 'Blue White theme',
     emptyArtists: 'No artists yet',
     emptyFavorites: 'No favorite songs yet',
@@ -203,7 +198,6 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     fontColor: 'Font color',
     highQuality: 'High quality',
     language: 'Language',
-    lightTheme: 'Gray White theme',
     localFolder: 'Local folder',
     localFolders: 'Local folders',
     localLibrary: 'Local Library',

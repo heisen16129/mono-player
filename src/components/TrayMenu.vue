@@ -39,7 +39,8 @@ async function refreshTrayState() {
     readJson(SETTINGS_KEY, { theme: 'blueWhite' }),
   ]);
   state.value = nextState;
-  document.documentElement.dataset.theme = String(settings.theme || 'blueWhite');
+  const theme = String(settings.theme || 'blueWhite');
+  document.documentElement.dataset.theme = theme.startsWith('custom:') ? 'custom' : 'blueWhite';
 }
 
 onMounted(async () => {

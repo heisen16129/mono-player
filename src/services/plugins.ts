@@ -12,6 +12,13 @@ const INSTALLED_PLUGINS_KEY = 'plugins.installed';
 const PLUGIN_SUBSCRIPTIONS_KEY = 'plugins.subscriptions';
 const DELETED_PLUGINS_KEY = 'plugins.deleted';
 const PLUGIN_CATALOG_CACHE_KEY = 'plugins.catalog.cache';
+let pluginMutationQueue: Promise<void> = Promise.resolve();
+
+function runPluginMutation<T>(mutation: () => Promise<T>): Promise<T> {
+  const run = pluginMutationQueue.then(mutation, mutation);
+  pluginMutationQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
 
 export async function listPluginSubscriptions(): Promise<PluginSubscription[]> {
   const stored = await readPersistentValue<PluginSubscription[]>(PLUGIN_SUBSCRIPTIONS_KEY);
@@ -95,16 +102,18 @@ export async function restoreDeletedPluginsFromCatalog(plugins: PluginCatalogIte
 }
 
 export async function installCatalogPlugin(item: PluginCatalogItem): Promise<PluginManifest[]> {
-  const installed = await listInstalledPlugins();
-  const manifest = await invokeApi<PluginManifest>('build_plugin_manifest_from_catalog', {
-    item,
-    installedAt: new Date().toISOString(),
-    enabled: true,
+  return runPluginMutation(async () => {
+    const manifest = await invokeApi<PluginManifest>('build_plugin_manifest_from_catalog', {
+      item,
+      installedAt: new Date().toISOString(),
+      enabled: true,
+    });
+    const installed = await listInstalledPlugins();
+    const nextInstalled = [manifest, ...installed.filter((plugin) => plugin.id !== manifest.id)];
+    await restoreDeletedPlugin(manifest.id);
+    await saveInstalledPlugins(nextInstalled);
+    return nextInstalled;
   });
-  const nextInstalled = [manifest, ...installed.filter((plugin) => plugin.id !== manifest.id)];
-  await restoreDeletedPlugin(manifest.id);
-  await saveInstalledPlugins(nextInstalled);
-  return nextInstalled;
 }
 
 export async function installLocalPlugin(filePath: string): Promise<PluginManifest[]> {
@@ -112,16 +121,18 @@ export async function installLocalPlugin(filePath: string): Promise<PluginManife
     throw new Error('只支持导入 WASM 插件。');
   }
 
-  const installed = await listInstalledPlugins();
-  const manifest = await invokeApi<PluginManifest>('build_local_plugin_manifest', {
-    filePath,
-    installedAt: new Date().toISOString(),
-    enabled: true,
+  return runPluginMutation(async () => {
+    const manifest = await invokeApi<PluginManifest>('build_local_plugin_manifest', {
+      filePath,
+      installedAt: new Date().toISOString(),
+      enabled: true,
+    });
+    const installed = await listInstalledPlugins();
+    const nextInstalled = [manifest, ...installed.filter((plugin) => plugin.id !== manifest.id)];
+    await restoreDeletedPlugin(manifest.id);
+    await saveInstalledPlugins(nextInstalled);
+    return nextInstalled;
   });
-  const nextInstalled = [manifest, ...installed.filter((plugin) => plugin.id !== manifest.id)];
-  await restoreDeletedPlugin(manifest.id);
-  await saveInstalledPlugins(nextInstalled);
-  return nextInstalled;
 }
 
 function isAbsolutePluginAsset(value: string) {

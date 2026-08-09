@@ -1,9 +1,4 @@
-import type { AppTheme, CustomTheme, SystemThemeState } from '../../types/music';
-
-export interface CachedSystemThemeState {
-  state: SystemThemeState;
-  savedAt: number;
-}
+import type { AppTheme, CustomTheme } from '../../types/music';
 
 export function normalizeCustomThemes(value: unknown): CustomTheme[] {
   return Array.isArray(value)
@@ -21,27 +16,9 @@ export function normalizeCustomThemes(value: unknown): CustomTheme[] {
 }
 
 export function isBuiltInTheme(theme: string): theme is Exclude<AppTheme, `custom:${string}`> {
-  return theme === 'dark' || theme === 'light' || theme === 'blueWhite' || theme === 'wallpaperTone' || theme === 'desktopGlass';
+  return theme === 'blueWhite';
 }
 
 export function isCustomTheme(theme: AppTheme): theme is `custom:${string}` {
   return theme.startsWith('custom:');
-}
-
-export function normalizeCachedSystemThemeState(value: unknown): CachedSystemThemeState | null {
-  try {
-    if (!value || typeof value !== 'object') return null;
-    const parsed = value as CachedSystemThemeState;
-    if (
-      typeof parsed.savedAt !== 'number' ||
-      (parsed.state?.mode !== 'light' && parsed.state?.mode !== 'dark') ||
-      typeof parsed.state.appsUseLightTheme !== 'boolean' ||
-      typeof parsed.state.systemUsesLightTheme !== 'boolean'
-    ) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
 }

@@ -3,7 +3,6 @@ import type { PlayerSettings, ShortcutBindings } from '../../types/music';
 export const SETTINGS_KEY = 'mono-player-settings';
 export const FAVORITES_KEY = 'mono-player-favorites';
 export const CUSTOM_THEMES_KEY = 'mono-player-custom-themes';
-export const SYSTEM_THEME_KEY = 'mono-player-system-theme-state';
 export const PLAYBACK_SESSION_KEY = 'mono-player-playback-session';
 export const STARTUP_THEME_KEY = 'mono-player-startup-theme';
 export const STARTUP_BG_KEY = 'mono-player-startup-bg';

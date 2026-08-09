@@ -1,10 +1,9 @@
 ﻿import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { listen } from '@tauri-apps/api/event';
 import { resolveLocale } from '../i18n';
 import { listLatestAddedTracks, listTracks, removeMusicDir, scanMusicDir } from '../services/music';
 import { readPersistentValue, removePersistentValue, writePersistentValue } from '../services/persistentStore';
-import type { CustomTheme, PlaybackMode, PlaybackSession, PlayerSettings, SystemThemeState, Track } from '../types/music';
+import type { CustomTheme, PlaybackMode, PlaybackSession, PlayerSettings, Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
 import {
   CUSTOM_THEMES_KEY,
@@ -12,17 +11,14 @@ import {
   fallbackSettings,
   PLAYBACK_SESSION_KEY,
   SETTINGS_KEY,
-  SYSTEM_THEME_KEY,
 } from './player/constants';
 import { createPlayerFavoriteActions } from './player/favoriteActions';
 import {
   dedupeTracksByPath,
-  normalizeCachedSystemThemeState,
   normalizeCustomThemes,
   normalizeFavoriteStore,
   normalizeSettings,
   normalizePlaybackSession,
-  type CachedSystemThemeState,
 } from './player/normalizers';
 import { createPlayerPlaylistActions } from './player/playlistActions';
 import { createPlayerPlaybackStateActions } from './player/playbackStateActions';
@@ -44,19 +40,14 @@ export const usePlayerStore = defineStore('player', () => {
   const settings = ref<PlayerSettings>(fallbackSettings);
   const playbackMode = ref<PlaybackMode>('shuffle');
   const playbackSession = ref<PlaybackSession | null>(null);
-  const cachedSystemThemeState = ref<CachedSystemThemeState | null>(null);
   const {
     addCustomTheme,
     applySettingsSideEffects,
-    applySystemThemeState,
-    handleSystemThemeChanged,
     persistSettings,
-    refreshSystemThemeOnFocus,
     removeCustomTheme,
-    scheduleSystemThemeRefresh,
     setTheme,
     toggleTheme,
-  } = createPlayerThemeController({ settings, customThemes, cachedSystemThemeState });
+  } = createPlayerThemeController({ settings, customThemes });
 
   const { favoriteTracks, isFavorite, toggleFavorite } = createPlayerFavoriteActions({
     favoriteTrackIds,
@@ -80,13 +71,11 @@ export const usePlayerStore = defineStore('player', () => {
       storedFavoriteTrackIds,
       storedCustomThemes,
       storedPlaybackSession,
-      storedSystemTheme,
     ] = await Promise.all([
       readPersistentValue<unknown>(SETTINGS_KEY),
       readPersistentValue<unknown>(FAVORITES_KEY),
       readPersistentValue<unknown>(CUSTOM_THEMES_KEY),
       readPersistentValue<unknown>(PLAYBACK_SESSION_KEY),
-      readPersistentValue<unknown>(SYSTEM_THEME_KEY),
     ]);
 
     if (storedSettings) {
@@ -105,14 +94,6 @@ export const usePlayerStore = defineStore('player', () => {
 
     if (storedPlaybackSession) {
       playbackSession.value = normalizePlaybackSession(storedPlaybackSession);
-    }
-
-    if (storedSystemTheme) {
-      const cached = normalizeCachedSystemThemeState(storedSystemTheme);
-      if (cached) {
-        cachedSystemThemeState.value = cached;
-        applySystemThemeState(cached.state);
-      }
     }
 
     applySettingsSideEffects();
@@ -282,18 +263,6 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   applySettingsSideEffects();
-  void listen<SystemThemeState>('system-theme-changed', (event) => {
-    handleSystemThemeChanged(event.payload);
-  });
-  window.addEventListener('focus', refreshSystemThemeOnFocus);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      refreshSystemThemeOnFocus();
-    }
-  });
-  if (settings.value.theme === 'wallpaperTone') {
-    scheduleSystemThemeRefresh(true);
-  }
 
   return {
     currentSource,
