@@ -1,6 +1,7 @@
 import type { Ref } from 'vue';
 import type { usePlayerStore } from '../stores/player';
 import type { Track, TrackLyrics } from '../types/music';
+import { normalizeTrackLyrics } from '../utils/trackLyrics';
 import { isSameTrackForMetadata } from '../utils/trackRuntimeMetadata';
 
 type LyricsTarget = 'lyrics' | 'associatedLyrics';
@@ -17,7 +18,6 @@ interface UseTrackLyricsMutationOptions {
   player: ReturnType<typeof usePlayerStore>;
   rustPlaybackQueue: Ref<Track[]>;
   selectedTrack: Ref<Track | null>;
-  syncLyricsViewStateForTrack: (track: Track | null) => void;
   updateLyricsViewStateForRequest: (track: Track, status: LyricsViewStatus, error?: string | null) => void;
 }
 
@@ -28,7 +28,6 @@ export function useTrackLyricsMutation({
   player,
   rustPlaybackQueue,
   selectedTrack,
-  syncLyricsViewStateForTrack,
   updateLyricsViewStateForRequest,
 }: UseTrackLyricsMutationOptions) {
   function withTrackLyrics(
@@ -141,7 +140,7 @@ export function useTrackLyricsMutation({
     if (isSameTrackForMetadata(player.currentTrack, active)) {
       player.setCurrentTrack(nextTrack);
     }
-    syncLyricsViewStateForTrack(nextTrack);
+    updateLyricsViewStateForRequest(nextTrack, normalizeTrackLyrics(nextTrack)?.lyrics.length ? 'ready' : 'empty');
 
     player.tracks = player.tracks.map((track) => (isSameTrackForMetadata(track, active) ? withoutAssociatedTrackLyrics(track) : track));
     player.queue = player.queue.map((track) => (isSameTrackForMetadata(track, active) ? withoutAssociatedTrackLyrics(track) : track));

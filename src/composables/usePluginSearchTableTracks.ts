@@ -23,7 +23,7 @@ export function usePluginSearchTableTracks(options: UsePluginSearchTableTracksOp
       sourceId: track.id,
       sourceName: track.providerName,
       sourceProviderId: track.providerId,
-      sourceRaw: track.raw ?? track,
+      sourceRaw: track.sourceRaw ?? track,
     }))
   )));
 

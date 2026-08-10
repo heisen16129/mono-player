@@ -142,7 +142,7 @@ export interface PluginSearchTrack {
   year?: number | null;
   genre?: string | null;
   trackNumber?: number | null;
-  raw?: unknown;
+  sourceRaw?: unknown;
 }
 
 export interface PluginSearchProvider {

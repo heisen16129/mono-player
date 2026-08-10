@@ -5,6 +5,7 @@ use crate::workers::{
 use std::{
     io::{BufRead, BufReader, Write},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    thread,
 };
 
 pub(crate) struct WorkerProcess {
@@ -52,7 +53,7 @@ impl WorkerProcess {
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|err| err.to_string())?;
 
@@ -64,6 +65,28 @@ impl WorkerProcess {
             .stdout
             .take()
             .ok_or_else(|| format!("{worker_flag} worker stdout is unavailable"))?;
+        if let Some(stderr) = child.stderr.take() {
+            thread::spawn(move || {
+                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                        eprintln!("{}", serde_json::json!({ "worker": worker, "log": value }));
+                    } else {
+                        eprintln!(
+                            "{}",
+                            serde_json::json!({
+                                "target": "worker-stderr",
+                                "worker": worker,
+                                "message": trimmed,
+                            })
+                        );
+                    }
+                }
+            });
+        }
 
         Ok(WorkerProcessParts {
             worker,

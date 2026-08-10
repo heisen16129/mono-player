@@ -126,14 +126,18 @@ fn ensure_current_playback_generation(
 
 fn queue_track_plugin_value(track: &QueueTrack) -> Value {
     json!({
-        "id": track.source_id.as_deref().unwrap_or(""),
+        "id": track.id,
+        "sourceId": track.source_id.as_deref().unwrap_or(""),
         "providerId": track.source_provider_id.as_deref().unwrap_or(""),
+        "sourceProviderId": track.source_provider_id.as_deref().unwrap_or(""),
         "providerName": track.source_name.as_deref().unwrap_or(""),
+        "sourceName": track.source_name.as_deref().unwrap_or(""),
         "title": track.title,
         "artist": track.artist.as_deref().unwrap_or(""),
         "album": track.album.as_deref().unwrap_or(""),
         "duration": track.duration,
         "artwork": track.artwork,
+        "sourceRaw": track.source_raw,
     })
 }
 
@@ -681,6 +685,7 @@ fn model_track_to_queue_track(track: Track) -> QueueTrack {
         source_id: track.source_id,
         source_name: track.source_name,
         source_provider_id: track.source_provider_id,
+        source_raw: track.source_raw,
     }
 }
 

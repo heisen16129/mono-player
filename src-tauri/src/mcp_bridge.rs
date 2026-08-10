@@ -736,7 +736,7 @@ fn online_track_from_params(params: Value) -> Result<Track, String> {
         track_number: None,
         associated_artwork: None,
         associated_lyrics: None,
-        source_raw: track.get("raw").cloned().or_else(|| Some(track.clone())),
+        source_raw: track.get("sourceRaw").cloned(),
     })
 }
 
@@ -1003,7 +1003,7 @@ fn normalize_search_track(plugin: &McpPluginManifest, raw_track: Value) -> Value
         Value::Object(map) => map,
         value => {
             let mut map = serde_json::Map::new();
-            map.insert("raw".to_string(), value);
+            map.insert("sourceRaw".to_string(), value);
             map
         }
     };
@@ -1011,7 +1011,7 @@ fn normalize_search_track(plugin: &McpPluginManifest, raw_track: Value) -> Value
     track.insert("providerId".to_string(), json!(plugin.id));
     track.insert("providerName".to_string(), json!(plugin.name));
     track
-        .entry("raw".to_string())
+        .entry("sourceRaw".to_string())
         .or_insert_with(|| raw_track.clone());
     Value::Object(track)
 }

@@ -221,11 +221,19 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         "artwork": track.get("artwork").cloned().unwrap_or(Value::Null),
         "quality": quality,
         "lyrics": Value::Null,
-        "sourceId": track.get("id").cloned().unwrap_or(Value::Null),
+        "sourceId": source_id_value(track),
         "sourceName": PROVIDER_NAME,
         "sourceProviderId": PROVIDER_ID,
-        "sourceRaw": track
+        "sourceRaw": track_source_raw(track)
     })
+}
+
+fn source_id_value(track: &Value) -> Value {
+    track.get("sourceId").cloned().unwrap_or(Value::Null)
+}
+
+fn track_source_raw(track: &Value) -> Value {
+    track.get("sourceRaw").cloned().unwrap_or(Value::Null)
 }
 
 fn netease_outer_url_id(url: &str) -> Option<String> {
@@ -280,7 +288,7 @@ fn normalized_track(item: &Value) -> Option<Value> {
         "album": album,
         "duration": duration,
         "artwork": artwork,
-        "raw": item
+        "sourceRaw": item
     }))
 }
 
@@ -300,8 +308,8 @@ fn api_message(payload: &Value, fallback: &str) -> String {
 }
 
 fn track_id(track: &Value) -> Option<String> {
-    string_field(track, &["id", "sourceId"])
-        .or_else(|| track.get("raw").and_then(|raw| string_field(raw, &["id", "sourceId"])))
+    string_field(track, &["sourceId"])
+        .or_else(|| track.get("sourceRaw").and_then(|source_raw| string_field(source_raw, &["id", "sourceId"])))
 }
 
 fn configured_default_quality(request: &Value) -> &'static str {

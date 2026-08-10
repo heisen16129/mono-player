@@ -29,17 +29,28 @@ fn log_plugin_args(method: &str, args: Value) {
     if should_skip_plugin_log(method, &args) {
         return;
     }
-    eprintln!("[plugin-rust] {method} args={args}");
+    eprintln!(
+        "{}",
+        json!({
+            "target": "plugin-rust",
+            "event": method,
+            "args": args,
+        })
+    );
 }
 
 fn log_plugin_host_request(plugin_id: Option<&str>, method: &str, url: &str, data: Option<&str>) {
     eprintln!(
-        "[plugin-host-request] args={}",
+        "{}",
         json!({
-            "pluginId": plugin_id,
-            "method": method,
-            "url": url,
-            "data": data,
+            "target": "plugin-host-request",
+            "event": "request",
+            "args": {
+                "pluginId": plugin_id,
+                "method": method,
+                "url": url,
+                "data": data,
+            }
         })
     );
 }

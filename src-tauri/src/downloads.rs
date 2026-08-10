@@ -540,7 +540,9 @@ fn resolve_download_track_request(
         track.source_provider_id = Some(source.source_provider_id)
             .filter(|value| !value.trim().is_empty())
             .or(track.source_provider_id);
-        track.source_raw = Some(source.source_raw).or(track.source_raw);
+        if !source.source_raw.is_null() {
+            track.source_raw = Some(source.source_raw);
+        }
         if track_lyrics_raw(&track.lyrics).is_none() {
             track.lyrics = source
                 .lyrics

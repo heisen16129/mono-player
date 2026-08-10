@@ -12,6 +12,7 @@ import type { CustomTheme } from '../types/music';
 import type { PluginCatalogItem, PluginManifest } from '../types/plugin';
 import type { PluginRow } from '../components/plugin-manager/types';
 import { getErrorMessage } from '../utils/error';
+import { PLUGINS_CHANGED_EVENT } from './useMusicSourcePluginAvailability';
 
 interface UsePluginInstallActionsOptions {
   catalogPlugins: Ref<PluginCatalogItem[]>;
@@ -36,6 +37,10 @@ export function usePluginInstallActions({
 }: UsePluginInstallActionsOptions) {
   const player = usePlayerStore();
   const isBatchBusy = ref(false);
+
+  function notifyInstalledPluginsChanged() {
+    window.dispatchEvent(new CustomEvent(PLUGINS_CHANGED_EVENT));
+  }
 
   function pluginThemeId(themeId: string | undefined, fallbackId: string): CustomTheme['id'] {
     const id = themeId?.trim() || fallbackId;
@@ -71,6 +76,7 @@ export function usePluginInstallActions({
 
   async function installPlugin(item: PluginCatalogItem) {
     installedPlugins.value = await installCatalogPlugin(item);
+    notifyInstalledPluginsChanged();
     const manifest = installedPlugins.value.find((plugin) => plugin.id === item.id);
     let themeInstalled = false;
     if (manifest) {
@@ -88,6 +94,7 @@ export function usePluginInstallActions({
 
   async function updatePlugin(item: PluginCatalogItem) {
     installedPlugins.value = await installCatalogPlugin(item);
+    notifyInstalledPluginsChanged();
     const manifest = installedPlugins.value.find((plugin) => plugin.id === item.id);
     let themeUpdated = false;
     if (manifest) {
@@ -106,6 +113,7 @@ export function usePluginInstallActions({
   async function removePlugin(pluginId: string, pluginName: string) {
     const manifest = installedPlugins.value.find((plugin) => plugin.id === pluginId);
     installedPlugins.value = await uninstallPlugin(pluginId);
+    notifyInstalledPluginsChanged();
     if (manifest) await removeThemeFromPlugin(manifest);
     catalogPlugins.value = catalogPlugins.value.filter((plugin) => plugin.id !== pluginId);
     await loadDeletedPluginIds();
@@ -115,6 +123,7 @@ export function usePluginInstallActions({
 
   async function togglePlugin(plugin: PluginManifest) {
     installedPlugins.value = await setPluginEnabled(plugin.id, !plugin.enabled);
+    notifyInstalledPluginsChanged();
   }
 
   async function batchInstallSelected() {
@@ -126,6 +135,7 @@ export function usePluginInstallActions({
       for (const plugin of pluginsToInstall) {
         if (plugin.catalogItem) {
           installedPlugins.value = await installCatalogPlugin(plugin.catalogItem);
+          notifyInstalledPluginsChanged();
           const manifest = installedPlugins.value.find((item) => item.id === plugin.catalogItem?.id);
           if (manifest) await addThemeFromPlugin(manifest);
         }
@@ -147,6 +157,7 @@ export function usePluginInstallActions({
       for (const plugin of pluginsToUninstall) {
         if (plugin.manifest) await removeThemeFromPlugin(plugin.manifest);
         installedPlugins.value = await uninstallPlugin(plugin.id);
+        notifyInstalledPluginsChanged();
         catalogPlugins.value = catalogPlugins.value.filter((item) => item.id !== plugin.id);
       }
       await loadDeletedPluginIds();
@@ -165,6 +176,7 @@ export function usePluginInstallActions({
     try {
       for (const plugin of pluginsToDisable) {
         if (plugin.manifest) installedPlugins.value = await setPluginEnabled(plugin.manifest.id, false);
+        notifyInstalledPluginsChanged();
       }
       notify(`已停用 ${pluginsToDisable.length} 个插件`);
     } finally {
@@ -183,6 +195,7 @@ export function usePluginInstallActions({
 
     if (typeof selected !== 'string') return;
     installedPlugins.value = await installLocalPlugin(selected);
+    notifyInstalledPluginsChanged();
     const manifest = installedPlugins.value[0];
     let themeInstalled = false;
     if (manifest) {

@@ -1,5 +1,7 @@
-import { computed, onMounted, ref, watch, type ComputedRef } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch, type ComputedRef } from 'vue';
 import { listInstalledPlugins } from '../services/plugins';
+
+export const PLUGINS_CHANGED_EVENT = 'mono:plugins-changed';
 
 export function useMusicSourcePluginAvailability(pluginsEnabled: ComputedRef<boolean>) {
   const hasInstalledMusicSourcePlugin = ref(false);
@@ -12,12 +14,24 @@ export function useMusicSourcePluginAvailability(pluginsEnabled: ComputedRef<boo
 
     const plugins = await listInstalledPlugins().catch(() => []);
     hasInstalledMusicSourcePlugin.value = plugins.some((plugin) => (
-      plugin.enabled && plugin.kind === 'music' && plugin.capabilities.includes('search')
+      plugin.enabled
+      && plugin.kind === 'music'
+      && plugin.capabilities.includes('search')
+      && plugin.capabilities.includes('play')
     ));
   }
 
-  onMounted(() => {
+  function handlePluginsChanged() {
     void refreshMusicSourcePluginAvailability();
+  }
+
+  onMounted(() => {
+    window.addEventListener(PLUGINS_CHANGED_EVENT, handlePluginsChanged);
+    void refreshMusicSourcePluginAvailability();
+  });
+
+  onUnmounted(() => {
+    window.removeEventListener(PLUGINS_CHANGED_EVENT, handlePluginsChanged);
   });
 
   watch(pluginsEnabled, () => {

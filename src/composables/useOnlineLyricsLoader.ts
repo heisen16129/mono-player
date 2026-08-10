@@ -64,7 +64,7 @@ export function useOnlineLyricsLoader({
           track.providerName,
           track.providerId,
           track.id,
-          track.raw ?? track,
+          track.sourceRaw ?? track,
         );
         updateLyricsViewStateForRequest(playbackTrack, 'ready');
       } catch (error) {

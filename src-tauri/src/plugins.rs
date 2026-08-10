@@ -15,7 +15,14 @@ const OFFICIAL_PLUGIN_ENTRY_PREFIX: &str =
 static PLAYBACK_QUALITIES_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 fn log_plugin_playback(method: &str, args: serde_json::Value) {
-    eprintln!("[plugin-playback] {method} args={args}");
+    eprintln!(
+        "{}",
+        json!({
+            "target": "plugin-playback",
+            "event": method,
+            "args": args,
+        })
+    );
 }
 
 fn json_string_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
@@ -131,7 +138,8 @@ pub struct PluginSearchTrack {
     year: Option<u64>,
     genre: Option<String>,
     track_number: Option<u64>,
-    raw: serde_json::Value,
+    #[serde(rename = "sourceRaw")]
+    source_raw: serde_json::Value,
 }
 
 #[derive(serde::Serialize)]
@@ -1068,9 +1076,15 @@ fn normalize_plugin_playback_source(
         .unwrap_or("")
         .to_string();
     let duration = json_duration_seconds(track);
-    let source_id = json_string_field(track, &["id", "songmid", "mid", "hash"])
+    let source_id = json_string_field(&response, &["sourceId"])
+        .or_else(|| json_string_field(track, &["sourceId"]))
         .unwrap_or("")
         .to_string();
+    let source_raw = response
+        .get("sourceRaw")
+        .cloned()
+        .or_else(|| track.get("sourceRaw").cloned())
+        .unwrap_or(Value::Null);
 
     Ok(PluginPlaybackSource {
         path: url.clone(),
@@ -1085,7 +1099,7 @@ fn normalize_plugin_playback_source(
         source_id,
         source_name: plugin.name.clone(),
         source_provider_id: plugin.id.clone(),
-        source_raw: track.clone(),
+        source_raw,
     })
 }
 
@@ -1173,7 +1187,10 @@ fn normalize_plugin_search_track(
     track: serde_json::Value,
     plugin: &PluginPlaybackPlanPlugin,
 ) -> PluginSearchTrack {
-    let raw = track.get("raw").cloned().unwrap_or_else(|| track.clone());
+    let source_raw = track
+        .get("sourceRaw")
+        .cloned()
+        .unwrap_or_else(|| track.clone());
     let title = json_string_field(&track, &["title", "name"])
         .unwrap_or("Unknown Track")
         .to_string();
@@ -1198,7 +1215,7 @@ fn normalize_plugin_search_track(
             &track,
             &["trackNumber", "trackNo", "track_no", "index"],
         ),
-        raw,
+        source_raw,
     }
 }
 
@@ -2015,7 +2032,7 @@ fn normalize_plugin_lyrics_metadata(
         track_id: json_string_field(&response, &["trackId"]).map(str::to_string),
         default_format,
         lyrics,
-        track_raw: response.get("raw").cloned(),
+        track_raw: response.get("sourceRaw").cloned(),
     })
 }
 

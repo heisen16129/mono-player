@@ -64,7 +64,6 @@ export function usePlaybackLyricsRuntime({
     player,
     rustPlaybackQueue,
     selectedTrack,
-    syncLyricsViewStateForTrack,
     updateLyricsViewStateForRequest,
   });
 

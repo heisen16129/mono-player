@@ -38,6 +38,7 @@ pub(crate) struct QueueTrack {
     pub(super) source_id: Option<String>,
     pub(super) source_name: Option<String>,
     pub(super) source_provider_id: Option<String>,
+    pub(super) source_raw: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Serialize)]
@@ -666,6 +667,7 @@ mod tests {
             source_id: source_id.map(str::to_string),
             source_name: Some("Provider".to_string()),
             source_provider_id: provider_id.map(str::to_string),
+            source_raw: None,
         }
     }
 

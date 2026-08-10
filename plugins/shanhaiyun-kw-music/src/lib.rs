@@ -249,8 +249,12 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         "sourceId": track_id(track).map_or(Value::Null, Value::String),
         "sourceName": PROVIDER_NAME,
         "sourceProviderId": PROVIDER_ID,
-        "sourceRaw": track
+        "sourceRaw": track_source_raw(track)
     })
+}
+
+fn track_source_raw(track: &Value) -> Value {
+    track.get("sourceRaw").cloned().unwrap_or(Value::Null)
 }
 
 fn parse_lyrics_response(request: &Value, body: &str) -> Value {
@@ -296,7 +300,7 @@ fn normalized_track(item: &Value) -> Option<Value> {
         "album": album,
         "duration": duration,
         "artwork": artwork,
-        "raw": raw
+        "sourceRaw": raw
     }))
 }
 
@@ -443,9 +447,9 @@ fn array_items<'a>(value: &'a Value, keys: &[&str]) -> Vec<&'a Value> {
 }
 
 fn track_id(track: &Value) -> Option<String> {
-    string_field(track, &["id", "rid", "music_id", "musicId", "sourceId"])
-        .or_else(|| track.get("raw").and_then(|raw| string_field(raw, &["id", "rid", "music_id", "musicId", "sourceId"])))
-        .or_else(|| track.get("source").and_then(|raw| string_field(raw, &["id", "rid", "music_id", "musicId", "sourceId"])))
+    string_field(track, &["sourceId"])
+        .or_else(|| track.get("sourceRaw").and_then(|source_raw| string_field(source_raw, &["id", "rid", "music_id", "musicId", "sourceId"])))
+        .or_else(|| track.get("sourceRaw").and_then(|source_raw| source_raw.get("source")).and_then(|source| string_field(source, &["id", "rid", "music_id", "musicId", "sourceId"])))
 }
 
 fn artist_name(item: &Value) -> String {

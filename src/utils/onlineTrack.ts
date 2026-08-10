@@ -41,7 +41,7 @@ export function createOnlineQueueTrack(track: PluginSearchTrack, source?: Online
     trackId: track.id,
     defaultFormat: source.lyrics.defaultFormat ?? source.lyrics.lyrics[0]?.format ?? null,
     lyrics: source.lyrics.lyrics,
-    trackRaw: track.raw ?? track,
+    trackRaw: track.sourceRaw ?? track,
   } : null;
 
   return {
@@ -59,7 +59,7 @@ export function createOnlineQueueTrack(track: PluginSearchTrack, source?: Online
     sourceId: source?.sourceId ?? track.id,
     sourceName: source?.sourceName ?? track.providerName,
     sourceProviderId: source?.sourceProviderId ?? track.providerId,
-    sourceRaw: source?.sourceRaw ?? track.raw ?? track,
+    sourceRaw: source?.sourceRaw ?? track.sourceRaw ?? track,
   };
 }
 
@@ -92,7 +92,7 @@ export function findPluginTrackForQueueTrack(track: Track, candidates: OnlineTra
     album: track.album ?? '',
     duration: track.duration,
     artwork: track.artwork ?? null,
-    raw: track.sourceRaw ?? track,
+    sourceRaw: track.sourceRaw ?? track,
   };
 }
 

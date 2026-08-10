@@ -121,7 +121,7 @@ fn play_request(request: &Value) -> Value {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| configured_default_quality(request));
-    let Some(id) = value_to_string(track.get("id")).map(|v| v.replace("MUSIC_", "")) else {
+    let Some(id) = source_raw_field(track, &["id", "MUSICRID", "DC_TARGETID"]).map(|v| v.replace("MUSIC_", "")) else {
         return json!({"error":"Kuwo track has no playable id."});
     };
     host_get(
@@ -137,7 +137,7 @@ fn lyrics_request(request: &Value) -> Value {
     if let Some(raw) = pick_raw_lyrics(track) {
         return lyrics_response(normalize_kuwo_raw_lyrics(&raw), request);
     }
-    let Some(id) = value_to_string(track.get("id")).map(|v| v.replace("MUSIC_", "")) else {
+    let Some(id) = source_raw_field(track, &["id", "MUSICRID", "DC_TARGETID"]).map(|v| v.replace("MUSIC_", "")) else {
         return json!({"error":"Kuwo lyrics track missing id."});
     };
     host_get(
@@ -168,7 +168,7 @@ fn parse_lyrics_response(request: &Value, body: &str) -> Value {
         .ok()
         .and_then(|v| format_kuwo_lyric_list(v.pointer("/data/lrclist")));
     if raw.is_none() {
-        if let Some(id) = value_to_string(request.get("track").unwrap_or(&Value::Null).get("id"))
+        if let Some(id) = source_raw_field(request.get("track").unwrap_or(&Value::Null), &["id", "MUSICRID", "DC_TARGETID"])
             .map(|v| v.replace("MUSIC_", ""))
         {
             return host_get(
@@ -252,11 +252,15 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| configured_default_quality(request));
-    json!({"url":url,"path":url,"title":track.get("title").cloned().unwrap_or(Value::Null),"artist":track.get("artist").cloned().unwrap_or(Value::Null),"album":track.get("album").cloned().unwrap_or(Value::Null),"duration":normalize_seconds(track.get("duration")),"artwork":track.get("artwork").cloned().unwrap_or(Value::Null),"quality":quality,"lyrics":play_lyrics_metadata(track),"sourceId":track.get("id").cloned().unwrap_or(Value::Null),"sourceName":PROVIDER_NAME,"sourceProviderId":PROVIDER_ID,"sourceRaw":track})
+    json!({"url":url,"path":url,"title":track.get("title").cloned().unwrap_or(Value::Null),"artist":track.get("artist").cloned().unwrap_or(Value::Null),"album":track.get("album").cloned().unwrap_or(Value::Null),"duration":normalize_seconds(track.get("duration")),"artwork":track.get("artwork").cloned().unwrap_or(Value::Null),"quality":quality,"lyrics":play_lyrics_metadata(track),"sourceId":source_id_value(track),"sourceName":PROVIDER_NAME,"sourceProviderId":PROVIDER_ID,"sourceRaw":track_source_raw(track)})
 }
 
+fn source_id_value(track: &Value) -> Value { track.get("sourceId").cloned().unwrap_or(Value::Null) }
+fn track_source_raw(track: &Value) -> Value { track.get("sourceRaw").cloned().unwrap_or(Value::Null) }
+fn source_raw_field(track: &Value, keys: &[&str]) -> Option<String> { let source_raw = track.get("sourceRaw")?; keys.iter().find_map(|key| value_to_string(source_raw.get(*key))) }
+
 fn normalized_track(id: String, raw: Value) -> Value {
-    json!({"id":id,"providerId":PROVIDER_ID,"providerName":PROVIDER_NAME,"title":raw.get("title").and_then(Value::as_str).unwrap_or("Unknown Track"),"artist":raw.get("artist").and_then(Value::as_str).unwrap_or("Unknown Artist"),"album":raw.get("album").and_then(Value::as_str).unwrap_or(""),"duration":normalize_seconds(raw.get("duration").or_else(||raw.get("interval"))),"artwork":raw.get("artwork").cloned().unwrap_or(Value::Null),"raw":raw})
+    json!({"id":id,"providerId":PROVIDER_ID,"providerName":PROVIDER_NAME,"title":raw.get("title").and_then(Value::as_str).unwrap_or("Unknown Track"),"artist":raw.get("artist").and_then(Value::as_str).unwrap_or("Unknown Artist"),"album":raw.get("album").and_then(Value::as_str).unwrap_or(""),"duration":normalize_seconds(raw.get("duration").or_else(||raw.get("interval"))),"artwork":raw.get("artwork").cloned().unwrap_or(Value::Null),"sourceRaw":raw})
 }
 fn paged_tracks(request: &Value, tracks: Vec<Value>, total: u64) -> Value {
     let page = request.get("page").and_then(Value::as_u64).unwrap_or(1);
@@ -317,7 +321,7 @@ fn normalize_seconds(value: Option<&Value>) -> Value {
 fn pick_raw_lyrics(track: &Value) -> Option<String> {
     ["rawLrc", "rawLrcTxt", "lyric", "lyrics", "lrc"]
         .iter()
-        .find_map(|k| track.get(*k).and_then(Value::as_str).map(str::to_string))
+        .find_map(|k| track.get("sourceRaw").and_then(|source_raw| source_raw.get(*k)).and_then(Value::as_str).map(str::to_string))
 }
 fn playable_url_from_response(response: &Value) -> Option<String> {
     ["/url", "/data/url"]

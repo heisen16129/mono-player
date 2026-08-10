@@ -52,7 +52,7 @@ export function useLyricsAssociation(options: {
         track.providerName,
         track.providerId,
         track.id,
-        track.raw ?? track,
+        track.sourceRaw ?? track,
       );
       options.closeLyricSearchDialog();
     } catch (error) {

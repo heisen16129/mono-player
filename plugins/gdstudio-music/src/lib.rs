@@ -238,11 +238,19 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         "artwork": Value::Null,
         "quality": quality,
         "lyrics": Value::Null,
-        "sourceId": track.get("id").cloned().unwrap_or(Value::Null),
+        "sourceId": source_id_value(track),
         "sourceName": PROVIDER_NAME,
         "sourceProviderId": PROVIDER_ID,
-        "sourceRaw": track
+        "sourceRaw": track_source_raw(track)
     })
+}
+
+fn source_id_value(track: &Value) -> Value {
+    track.get("sourceId").cloned().unwrap_or(Value::Null)
+}
+
+fn track_source_raw(track: &Value) -> Value {
+    track.get("sourceRaw").cloned().unwrap_or(Value::Null)
 }
 
 fn parse_lyrics_response(request: &Value, body: &str) -> Value {
@@ -303,7 +311,7 @@ fn normalized_track(item: &Value) -> Option<Value> {
         "album": album,
         "duration": Value::Null,
         "artwork": Value::Null,
-        "raw": raw
+        "sourceRaw": raw
     }))
 }
 
@@ -351,9 +359,9 @@ fn request_source(request: &Value) -> String {
 }
 
 fn track_source(track: &Value) -> Option<String> {
-    ["source", "sourceId"]
-        .iter()
-        .find_map(|key| track.get(*key).and_then(Value::as_str))
+    track
+        .get("sourceRaw")
+        .and_then(|source_raw| ["source"].iter().find_map(|key| source_raw.get(*key).and_then(Value::as_str)))
         .map(str::trim)
         .filter(|value| is_supported_source(value))
         .map(str::to_string)
@@ -364,15 +372,21 @@ fn is_supported_source(source: &str) -> bool {
 }
 
 fn track_id(track: &Value) -> Option<String> {
-    ["id", "trackId"]
-        .iter()
-        .find_map(|key| value_to_string(track.get(*key)))
+    value_to_string(track.get("sourceId")).or_else(|| {
+        track.get("sourceRaw").and_then(|source_raw| {
+            ["id", "trackId"]
+                .iter()
+                .find_map(|key| value_to_string(source_raw.get(*key)))
+        })
+    })
 }
 
 fn lyric_id(track: &Value) -> Option<String> {
-    ["lyricId", "lyric_id"]
-        .iter()
-        .find_map(|key| value_to_string(track.get(*key)))
+    track.get("sourceRaw").and_then(|source_raw| {
+        ["lyricId", "lyric_id"]
+            .iter()
+            .find_map(|key| value_to_string(source_raw.get(*key)))
+    })
 }
 
 fn value_to_string(value: Option<&Value>) -> Option<String> {
