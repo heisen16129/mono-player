@@ -1,8 +1,8 @@
 use crate::api_response::ApiResponse;
-use crate::models::Track;
+use crate::models::{artist_names, Track};
 use crate::state::AppState;
 use lofty::config::WriteOptions;
-use lofty::file::{AudioFile, TaggedFileExt};
+use lofty::file::{AudioFile, FileType, TaggedFileExt};
 use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::prelude::Accessor;
 use lofty::tag::{ItemKey, Tag};
@@ -33,7 +33,7 @@ pub(crate) struct UpdateTrackMetadataRequest {
 pub(crate) struct UpdateTrackMetadataResult {
     pub(crate) id: i64,
     pub(crate) title: String,
-    pub(crate) artist: Option<String>,
+    pub(crate) artist: Vec<String>,
     pub(crate) album: Option<String>,
     pub(crate) year: Option<u32>,
     pub(crate) genre: Option<String>,
@@ -78,10 +78,18 @@ pub(crate) struct ReadTrackAudioInfoRequest {
 
 #[derive(Debug, Serialize)]
 pub(crate) struct TrackAudioInfo {
+    #[serde(rename = "durationSeconds")]
+    pub(crate) duration_seconds: Option<u64>,
+    #[serde(rename = "containerFormat")]
+    pub(crate) container_format: Option<String>,
+    pub(crate) codec: Option<String>,
     #[serde(rename = "bitrateKbps")]
     pub(crate) bitrate_kbps: Option<u32>,
     #[serde(rename = "sampleRateHz")]
     pub(crate) sample_rate_hz: Option<u32>,
+    #[serde(rename = "bitDepth")]
+    pub(crate) bit_depth: Option<u8>,
+    pub(crate) lossless: Option<bool>,
     pub(crate) channels: Option<u8>,
     #[serde(rename = "fileSizeBytes")]
     pub(crate) file_size_bytes: Option<u64>,
@@ -172,13 +180,13 @@ pub(crate) fn update_track_metadata(
             return Err("没有找到要更新的歌曲。".to_string());
         }
 
-        Ok(UpdateTrackMetadataResult {
-            id: request.id,
-            title,
-            artist,
-            album,
-            year,
-            genre,
+          Ok(UpdateTrackMetadataResult {
+              id: request.id,
+              title,
+              artist: artist.as_deref().map(artist_names).unwrap_or_default(),
+              album,
+              year,
+              genre,
             track_number,
         })
     })())
@@ -234,22 +242,53 @@ fn read_track_audio_info_inner(
 ) -> Result<TrackAudioInfo, String> {
     let path = normalized_local_file_path(&request.path)?;
     let file_size_bytes = fs::metadata(&path).map(|metadata| metadata.len()).ok();
+    let (container_format, codec, lossless) = audio_format_labels(FileType::from_path(&path));
     let Ok(tagged_file) = crate::metadata::read_tagged_file(&path, "audio-info") else {
         return Ok(TrackAudioInfo {
+            duration_seconds: None,
+            container_format,
+            codec,
             bitrate_kbps: None,
             sample_rate_hz: None,
+            bit_depth: None,
+            lossless,
             channels: None,
             file_size_bytes,
         });
     };
     let properties = tagged_file.properties();
+    let (container_format, codec, lossless) = audio_format_labels(Some(tagged_file.file_type()));
 
     Ok(TrackAudioInfo {
+        duration_seconds: Some(properties.duration().as_secs()).filter(|value| *value > 0),
+        container_format,
+        codec,
         bitrate_kbps: properties.audio_bitrate().filter(|value| *value > 0),
         sample_rate_hz: properties.sample_rate().filter(|value| *value > 0),
+        bit_depth: properties.bit_depth().filter(|value| *value > 0),
+        lossless,
         channels: properties.channels().filter(|value| *value > 0),
         file_size_bytes,
     })
+}
+
+fn audio_format_labels(file_type: Option<FileType>) -> (Option<String>, Option<String>, Option<bool>) {
+    match file_type {
+        Some(FileType::Aac) => (Some("AAC".to_string()), Some("AAC".to_string()), Some(false)),
+        Some(FileType::Aiff) => (Some("AIFF".to_string()), Some("PCM".to_string()), Some(true)),
+        Some(FileType::Ape) => (Some("APE".to_string()), Some("Monkey's Audio".to_string()), Some(true)),
+        Some(FileType::Flac) => (Some("FLAC".to_string()), Some("FLAC".to_string()), Some(true)),
+        Some(FileType::Mpeg) => (Some("MP3".to_string()), Some("MPEG Audio".to_string()), Some(false)),
+        Some(FileType::Mp4) => (Some("MP4/M4A".to_string()), None, None),
+        Some(FileType::Mpc) => (Some("MPC".to_string()), Some("Musepack".to_string()), Some(false)),
+        Some(FileType::Opus) => (Some("Opus".to_string()), Some("Opus".to_string()), Some(false)),
+        Some(FileType::Vorbis) => (Some("Ogg Vorbis".to_string()), Some("Vorbis".to_string()), Some(false)),
+        Some(FileType::Speex) => (Some("Speex".to_string()), Some("Speex".to_string()), Some(false)),
+        Some(FileType::Wav) => (Some("WAV".to_string()), Some("PCM".to_string()), Some(true)),
+        Some(FileType::WavPack) => (Some("WavPack".to_string()), Some("WavPack".to_string()), Some(true)),
+        Some(FileType::Custom(name)) => (Some(name.to_string()), None, None),
+        Some(_) | None => (None, None, None),
+    }
 }
 
 fn refresh_track_duration_inner(

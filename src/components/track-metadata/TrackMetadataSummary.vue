@@ -5,11 +5,16 @@ import TrackMetadataFileInfo from './TrackMetadataFileInfo.vue';
 defineProps<{
   addedAtLabel: string;
   bitrateLabel: string;
+  bitDepthLabel: string;
   channelsLabel: string;
+  codecLabel: string;
+  containerFormatLabel: string;
   coverPreviewUrl: string;
+  durationLabel: string;
   fileName: string;
   filePathLabel: string;
   fileSizeLabel: string;
+  losslessLabel: string;
   sampleRateLabel: string;
 }>();
 
@@ -25,11 +30,17 @@ const emit = defineEmits<{
     <TrackMetadataFileInfo
       :added-at-label="addedAtLabel"
       :bitrate-label="bitrateLabel"
+      :bit-depth-label="bitDepthLabel"
       :channels-label="channelsLabel"
+      :codec-label="codecLabel"
+      :container-format-label="containerFormatLabel"
+      :duration-label="durationLabel"
       :file-name="fileName"
       :file-path-label="filePathLabel"
       :file-size-label="fileSizeLabel"
+      :lossless-label="losslessLabel"
       :sample-rate-label="sampleRateLabel"
+      variant="details"
     />
   </aside>
 </template>

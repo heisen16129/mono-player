@@ -15,6 +15,9 @@ defineProps<{
 .metadata-dialog-title h2 {
   margin: 0;
   color: var(--smw-text-primary);
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.25;
 }
 
 .metadata-dialog-title p {

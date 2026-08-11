@@ -12,6 +12,7 @@ import TrackMetadataDialogFooter from './track-metadata/TrackMetadataDialogFoote
 import TrackMetadataDialogHeader from './track-metadata/TrackMetadataDialogHeader.vue';
 import TrackMetadataEditor from './track-metadata/TrackMetadataEditor.vue';
 import TrackMetadataError from './track-metadata/TrackMetadataError.vue';
+import TrackMetadataFileInfo from './track-metadata/TrackMetadataFileInfo.vue';
 import TrackMetadataSummary from './track-metadata/TrackMetadataSummary.vue';
 
 const props = defineProps<TrackMetadataDialogProps>();
@@ -22,7 +23,20 @@ const { album, artist, canSave, genre, resetForm, title, toFormValue, trackNumbe
 const { audioInfo, loadAudioInfo, stopAudioInfoLoading } = useTrackMetadataAudioInfo();
 const { coverPreviewUrl, handleCoverError, loadCoverPreview, stopCoverPreviewLoading } = useTrackMetadataCoverPreview();
 
-const { addedAtLabel, bitrateLabel, channelsLabel, fileName, filePathLabel, fileSizeLabel, sampleRateLabel } = useTrackMetadataDisplayLabels({
+const {
+  addedAtLabel,
+  bitrateLabel,
+  bitDepthLabel,
+  channelsLabel,
+  codecLabel,
+  containerFormatLabel,
+  durationLabel,
+  fileName,
+  filePathLabel,
+  fileSizeLabel,
+  losslessLabel,
+  sampleRateLabel,
+} = useTrackMetadataDisplayLabels({
   audioInfo,
   locale: toRef(props, 'locale'),
   track: toRef(props, 'track'),
@@ -55,8 +69,8 @@ function submit() {
     :close-label="t(locale, 'close')"
     :close-disabled="saving"
     close-on-overlay
-    width="min(760px, calc(100vw - 32px))"
-    max-height="min(620px, calc(100vh - var(--player-height) - 48px))"
+    width="min(920px, calc(100vw - 40px))"
+    max-height="min(640px, calc(100vh - var(--player-height) - 32px))"
     grid-template-rows="auto minmax(0, 1fr)"
     overflow="hidden"
     panel-class="metadata-dialog-panel"
@@ -72,29 +86,52 @@ function submit() {
         <TrackMetadataSummary
           :added-at-label="addedAtLabel"
           :bitrate-label="bitrateLabel"
+          :bit-depth-label="bitDepthLabel"
           :channels-label="channelsLabel"
+          :codec-label="codecLabel"
+          :container-format-label="containerFormatLabel"
           :cover-preview-url="coverPreviewUrl"
+          :duration-label="durationLabel"
           :file-name="fileName"
           :file-path-label="filePathLabel"
           :file-size-label="fileSizeLabel"
+          :lossless-label="losslessLabel"
           :sample-rate-label="sampleRateLabel"
           @cover-error="handleCoverError"
         />
 
-        <TrackMetadataEditor
-          :album="album"
-          :artist="artist"
-          :genre="genre"
-          :title="title"
-          :track-number="trackNumber"
-          :year="year"
-          @update-album="album = $event"
-          @update-artist="artist = $event"
-          @update-genre="genre = $event"
-          @update-title="title = $event"
-          @update-track-number="trackNumber = $event"
-          @update-year="year = $event"
-        />
+        <div class="metadata-dialog-main">
+          <TrackMetadataFileInfo
+            :added-at-label="addedAtLabel"
+            :bitrate-label="bitrateLabel"
+            :bit-depth-label="bitDepthLabel"
+            :channels-label="channelsLabel"
+            :codec-label="codecLabel"
+            :container-format-label="containerFormatLabel"
+            :duration-label="durationLabel"
+            :file-name="fileName"
+            :file-path-label="filePathLabel"
+            :file-size-label="fileSizeLabel"
+            :lossless-label="losslessLabel"
+            :sample-rate-label="sampleRateLabel"
+            variant="properties"
+          />
+
+          <TrackMetadataEditor
+            :album="album"
+            :artist="artist"
+            :genre="genre"
+            :title="title"
+            :track-number="trackNumber"
+            :year="year"
+            @update-album="album = $event"
+            @update-artist="artist = $event"
+            @update-genre="genre = $event"
+            @update-title="title = $event"
+            @update-track-number="trackNumber = $event"
+            @update-year="year = $event"
+          />
+        </div>
       </TrackMetadataDialogBody>
 
       <TrackMetadataError v-if="error" :message="error" />
@@ -110,6 +147,13 @@ function submit() {
   grid-template-rows: minmax(0, 1fr) auto auto;
   min-height: 0;
   overflow: hidden;
+}
+
+.metadata-dialog-main {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
 }
 
 </style>

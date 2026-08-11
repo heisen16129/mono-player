@@ -42,7 +42,7 @@ export interface UpdateTrackMetadataRequest {
 export interface UpdateTrackMetadataResult {
   id: number;
   title: string;
-  artist: string | null;
+  artist: string[];
   album: string | null;
   year: number | null;
   genre: string | null;
@@ -85,8 +85,13 @@ export interface ReadTrackAudioInfoRequest {
 }
 
 export interface TrackAudioInfo {
+  durationSeconds: number | null;
+  containerFormat: string | null;
+  codec: string | null;
   bitrateKbps: number | null;
   sampleRateHz: number | null;
+  bitDepth: number | null;
+  lossless: boolean | null;
   channels: number | null;
   fileSizeBytes: number | null;
 }
@@ -153,7 +158,17 @@ export function refreshTrackDuration(request: RefreshTrackDurationRequest): Prom
 
 export function readTrackAudioInfo(request: ReadTrackAudioInfoRequest): Promise<TrackAudioInfo> {
   if (!isTauriRuntime()) {
-    return Promise.resolve({ bitrateKbps: null, sampleRateHz: null, channels: null, fileSizeBytes: null });
+    return Promise.resolve({
+      durationSeconds: null,
+      containerFormat: null,
+      codec: null,
+      bitrateKbps: null,
+      sampleRateHz: null,
+      bitDepth: null,
+      lossless: null,
+      channels: null,
+      fileSizeBytes: null,
+    });
   }
 
   return invokeApi<TrackAudioInfo>('read_track_audio_info', { request });

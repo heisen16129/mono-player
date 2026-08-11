@@ -10,11 +10,11 @@
 <style scoped>
 .metadata-dialog-body {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 22px;
   min-height: 0;
   overflow: auto;
-  padding: 16px 18px 12px;
+  padding: 16px 22px 12px;
 }
 
 @media (max-width: 720px) {
