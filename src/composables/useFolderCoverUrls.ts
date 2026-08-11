@@ -1,7 +1,7 @@
 import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
-import { coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, usableArtworkDisplaySrc } from '../utils/artwork';
+import { coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, trackArtworkSource, usableArtworkDisplaySrc } from '../utils/artwork';
 
 const MAX_FOLDER_COVER_CACHE = 80;
 const MAX_TRACK_COVER_CACHE = 240;
@@ -10,6 +10,7 @@ const folderCoverRequestCache = new Map<string, Promise<(string | null)[]>>();
 const trackCoverUrlCache = new Map<string, string | null>();
 const trackCoverRequestCache = new Map<string, Promise<string | null>>();
 const failedArtworkUrls = new Set<string>();
+const failedLocalCoverKeys = new Set<string>();
 
 function releaseCacheKey(key: string) {
   if (!key) return;
@@ -30,7 +31,7 @@ function trimFolderCoverCache() {
 }
 
 function trackCacheKey(track: Track) {
-  return `${track.id}:${track.path}:${track.artwork ?? ''}:${track.coverVersion ?? ''}`;
+  return `${track.id}:${track.path}:${track.artwork ?? ''}:${track.associatedArtwork ?? ''}:${track.coverVersion ?? ''}`;
 }
 
 function trimTrackCoverCache() {
@@ -52,11 +53,12 @@ function cacheKeyForTracks(tracks: Track[]) {
 }
 
 async function coverUrlForTrack(track: Track) {
-  const artworkUrl = usableArtworkDisplaySrc(track.artwork, failedArtworkUrls);
+  const artworkUrl = usableArtworkDisplaySrc(trackArtworkSource(track), failedArtworkUrls);
   if (artworkUrl) return artworkUrl;
   if (!track.path) return null;
 
   const cacheKey = trackCacheKey(track);
+  if (failedLocalCoverKeys.has(cacheKey)) return null;
   if (trackCoverUrlCache.has(cacheKey)) {
     return trackCoverUrlCache.get(cacheKey) ?? null;
   }
@@ -66,12 +68,20 @@ async function coverUrlForTrack(track: Track) {
 
   const request = readCoverThumbnail(track.path)
     .then((cover) => {
-      return coverImageObjectUrl(cover);
+      const url = coverImageObjectUrl(cover);
+      if (!url) failedLocalCoverKeys.add(cacheKey);
+      return url;
     })
     .then((url) => {
       trackCoverUrlCache.set(cacheKey, url);
       trimTrackCoverCache();
       return url;
+    })
+    .catch(() => {
+      failedLocalCoverKeys.add(cacheKey);
+      trackCoverUrlCache.set(cacheKey, null);
+      trimTrackCoverCache();
+      return null;
     })
     .finally(() => {
       trackCoverRequestCache.delete(cacheKey);

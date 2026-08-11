@@ -2,6 +2,7 @@ import type { MaybeRefOrGetter, Ref } from 'vue';
 import { computed, toValue } from 'vue';
 import { t } from '../i18n';
 import type { Locale, LyricLine, Track, TrackLyrics } from '../types/music';
+import { trackArtworkSource } from '../utils/artwork';
 import { normalizeTrackLyrics } from '../utils/trackLyrics';
 
 type LyricsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
@@ -27,10 +28,7 @@ export function useLyricsMetadataState(options: LyricsMetadataStateOptions) {
       : t(toValue(options.locale), 'noLyrics');
   });
   const hasAssociatedLyrics = computed(() => Boolean(toValue(options.activeTrack)?.associatedLyrics?.lyrics.length));
-  const activeArtwork = computed(() => {
-    const activeTrack = toValue(options.activeTrack);
-    return activeTrack?.artwork ?? activeTrack?.associatedArtwork ?? null;
-  });
+  const activeArtwork = computed(() => trackArtworkSource(toValue(options.activeTrack)));
   const availableLyricFormats = computed(() => {
     const formats = activeLyrics.value?.lyrics.map((variant) => variant.format) ?? [];
     return formats.filter((format, index) => format && formats.indexOf(format) === index);

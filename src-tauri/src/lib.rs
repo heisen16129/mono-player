@@ -8,6 +8,7 @@ mod lyrics;
 mod mcp;
 mod mcp_bridge;
 mod mcp_service;
+mod metadata;
 mod models;
 mod player;
 mod plugins;

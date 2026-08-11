@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
-import { coverImageObjectUrl, revokeTemporaryObjectUrl, usableArtworkDisplaySrc } from '../utils/artwork';
+import { coverImageObjectUrl, revokeTemporaryObjectUrl, trackArtworkSource, usableArtworkDisplaySrc } from '../utils/artwork';
 
 export function useTrackMetadataCoverPreview() {
   const coverPreviewUrl = ref('');
@@ -22,7 +22,7 @@ export function useTrackMetadataCoverPreview() {
     const currentLoadId = ++coverLoadId;
     clearTemporaryCoverUrl();
 
-    const artworkUrl = usableArtworkDisplaySrc(track.artwork ?? track.associatedArtwork);
+    const artworkUrl = usableArtworkDisplaySrc(trackArtworkSource(track));
     if (artworkUrl) {
       coverPreviewUrl.value = artworkUrl;
       return;

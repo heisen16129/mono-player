@@ -14,7 +14,7 @@ interface LyricsDownloadOptions {
   activeLyrics: ComputedRef<TrackLyrics | null | undefined>;
   activeTrack: ComputedRef<Track | null>;
   closeMenu: () => void;
-  onCoverChanged: () => void;
+  onCoverChanged: (artwork?: string | null) => void;
   onNotify: (message: string, variant?: 'success' | 'error') => void;
   player: PlayerStore;
 }
@@ -123,9 +123,9 @@ export function useLyricsDownload({ activeLyricFormats, activeTrack, closeMenu, 
         mimeType: null,
         data: null,
       });
-      if (result.embeddedInTrack) {
+      if (result.artwork) {
         await clearCoverThumbnailCache(track.path);
-        onCoverChanged();
+        onCoverChanged(result.artwork);
       }
       onNotify(result.embeddedInTrack ? '封面已写入歌曲文件' : '封面已保存为图片', 'success');
       closeMenu();

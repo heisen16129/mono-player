@@ -8,14 +8,18 @@ use image::imageops::FilterType;
 use lofty::file::TaggedFileExt;
 use serde::Deserialize;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
 #[cfg(not(target_os = "windows"))]
 use tauri::Url;
 use tauri::{AppHandle, Manager, State};
+
+static FAILED_EMBEDDED_COVER_KEYS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -263,7 +267,13 @@ fn read_thumbnail_cover_uncached(audio_path: &Path) -> Result<Option<CoverImage>
 }
 
 fn read_embedded_cover_image(audio_path: &Path) -> Result<Option<CoverImage>, String> {
-    if let Ok(tagged_file) = lofty::read_from_path(audio_path) {
+    let cache_key = cover_cache_key(audio_path);
+    if embedded_cover_failed_before(&cache_key) {
+        return Ok(None);
+    }
+
+    match crate::metadata::read_tagged_file(audio_path, "cover") {
+        Ok(tagged_file) => {
         let tag = tagged_file
             .primary_tag()
             .or_else(|| tagged_file.first_tag());
@@ -278,9 +288,28 @@ fn read_embedded_cover_image(audio_path: &Path) -> Result<Option<CoverImage>, St
                 data: picture.data().to_vec(),
             }));
         }
+        }
+        Err(_) => remember_failed_embedded_cover(cache_key),
     }
 
     Ok(None)
+}
+
+fn embedded_cover_failed_before(cache_key: &str) -> bool {
+    FAILED_EMBEDDED_COVER_KEYS
+        .get_or_init(|| Mutex::new(HashSet::new()))
+        .lock()
+        .map(|keys| keys.contains(cache_key))
+        .unwrap_or(false)
+}
+
+fn remember_failed_embedded_cover(cache_key: String) {
+    if let Ok(mut keys) = FAILED_EMBEDDED_COVER_KEYS
+        .get_or_init(|| Mutex::new(HashSet::new()))
+        .lock()
+    {
+        keys.insert(cache_key);
+    }
 }
 
 fn create_cover_thumbnail(data: &[u8]) -> Result<Vec<u8>, String> {
@@ -316,11 +345,6 @@ fn read_local_cover_image(audio_path: &Path) -> Result<Option<CoverImage>, Strin
     };
 
     let mut candidates = Vec::new();
-    for name in ["cover", "front", "folder", "album"] {
-        for extension in ["jpg", "jpeg", "png", "webp"] {
-            candidates.push(parent.join(format!("{name}.{extension}")));
-        }
-    }
 
     if let Some(stem) = audio_path.file_stem().and_then(|value| value.to_str()) {
         for extension in ["jpg", "jpeg", "png", "webp"] {

@@ -1,12 +1,13 @@
 import { onBeforeUnmount, onMounted, ref, type ComponentPublicInstance, type MaybeRefOrGetter, toValue, watch } from 'vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
-import { coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, usableArtworkDisplaySrc } from '../utils/artwork';
+import { coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, trackArtworkSource, usableArtworkDisplaySrc } from '../utils/artwork';
 
 const MAX_CACHED_COVERS = 360;
 const coverUrlCache = new Map<string, string | null>();
 const coverRequestCache = new Map<string, Promise<string | null>>();
 const failedArtworkUrls = new Set<string>();
+const failedLocalCoverKeys = new Set<string>();
 const MAX_CONCURRENT_COVER_READS = 5;
 let activeCoverReads = 0;
 const pendingCoverReads: Array<() => void> = [];
@@ -20,7 +21,7 @@ export function useTrackCoverThumbUrl(track: MaybeRefOrGetter<Track>) {
 
   async function loadCurrentCover() {
     const currentTrack = toValue(track);
-    await loadCover(currentTrack.id, currentTrack.path, currentTrack.artwork, currentTrack.coverVersion);
+    await loadCover(currentTrack.id, currentTrack.path, trackArtworkSource(currentTrack), currentTrack.coverVersion);
   }
 
   async function loadCover(id: number, path: string, artwork: string | null | undefined, coverVersion: number | undefined) {
@@ -72,7 +73,7 @@ export function useTrackCoverThumbUrl(track: MaybeRefOrGetter<Track>) {
   watch(
     () => {
       const currentTrack = toValue(track);
-      return [currentTrack.id, currentTrack.path, currentTrack.artwork, currentTrack.coverVersion] as const;
+      return [currentTrack.id, currentTrack.path, trackArtworkSource(currentTrack), currentTrack.coverVersion] as const;
     },
     ([id, path, artwork, coverVersion]) => {
       void loadCover(id, path, artwork, coverVersion);
@@ -147,6 +148,7 @@ async function getCachedCoverUrl(path: string, cacheKey: string) {
     touchCachedCover(cacheKey, cachedUrl);
     return cachedUrl;
   }
+  if (failedLocalCoverKeys.has(cacheKey)) return null;
 
   const existingRequest = coverRequestCache.get(cacheKey);
   if (existingRequest) return existingRequest;
@@ -154,12 +156,14 @@ async function getCachedCoverUrl(path: string, cacheKey: string) {
   const request = runLimitedCoverRead(() => readCoverThumbnail(path))
     .then((cover) => {
       if (!cover?.data.length) {
+        failedLocalCoverKeys.add(cacheKey);
         touchCachedCover(cacheKey, null);
         return null;
       }
 
       const objectUrl = coverImageObjectUrl(cover);
       if (!objectUrl) {
+        failedLocalCoverKeys.add(cacheKey);
         touchCachedCover(cacheKey, null);
         return null;
       }
@@ -167,6 +171,7 @@ async function getCachedCoverUrl(path: string, cacheKey: string) {
       return objectUrl;
     })
     .catch(() => {
+      failedLocalCoverKeys.add(cacheKey);
       touchCachedCover(cacheKey, null);
       return null;
     })

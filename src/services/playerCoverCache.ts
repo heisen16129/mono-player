@@ -9,9 +9,9 @@ export interface PlayerOriginalCoverCache {
 
 let cachedCover: PlayerOriginalCoverCache | null = null;
 
-export function playerCoverCacheKey(track: Pick<Track, 'id' | 'path' | 'artwork' | 'coverVersion'> | null | undefined) {
+export function playerCoverCacheKey(track: Pick<Track, 'id' | 'path' | 'artwork' | 'associatedArtwork' | 'coverVersion'> | null | undefined) {
   if (!track?.path) return '';
-  return `${track.id ?? ''}:${track.path}:${track.artwork ?? ''}:${track.coverVersion ?? ''}`;
+  return `${track.id ?? ''}:${track.path}:${track.artwork ?? ''}:${track.associatedArtwork ?? ''}:${track.coverVersion ?? ''}`;
 }
 
 export function getPlayerOriginalCoverCache(key: string) {

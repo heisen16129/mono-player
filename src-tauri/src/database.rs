@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::fs::File;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use tauri::State;
 
@@ -233,7 +234,14 @@ fn read_track_audio_info_inner(
 ) -> Result<TrackAudioInfo, String> {
     let path = normalized_local_file_path(&request.path)?;
     let file_size_bytes = fs::metadata(&path).map(|metadata| metadata.len()).ok();
-    let tagged_file = lofty::read_from_path(&path).map_err(|err| err.to_string())?;
+    let Ok(tagged_file) = crate::metadata::read_tagged_file(&path, "audio-info") else {
+        return Ok(TrackAudioInfo {
+            bitrate_kbps: None,
+            sample_rate_hz: None,
+            channels: None,
+            file_size_bytes,
+        });
+    };
     let properties = tagged_file.properties();
 
     Ok(TrackAudioInfo {
@@ -280,11 +288,32 @@ fn refresh_track_duration_inner(
 
 fn read_track_duration_seconds(path: &Path) -> Result<u64, String> {
     let file = File::open(path).map_err(|err| err.to_string())?;
-    let decoder = Decoder::try_from(file)
-        .map_err(|err| format!("读取失败：音频文件格式异常或包含损坏帧，无法读取时长。{err}"))?;
+    let decoder = match catch_unwind(AssertUnwindSafe(|| Decoder::try_from(file))) {
+        Ok(Ok(decoder)) => decoder,
+        Ok(Err(error)) => {
+            return Err(format!(
+                "读取失败：音频文件格式异常或包含损坏帧，无法读取时长。{error}"
+            ));
+        }
+        Err(_) => {
+            eprintln!(
+                "[metadata] duration decoder panic path={}",
+                path.to_string_lossy()
+            );
+            return Err("读取失败：音频解析器异常。".to_string());
+        }
+    };
 
-    decoder
-        .total_duration()
+    match catch_unwind(AssertUnwindSafe(|| decoder.total_duration())) {
+        Ok(duration) => duration,
+        Err(_) => {
+            eprintln!(
+                "[metadata] duration read panic path={}",
+                path.to_string_lossy()
+            );
+            None
+        }
+    }
         .map(|duration| duration.as_secs())
         .filter(|duration| *duration > 0)
         .ok_or_else(|| "没有读取到有效的歌曲时长。".to_string())
@@ -714,7 +743,7 @@ fn write_track_file_metadata(
         return Err("歌曲文件不存在。".to_string());
     }
 
-    let mut tagged_file = lofty::read_from_path(&path).map_err(|err| err.to_string())?;
+    let mut tagged_file = crate::metadata::read_tagged_file(&path, "write-track-metadata")?;
     if tagged_file.primary_tag_mut().is_none() {
         tagged_file.insert_tag(Tag::new(tagged_file.primary_tag_type()));
     }
@@ -756,7 +785,7 @@ fn write_track_cover_metadata(path: &str, cover_path: &str) -> Result<(), String
     let mime_type = image_mime_type(&cover_path, &data)
         .ok_or_else(|| "请选择 jpg、png、gif、bmp 或 tiff 图片。".to_string())?;
 
-    let mut tagged_file = lofty::read_from_path(&track_path).map_err(|err| err.to_string())?;
+    let mut tagged_file = crate::metadata::read_tagged_file(&track_path, "write-track-cover")?;
     if tagged_file.primary_tag_mut().is_none() {
         tagged_file.insert_tag(Tag::new(tagged_file.primary_tag_type()));
     }

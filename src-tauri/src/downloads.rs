@@ -92,6 +92,7 @@ pub(crate) struct DownloadCoverRequest {
     pub(crate) data: Option<Vec<u8>>,
 }
 
+#[derive(Clone)]
 struct CoverArtwork {
     mime_type: MimeType,
     data: Vec<u8>,
@@ -115,6 +116,7 @@ pub(crate) struct DownloadCoverResult {
     pub(crate) path: Option<String>,
     #[serde(rename = "embeddedInTrack")]
     pub(crate) embedded_in_track: bool,
+    pub(crate) artwork: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -135,6 +137,9 @@ pub(crate) struct DownloadQueueEvent {
 }
 
 static DOWNLOAD_TASK_COUNTER: AtomicU64 = AtomicU64::new(1);
+const AUDIO_DOWNLOAD_USER_AGENT: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
+const NETEASE_REFERER: &str = "https://music.163.com/";
 
 #[tauri::command]
 pub(crate) fn enqueue_download_online_track(
@@ -320,7 +325,34 @@ fn download_cover_file_inner(
             false
         }
     };
+    if !embedded_in_track {
+        if let Some(track_path) = request
+            .track_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            if let Some(artwork) = write_track_sidecar_cover_file_url(
+                Path::new(track_path),
+                &data,
+                mime_type.as_ref(),
+            )? {
+                let db = state.db.lock().map_err(|err| err.to_string())?;
+                db.execute(
+                    "UPDATE tracks SET artwork = ?1, updated_at = CURRENT_TIMESTAMP WHERE path = ?2",
+                    params![artwork, track_path],
+                )
+                .map_err(|err| err.to_string())?;
+                return Ok(DownloadCoverResult {
+                    path: None,
+                    embedded_in_track,
+                    artwork: Some(artwork),
+                });
+            }
+        }
+    }
     if embedded_in_track {
+        let mut embedded_artwork = None;
         if let Some(track_path) = request
             .track_path
             .as_deref()
@@ -337,11 +369,13 @@ fn download_cover_file_inner(
                     params![artwork, track_path],
                 )
                 .map_err(|err| err.to_string())?;
+                embedded_artwork = Some(artwork);
             }
         }
         return Ok(DownloadCoverResult {
             path: None,
             embedded_in_track,
+            artwork: embedded_artwork,
         });
     }
 
@@ -353,6 +387,7 @@ fn download_cover_file_inner(
     Ok(DownloadCoverResult {
         path: Some(file_path.to_string_lossy().to_string()),
         embedded_in_track,
+        artwork: None,
     })
 }
 
@@ -688,11 +723,14 @@ pub(crate) fn download_online_track_blocking_with_progress<F: FnMut(u8)>(
 
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(90))
-        .user_agent("Mono Player/0.1.0")
+        .user_agent(AUDIO_DOWNLOAD_USER_AGENT)
         .build()
         .map_err(|err| err.to_string())?;
+    eprintln!("[download] audio request url={}", request.url);
     let response = client
         .get(&request.url)
+        .header(reqwest::header::ACCEPT, "audio/*,*/*;q=0.8")
+        .header(reqwest::header::REFERER, NETEASE_REFERER)
         .send()
         .map_err(|err| err.to_string())?;
     let status = response.status();
@@ -771,13 +809,38 @@ fn write_audio_metadata_safely(
     request: &ResolvedDownloadTrackRequest,
     artwork: Option<CoverArtwork>,
 ) {
-    if let Err(error) = catch_unwind(AssertUnwindSafe(|| {
-        write_audio_metadata(path, request, artwork);
-    })) {
-        eprintln!(
-            "[download] write audio metadata skipped after panic: {}",
-            panic_message(error)
-        );
+    let Some(artwork) = artwork else {
+        if let Err(error) = catch_unwind(AssertUnwindSafe(|| {
+            if let Err(error) = write_audio_metadata(path, request, None) {
+                eprintln!("[download] write audio metadata failed: {error}");
+            }
+        })) {
+            eprintln!(
+                "[download] write audio metadata skipped after panic: {}",
+                panic_message(error)
+            );
+        }
+        return;
+    };
+
+    let artwork_for_fallback = artwork.clone();
+    let write_result = catch_unwind(AssertUnwindSafe(|| {
+        write_audio_metadata(path, request, Some(artwork))
+    }));
+
+    match write_result {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            eprintln!("[download] write audio metadata failed: {error}");
+            write_downloaded_track_sidecar_cover(path, &artwork_for_fallback);
+        }
+        Err(error) => {
+            eprintln!(
+                "[download] write audio metadata skipped after panic: {}",
+                panic_message(error)
+            );
+            write_downloaded_track_sidecar_cover(path, &artwork_for_fallback);
+        }
     }
 }
 
@@ -785,10 +848,8 @@ fn write_audio_metadata(
     path: &Path,
     request: &ResolvedDownloadTrackRequest,
     artwork: Option<CoverArtwork>,
-) {
-    let Ok(mut tagged_file) = lofty::read_from_path(path) else {
-        return;
-    };
+) -> Result<(), String> {
+    let mut tagged_file = crate::metadata::read_tagged_file(path, "download-write-metadata")?;
 
     if tagged_file.primary_tag_mut().is_none() {
         tagged_file.insert_tag(Tag::new(tagged_file.primary_tag_type()));
@@ -846,7 +907,58 @@ fn write_audio_metadata(
         }
     }
 
-    let _ = tagged_file.save_to_path(path, WriteOptions::default());
+    tagged_file
+        .save_to_path(path, WriteOptions::default())
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn write_downloaded_track_sidecar_cover(path: &Path, artwork: &CoverArtwork) {
+    if let Err(error) = write_track_sidecar_cover_file_url(
+        path,
+        &artwork.data,
+        Some(&artwork.mime_type),
+    ) {
+        eprintln!(
+            "[download] write sidecar cover failed path={} error={}",
+            path.to_string_lossy(),
+            error
+        );
+    }
+}
+
+fn write_track_sidecar_cover_file_url(
+    track_path: &Path,
+    data: &[u8],
+    mime_type: Option<&MimeType>,
+) -> Result<Option<String>, String> {
+    if !track_path.is_file() {
+        return Ok(None);
+    }
+    let Some(parent) = track_path.parent() else {
+        return Ok(None);
+    };
+    let Some(stem) = track_path.file_stem().and_then(|value| value.to_str()) else {
+        return Ok(None);
+    };
+
+    let extension = cover_extension(mime_type, data);
+    let cover_path = parent.join(format!("{stem}.{extension}"));
+    fs::write(&cover_path, data).map_err(|err| err.to_string())?;
+    Ok(local_file_url(&cover_path))
+}
+
+#[cfg(target_os = "windows")]
+fn local_file_url(path: &Path) -> Option<String> {
+    Some(format!(
+        "file:///{}",
+        path.to_string_lossy().replace('\\', "/")
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn local_file_url(path: &Path) -> Option<String> {
+    tauri::Url::from_file_path(path).ok().map(|url| url.to_string())
 }
 
 fn write_cover_to_track_metadata(
@@ -869,7 +981,7 @@ fn write_cover_to_track_metadata(
         return Ok(false);
     }
 
-    let mut tagged_file = lofty::read_from_path(&path).map_err(|err| err.to_string())?;
+    let mut tagged_file = crate::metadata::read_tagged_file(&path, "download-write-cover")?;
     if tagged_file.primary_tag_mut().is_none() {
         tagged_file.insert_tag(Tag::new(tagged_file.primary_tag_type()));
     }

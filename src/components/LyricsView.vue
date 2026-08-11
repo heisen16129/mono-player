@@ -106,7 +106,7 @@ const {
   activeLyrics,
   activeTrack: activeTrackRef,
   closeMenu: closeFontMenu,
-  onCoverChanged: () => emit('coverChanged'),
+  onCoverChanged: (artwork) => emit('coverChanged', artwork),
   onNotify: (message, variant) => emit('notify', message, variant),
   player,
 });

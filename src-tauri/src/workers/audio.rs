@@ -16,6 +16,7 @@ use std::{
     fs::{self, File, OpenOptions},
     hash::{Hash, Hasher},
     io::{self, BufRead, Read, Seek, SeekFrom, Write},
+    panic::{catch_unwind, AssertUnwindSafe},
     path::PathBuf,
     sync::atomic::{AtomicBool, AtomicU32, Ordering},
     sync::{Arc, Condvar, Mutex},
@@ -595,9 +596,8 @@ impl AudioBackend {
             }
         }
 
-        let file = File::open(&path).map_err(|err| err.to_string())?;
-        let decoder = Decoder::try_from(file).map_err(|err| err.to_string())?;
-        let duration = decoder.total_duration();
+        let decoder = decode_local_file(&path)?;
+        let duration = source_total_duration(&decoder, "local-file");
         let source = SpectrumSource::new(decoder, Arc::clone(&self.spectrum_levels));
         let stream = self.ensure_output_stream()?;
         let sink = Arc::new(Sink::connect_new(stream.mixer()));
@@ -650,8 +650,8 @@ impl AudioBackend {
         if let Some(content_length) = content_length {
             decoder_builder = decoder_builder.with_byte_len(content_length);
         }
-        let decoder = decoder_builder.build().map_err(|err| err.to_string())?;
-        let duration = decoder.total_duration();
+        let decoder = build_stream_decoder(decoder_builder)?;
+        let duration = source_total_duration(&decoder, "http-stream");
         let source = SpectrumSource::new(decoder, Arc::clone(&self.spectrum_levels));
         let stream = self.ensure_output_stream()?;
         let sink = Arc::new(Sink::connect_new(stream.mixer()));
@@ -869,6 +869,50 @@ fn find_output_device(device_id: &str) -> Option<rodio::Device> {
         .find(|device| device.name().map(|name| name == device_id).unwrap_or(false))
 }
 
+fn decode_local_file(path: &PathBuf) -> Result<Decoder<io::BufReader<File>>, String> {
+    let file = File::open(path).map_err(|err| err.to_string())?;
+    match catch_unwind(AssertUnwindSafe(|| Decoder::try_from(file))) {
+        Ok(Ok(decoder)) => Ok(decoder),
+        Ok(Err(error)) => Err(error.to_string()),
+        Err(_) => {
+            let message = format!(
+                "audio decoder panicked while opening {}",
+                path.to_string_lossy()
+            );
+            eprintln!("[audio] {message}");
+            Err(message)
+        }
+    }
+}
+
+fn build_stream_decoder<R>(builder: rodio::decoder::DecoderBuilder<R>) -> Result<Decoder<R>, String>
+where
+    R: Read + Seek + Send + Sync + 'static,
+{
+    match catch_unwind(AssertUnwindSafe(|| builder.build())) {
+        Ok(Ok(decoder)) => Ok(decoder),
+        Ok(Err(error)) => Err(error.to_string()),
+        Err(_) => {
+            let message = "audio decoder panicked while opening stream".to_string();
+            eprintln!("[audio] {message}");
+            Err(message)
+        }
+    }
+}
+
+fn source_total_duration<S>(source: &S, context: &str) -> Option<Duration>
+where
+    S: Source,
+{
+    match catch_unwind(AssertUnwindSafe(|| source.total_duration())) {
+        Ok(duration) => duration,
+        Err(_) => {
+            eprintln!("[audio] duration read panic context={context}");
+            None
+        }
+    }
+}
+
 struct SpectrumSource<S> {
     inner: S,
     levels: Arc<[AtomicU32; SPECTRUM_BANDS]>,
@@ -899,7 +943,13 @@ where
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let sample = self.inner.next()?;
+        let sample = match catch_unwind(AssertUnwindSafe(|| self.inner.next())) {
+            Ok(sample) => sample?,
+            Err(_) => {
+                eprintln!("[audio] decoder read panic; ending current source");
+                return None;
+            }
+        };
         self.samples.push(sample);
         if self.samples.len() >= SPECTRUM_WINDOW_SAMPLES {
             update_spectrum_levels(&self.levels, &self.samples, self.sample_rate);
@@ -926,11 +976,20 @@ where
     }
 
     fn total_duration(&self) -> Option<Duration> {
-        self.inner.total_duration()
+        source_total_duration(&self.inner, "spectrum-source")
     }
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
-        let result = self.inner.try_seek(pos);
+        let result = match catch_unwind(AssertUnwindSafe(|| self.inner.try_seek(pos))) {
+            Ok(result) => result,
+            Err(_) => {
+                eprintln!("[audio] decoder seek panic");
+                Err(SeekError::Other(Box::new(io::Error::new(
+                    io::ErrorKind::Other,
+                    "audio decoder panicked while seeking",
+                ))))
+            }
+        };
         if result.is_ok() {
             self.samples.clear();
             clear_spectrum_levels(&self.levels);

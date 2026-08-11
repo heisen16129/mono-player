@@ -1,5 +1,9 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import type { CoverImage } from '../types/music';
+import type { CoverImage, Track } from '../types/music';
+
+export function trackArtworkSource(track: Pick<Track, 'artwork' | 'associatedArtwork'> | null | undefined) {
+  return track?.associatedArtwork ?? track?.artwork ?? null;
+}
 
 export function artworkDisplaySrc(url: string | null | undefined) {
   const value = url?.trim();

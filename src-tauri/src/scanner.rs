@@ -135,7 +135,7 @@ where
 }
 
 fn read_track_metadata(path: &Path) -> Result<Track, String> {
-    let tagged_file = lofty::read_from_path(path).map_err(|err| err.to_string())?;
+    let tagged_file = crate::metadata::read_tagged_file(path, "scan-track")?;
     let tag = tagged_file
         .primary_tag()
         .or_else(|| tagged_file.first_tag());

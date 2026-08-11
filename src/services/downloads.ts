@@ -40,6 +40,7 @@ export interface DownloadCoverFileRequest {
 export interface DownloadCoverFileResult {
   path: string | null;
   embeddedInTrack: boolean;
+  artwork?: string | null;
 }
 
 export interface DeleteDownloadedTrackFileRequest {
