@@ -852,7 +852,7 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
                 break;
             }
 
-            thread::sleep(Duration::from_millis(2000));
+            thread::sleep(Duration::from_millis(250));
         }
     });
 }

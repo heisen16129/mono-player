@@ -1,4 +1,4 @@
-use crate::models::{deserialize_artist_string, TrackLyrics};
+use crate::models::{deserialize_artist_string, serialize_artist_names, TrackLyrics};
 use serde::{Deserialize, Serialize};
 use std::{
     path::Path,
@@ -29,7 +29,11 @@ pub(crate) struct QueueTrack {
     pub(super) id: i64,
     pub(super) path: String,
     pub(super) title: String,
-    #[serde(default, deserialize_with = "deserialize_artist_string")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_artist_string",
+        serialize_with = "serialize_artist_names"
+    )]
     pub(super) artist: Option<String>,
     pub(super) album: Option<String>,
     pub(super) duration: Option<f64>,

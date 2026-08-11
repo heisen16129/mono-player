@@ -1,19 +1,59 @@
 <script setup lang="ts">
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { t } from '../../i18n';
 import type { Locale, Track } from '../../types/music';
 import { artistLabel } from '../../utils/artist';
 
-defineProps<{
+const props = defineProps<{
   activeTrack: Track | null;
   locale: Locale;
   lyricsOpen: boolean;
 }>();
+
+const titleRef = ref<HTMLElement | null>(null);
+const titleTextRef = ref<HTMLElement | null>(null);
+const isTitleOverflowing = ref(false);
+const titleMarqueeDistance = ref('0px');
+
+function measureTitleOverflow() {
+  const container = titleRef.value;
+  const text = titleTextRef.value;
+  if (!container || !text) return;
+  const textWidth = text.scrollWidth;
+  isTitleOverflowing.value = textWidth - container.clientWidth > 1;
+  titleMarqueeDistance.value = `${textWidth + 36}px`;
+}
+
+watch(
+  () => [props.activeTrack?.title, props.lyricsOpen] as const,
+  () => {
+    void nextTick(measureTitleOverflow);
+  },
+);
+
+onMounted(() => {
+  measureTitleOverflow();
+  window.addEventListener('resize', measureTitleOverflow);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', measureTitleOverflow);
+});
 </script>
 
 <template>
   <Transition name="info-roll" mode="out-in">
     <span v-if="!lyricsOpen" key="track" class="track-info" :class="{ 'is-empty': !activeTrack }">
-      <strong>{{ activeTrack?.title || t(locale, 'noMusic') }}</strong>
+      <strong
+        ref="titleRef"
+        :class="{ 'is-overflowing': isTitleOverflowing }"
+        :style="{ '--title-marquee-distance': titleMarqueeDistance }"
+      >
+        <span class="title-marquee-track">
+          <span ref="titleTextRef" class="title-marquee-text">{{ activeTrack?.title || t(locale, 'noMusic') }}</span>
+          <span v-if="isTitleOverflowing" class="title-marquee-text" aria-hidden="true">{{ activeTrack?.title || t(locale, 'noMusic') }}</span>
+        </span>
+      </strong>
       <small>{{ activeTrack ? artistLabel(activeTrack.artist, t(locale, 'unknownArtist')) : '' }}</small>
     </span>
     <span v-else key="blank" class="track-info track-info-lyrics-open">
@@ -59,8 +99,31 @@ defineProps<{
   color: var(--smw-text-primary);
   font-size: 14px;
   line-height: 1.2;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.title-marquee-track {
+  display: inline-flex;
+  gap: 36px;
+  min-width: 100%;
+  transform: translateX(0);
+}
+
+.title-marquee-text {
+  flex: 0 0 auto;
+}
+
+.track-info:not(.is-empty) strong.is-overflowing .title-marquee-track {
+  animation: now-playing-title-marquee 8s linear infinite;
+}
+
+@keyframes now-playing-title-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(calc(-1 * var(--title-marquee-distance, 0px)));
+  }
 }
 
 .track-info.is-empty {

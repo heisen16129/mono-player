@@ -165,7 +165,7 @@ export const usePlayerStore = defineStore('player', () => {
     const session = playbackSession.value;
     if (!session) return null;
 
-    const restored = resolvePlaybackSessionRestore(session);
+    const restored = resolvePlaybackSessionRestore(session, tracks.value);
     if (!restored) return null;
 
     queue.value = restored.queue;

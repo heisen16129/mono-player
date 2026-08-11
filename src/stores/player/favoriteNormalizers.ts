@@ -17,7 +17,9 @@ export function normalizeTrackSnapshot(value: unknown): Track | null {
     id: parsed.id,
     path: parsed.path,
     title: parsed.title,
-    artist: typeof parsed.artist === 'string' ? parsed.artist : null,
+    artist: Array.isArray(parsed.artist)
+      ? parsed.artist.map((name) => typeof name === 'string' ? name.trim() : '').filter(Boolean)
+      : null,
     album: typeof parsed.album === 'string' ? parsed.album : null,
     duration: typeof parsed.duration === 'number' ? parsed.duration : null,
     artwork: typeof parsed.artwork === 'string' ? parsed.artwork : null,

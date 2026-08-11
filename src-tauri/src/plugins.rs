@@ -1277,11 +1277,7 @@ fn json_artist_value_names(value: &serde_json::Value) -> Vec<String> {
 }
 
 fn split_artist_name(value: &str) -> impl Iterator<Item = String> + '_ {
-    value
-        .split(|character| matches!(character, '/' | ',' | '&'))
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
-        .map(str::to_string)
+    crate::models::artist_names(value).into_iter()
 }
 
 fn json_search_duration_seconds(value: &serde_json::Value) -> Option<u64> {

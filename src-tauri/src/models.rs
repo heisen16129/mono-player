@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serializer, Serialize};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -6,7 +6,11 @@ pub(crate) struct Track {
     pub(crate) id: i64,
     pub(crate) path: String,
     pub(crate) title: String,
-    #[serde(default, deserialize_with = "deserialize_artist_string")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_artist_string",
+        serialize_with = "serialize_artist_names"
+    )]
     pub(crate) artist: Option<String>,
     pub(crate) album: Option<String>,
     pub(crate) duration: Option<u64>,
@@ -41,6 +45,31 @@ where
 {
     let value = Option::<serde_json::Value>::deserialize(deserializer)?;
     Ok(normalize_artist_value(value.as_ref()))
+}
+
+pub(crate) fn serialize_artist_names<S>(artist: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let names = artist
+        .as_deref()
+        .map(artist_names)
+        .unwrap_or_default();
+    names.serialize(serializer)
+}
+
+pub(crate) fn artist_names(value: &str) -> Vec<String> {
+    value
+        .split(is_artist_separator)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn is_artist_separator(character: char) -> bool {
+    matches!(character, '/' | ',' | '&' | ';' | '|' | '_')
+        || matches!(character as u32, 0x3001 | 0xFF0C | 0xFF1B)
 }
 
 fn normalize_artist_value(value: Option<&serde_json::Value>) -> Option<String> {
