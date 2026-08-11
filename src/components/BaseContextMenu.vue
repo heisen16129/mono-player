@@ -49,7 +49,7 @@ onBeforeUnmount(() => {
   <div
     ref="menuRef"
     class="base-context-menu"
-    :style="{ left: `${menuPosition.left}px`, top: `${menuPosition.top}px`, '--base-context-menu-min-width': minWidth, '--base-context-menu-z-index': zIndex }"
+    :style="{ left: `${menuPosition.left}px`, top: `${menuPosition.top}px`, '--base-context-menu-width': minWidth, '--base-context-menu-z-index': zIndex }"
     role="menu"
     @click.stop
     @contextmenu.prevent.stop
@@ -63,7 +63,7 @@ onBeforeUnmount(() => {
   position: fixed;
   z-index: var(--base-context-menu-z-index);
   display: grid;
-  min-width: var(--base-context-menu-min-width);
+  width: var(--base-context-menu-width);
   max-width: min(310px, calc(100vw - 24px));
   max-height: calc(100vh - 20px);
   overflow-y: auto;

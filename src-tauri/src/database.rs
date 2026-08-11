@@ -93,8 +93,6 @@ pub(crate) struct TrackAudioInfo {
     pub(crate) channels: Option<u8>,
     #[serde(rename = "fileSizeBytes")]
     pub(crate) file_size_bytes: Option<u64>,
-    #[serde(rename = "modifiedAt")]
-    pub(crate) modified_at: Option<String>,
 }
 
 /**
@@ -201,18 +199,25 @@ pub(crate) fn update_track_cover(
     request: UpdateTrackCoverRequest,
 ) -> ApiResponse<UpdateTrackCoverResult> {
     ApiResponse::from_result((|| {
+        let track_path = Path::new(&request.path);
+        let cover_path = Path::new(&request.cover_path);
         let artwork = if request.embed_metadata {
-            write_track_cover_metadata(&request.path, &request.cover_path)?;
-            crate::covers::cached_cover_original_file_url_in(
-                &player_state.cache_dir()?,
-                Path::new(&request.path),
-            )?
+            match write_track_cover_metadata(&request.path, &request.cover_path) {
+                Ok(()) => crate::covers::cached_cover_original_file_url_in(
+                    &player_state.cache_dir()?,
+                    track_path,
+                )?,
+                Err(error) => {
+                    eprintln!(
+                        "[cover] embed metadata failed path={} error={}",
+                        request.path,
+                        error
+                    );
+                    crate::covers::write_sidecar_cover_file_url(track_path, cover_path)?
+                }
+            }
         } else {
-            crate::covers::cache_cover_file_url_in(
-                &player_state.cache_dir()?,
-                Path::new(&request.path),
-                Path::new(&request.cover_path),
-            )?
+            crate::covers::write_sidecar_cover_file_url(track_path, cover_path)?
         };
         let db = state.db.lock().map_err(|err| err.to_string())?;
         db.execute(
@@ -234,23 +239,15 @@ pub(crate) fn refresh_track_duration(
 
 #[tauri::command]
 pub(crate) fn read_track_audio_info(
-    state: State<'_, AppState>,
     request: ReadTrackAudioInfoRequest,
 ) -> ApiResponse<TrackAudioInfo> {
-    ApiResponse::from_result((|| {
-        let path = normalized_local_file_path(&request.path)?;
-        let modified_at = {
-            let db = state.db.lock().map_err(|err| err.to_string())?;
-            read_track_updated_at(&db, &path.to_string_lossy())?
-        };
-        read_track_audio_info_inner(path, modified_at)
-    })())
+    ApiResponse::from_result(read_track_audio_info_inner(request))
 }
 
 fn read_track_audio_info_inner(
-    path: PathBuf,
-    modified_at: Option<String>,
+    request: ReadTrackAudioInfoRequest,
 ) -> Result<TrackAudioInfo, String> {
+    let path = normalized_local_file_path(&request.path)?;
     let file_size_bytes = fs::metadata(&path).map(|metadata| metadata.len()).ok();
     let (container_format, codec, lossless) = audio_format_labels(FileType::from_path(&path));
     let Ok(tagged_file) = crate::metadata::read_tagged_file(&path, "audio-info") else {
@@ -264,7 +261,6 @@ fn read_track_audio_info_inner(
             lossless,
             channels: None,
             file_size_bytes,
-            modified_at,
         });
     };
     let properties = tagged_file.properties();
@@ -280,20 +276,6 @@ fn read_track_audio_info_inner(
         lossless,
         channels: properties.channels().filter(|value| *value > 0),
         file_size_bytes,
-        modified_at,
-    })
-}
-
-fn read_track_updated_at(db: &Connection, path: &str) -> Result<Option<String>, String> {
-    db.query_row(
-        "SELECT updated_at FROM tracks WHERE path = ?1",
-        params![path],
-        |row| row.get(0),
-    )
-    .map(Some)
-    .or_else(|err| match err {
-        rusqlite::Error::QueryReturnedNoRows => Ok(None),
-        _ => Err(err.to_string()),
     })
 }
 

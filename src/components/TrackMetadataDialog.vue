@@ -35,7 +35,6 @@ const {
   filePathLabel,
   fileSizeLabel,
   losslessLabel,
-  modifiedAtLabel,
   sampleRateLabel,
 } = useTrackMetadataDisplayLabels({
   audioInfo,
@@ -97,7 +96,6 @@ function submit() {
           :file-path-label="filePathLabel"
           :file-size-label="fileSizeLabel"
           :lossless-label="losslessLabel"
-          :modified-at-label="modifiedAtLabel"
           :sample-rate-label="sampleRateLabel"
           @cover-error="handleCoverError"
         />
@@ -115,7 +113,6 @@ function submit() {
             :file-path-label="filePathLabel"
             :file-size-label="fileSizeLabel"
             :lossless-label="losslessLabel"
-            :modified-at-label="modifiedAtLabel"
             :sample-rate-label="sampleRateLabel"
             variant="properties"
           />

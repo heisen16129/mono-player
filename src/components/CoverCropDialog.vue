@@ -13,9 +13,11 @@ const emit = defineEmits<{
   confirm: [payload: { x: number; y: number; size: number }];
 }>();
 
-const CROP_SIZE = 300;
-const VIEW_SIZE = 360;
-const CROP_INSET = (VIEW_SIZE - CROP_SIZE) / 2;
+const CROP_SIZE = 360;
+const VIEW_WIDTH = 760;
+const VIEW_HEIGHT = 484;
+const CROP_INSET_X = (VIEW_WIDTH - CROP_SIZE) / 2;
+const CROP_INSET_Y = (VIEW_HEIGHT - CROP_SIZE) / 2;
 const MAX_SCALE = 4;
 
 const naturalWidth = ref(0);
@@ -27,7 +29,7 @@ const dragging = ref(false);
 const dragStart = ref({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
 
 const imageSrc = computed(() => props.imagePath ? convertFileSrc(props.imagePath) : '');
-const imageName = computed(() => props.imagePath.split(/[\\/]/).pop() || props.imagePath);
+const imageSizeLabel = computed(() => naturalWidth.value && naturalHeight.value ? `${naturalWidth.value} × ${naturalHeight.value}` : '');
 const baseScale = computed(() => {
   if (!naturalWidth.value || !naturalHeight.value) return 1;
   return Math.max(CROP_SIZE / naturalWidth.value, CROP_SIZE / naturalHeight.value);
@@ -40,11 +42,14 @@ const minOffsetY = computed(() => Math.min(0, CROP_SIZE - displayHeight.value));
 const imageStyle = computed(() => ({
   width: `${displayWidth.value}px`,
   height: `${displayHeight.value}px`,
-  transform: `translate3d(${CROP_INSET + offsetX.value}px, ${CROP_INSET + offsetY.value}px, 0)`,
+  transform: `translate3d(${CROP_INSET_X + offsetX.value}px, ${CROP_INSET_Y + offsetY.value}px, 0)`,
 }));
 const stageStyle = computed(() => ({
-  '--crop-inset': `${CROP_INSET}px`,
-  '--crop-view-size': `${VIEW_SIZE}px`,
+  '--crop-inset-x': `${CROP_INSET_X}px`,
+  '--crop-inset-y': `${CROP_INSET_Y}px`,
+  '--crop-size': `${CROP_SIZE}px`,
+  '--crop-view-width': `${VIEW_WIDTH}px`,
+  '--crop-view-height': `${VIEW_HEIGHT}px`,
 }));
 
 watch(
@@ -141,9 +146,10 @@ onBeforeUnmount(() => {
     close-label="关闭"
     :close-disabled="saving"
     close-on-overlay
-    width="min(440px, calc(100vw - 32px))"
-    max-height="min(620px, calc(100vh - var(--player-height) - 48px))"
+    width="min(868px, calc(100vw - 32px))"
+    max-height="min(620px, calc(100vh - var(--player-height) - 32px))"
     grid-template-rows="auto minmax(0, 1fr)"
+    header-padding="0 20px"
     overflow="hidden"
     panel-class="cover-crop-dialog"
     :z-index="380"
@@ -152,7 +158,6 @@ onBeforeUnmount(() => {
     <template #header>
       <div class="cover-crop-title">
         <h2>编辑封面</h2>
-        <p>{{ imageName }}</p>
       </div>
     </template>
 
@@ -169,12 +174,18 @@ onBeforeUnmount(() => {
           @wheel="handleWheel"
         >
           <img :src="imageSrc" alt="" :style="imageStyle" draggable="false" @load="handleImageLoad" />
-          <span class="crop-frame" aria-hidden="true"></span>
+          <span class="crop-frame" aria-hidden="true">
+            <span class="crop-grid"></span>
+            <span class="crop-handle is-top-left"></span>
+            <span class="crop-handle is-top-right"></span>
+            <span class="crop-handle is-bottom-left"></span>
+            <span class="crop-handle is-bottom-right"></span>
+          </span>
         </div>
-
       </div>
 
       <footer class="cover-crop-actions">
+        <span class="cover-crop-size">{{ imageSizeLabel }}</span>
         <button class="secondary-button" type="button" :disabled="saving" @click="emit('close')">取消</button>
         <button class="confirm-button" type="button" :disabled="saving || !naturalWidth" @click="confirm">
           {{ saving ? '保存中...' : '保存' }}
@@ -189,6 +200,10 @@ onBeforeUnmount(() => {
   background: var(--smw-bg-workspace);
 }
 
+:global(.cover-crop-dialog .base-dialog-head) {
+  min-height: 52px;
+}
+
 .cover-crop-body {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
@@ -199,36 +214,26 @@ onBeforeUnmount(() => {
 .cover-crop-title h2 {
   margin: 0;
   color: var(--smw-text-primary);
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 650;
-}
-
-.cover-crop-title p {
-  max-width: 340px;
-  margin: 5px 0 0;
-  overflow: hidden;
-  color: var(--smw-text-secondary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .cover-crop-editor {
   display: grid;
-  gap: 10px;
   min-height: 0;
-  padding: 18px 18px 10px;
+  padding: 0;
   overflow: hidden;
+  background: color-mix(in srgb, var(--smw-bg-app) 88%, var(--smw-bg-workspace));
 }
 
 .cover-crop-stage {
   position: relative;
-  width: var(--crop-view-size);
-  height: var(--crop-view-size);
+  width: min(var(--crop-view-width), 100%);
+  height: min(var(--crop-view-height), calc(100vh - var(--player-height) - 128px));
   overflow: hidden;
-  border: 1px solid var(--smw-border);
-  border-radius: 8px;
-  background: #111;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   cursor: grab;
   justify-self: center;
   touch-action: none;
@@ -249,10 +254,52 @@ onBeforeUnmount(() => {
 
 .crop-frame {
   position: absolute;
-  inset: var(--crop-inset);
+  left: var(--crop-inset-x);
+  top: var(--crop-inset-y);
+  width: var(--crop-size);
+  height: var(--crop-size);
   pointer-events: none;
   border: 1px solid rgba(255, 255, 255, 0.82);
-  box-shadow: 0 0 0 var(--crop-inset) rgba(0, 0, 0, 0.46);
+  box-shadow: 0 0 0 max(var(--crop-inset-x), var(--crop-inset-y)) rgba(0, 0, 0, 0.42);
+}
+
+.crop-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.44) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.44) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
+    linear-gradient(to right, transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.44) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.44) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.44) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.44) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.44) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.44) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px));
+}
+
+.crop-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid color-mix(in srgb, var(--smw-text-secondary) 45%, white);
+  background: white;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+}
+
+.crop-handle.is-top-left {
+  top: -5px;
+  left: -5px;
+}
+
+.crop-handle.is-top-right {
+  top: -5px;
+  right: -5px;
+}
+
+.crop-handle.is-bottom-left {
+  bottom: -5px;
+  left: -5px;
+}
+
+.crop-handle.is-bottom-right {
+  right: -5px;
+  bottom: -5px;
 }
 
 .cover-crop-actions {
@@ -261,9 +308,17 @@ onBeforeUnmount(() => {
   --button-min-width: 70px;
 
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  padding: 10px 18px 16px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--smw-border-soft);
+}
+
+.cover-crop-size {
+  margin-right: auto;
+  color: var(--smw-text-tertiary);
+  font-size: 12px;
 }
 
 </style>

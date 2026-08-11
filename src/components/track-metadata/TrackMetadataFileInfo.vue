@@ -13,7 +13,6 @@ withDefaults(defineProps<{
   filePathLabel: string;
   fileSizeLabel: string;
   losslessLabel: string;
-  modifiedAtLabel: string;
   sampleRateLabel: string;
   variant?: 'details' | 'properties';
 }>(), {
@@ -32,7 +31,6 @@ withDefaults(defineProps<{
       <TrackMetadataInfoRow label="文件名" :value="fileName" :title="fileName" />
       <TrackMetadataInfoRow label="文件位置" :value="filePathLabel" :title="filePathLabel" />
       <TrackMetadataInfoRow label="添加日期" :value="addedAtLabel" />
-      <TrackMetadataInfoRow label="修改时间" :value="modifiedAtLabel" />
       </template>
       <template v-else>
         <TrackMetadataInfoRow label="容器格式" :value="containerFormatLabel" />

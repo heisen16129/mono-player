@@ -94,7 +94,6 @@ export interface TrackAudioInfo {
   lossless: boolean | null;
   channels: number | null;
   fileSizeBytes: number | null;
-  modifiedAt: string | null;
 }
 
 export function isTauriRuntime(): boolean {
@@ -169,7 +168,6 @@ export function readTrackAudioInfo(request: ReadTrackAudioInfoRequest): Promise<
       lossless: null,
       channels: null,
       fileSizeBytes: null,
-      modifiedAt: null,
     });
   }
 

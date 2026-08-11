@@ -15,7 +15,6 @@ defineProps<{
   filePathLabel: string;
   fileSizeLabel: string;
   losslessLabel: string;
-  modifiedAtLabel: string;
   sampleRateLabel: string;
 }>();
 
@@ -40,7 +39,6 @@ const emit = defineEmits<{
       :file-path-label="filePathLabel"
       :file-size-label="fileSizeLabel"
       :lossless-label="losslessLabel"
-      :modified-at-label="modifiedAtLabel"
       :sample-rate-label="sampleRateLabel"
       variant="details"
     />

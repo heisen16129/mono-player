@@ -211,24 +211,25 @@ pub(crate) fn refresh_cached_cover_original_file_url_in(
     Ok(cover_file_url(&cache_path))
 }
 
-pub(crate) fn cache_cover_file_url_in(
-    cache_root: &Path,
+pub(crate) fn write_sidecar_cover_file_url(
     audio_path: &Path,
     cover_path: &Path,
 ) -> Result<Option<String>, String> {
+    if !audio_path.is_file() || !cover_path.is_file() {
+        return Ok(None);
+    }
+    let Some(parent) = audio_path.parent() else {
+        return Ok(None);
+    };
+    let Some(stem) = audio_path.file_stem().and_then(|value| value.to_str()) else {
+        return Ok(None);
+    };
+
     let data = fs::read(cover_path).map_err(|err| err.to_string())?;
     let mime_type = cover_mime_type(cover_path).unwrap_or("image/jpeg");
-    let cache_dir = mono_cache_dir(cache_root).join("cover-originals");
-    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
-    let cache_path = cache_dir.join(format!(
-        "{}-edit-{}.{}",
-        cover_cache_key(audio_path),
-        uuid::Uuid::new_v4(),
-        cover_extension(mime_type)
-    ));
-    fs::write(&cache_path, data).map_err(|err| err.to_string())?;
-
-    Ok(cover_file_url(&cache_path))
+    let sidecar_path = parent.join(format!("{stem}.{}", cover_extension(mime_type)));
+    fs::write(&sidecar_path, data).map_err(|err| err.to_string())?;
+    Ok(cover_file_url(&sidecar_path))
 }
 
 fn cached_cover_thumbnail_path(cache_root: &Path, audio_path: &Path) -> Result<PathBuf, String> {
