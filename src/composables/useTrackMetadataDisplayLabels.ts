@@ -27,6 +27,7 @@ export function useTrackMetadataDisplayLabels({ audioInfo, locale, track }: Trac
   });
   const channelsLabel = computed(() => formatChannels(audioInfo.value?.channels));
   const fileSizeLabel = computed(() => formatFileSize(audioInfo.value?.fileSizeBytes));
+  const modifiedAtLabel = computed(() => formatMetadataDate(audioInfo.value?.modifiedAt, locale.value));
   const addedAtLabel = computed(() => formatMetadataDate(track.value.addedAt, locale.value));
   const filePathLabel = computed(() => track.value.path || UNKNOWN_LABEL);
 
@@ -42,6 +43,7 @@ export function useTrackMetadataDisplayLabels({ audioInfo, locale, track }: Trac
     filePathLabel,
     fileSizeLabel,
     losslessLabel,
+    modifiedAtLabel,
     sampleRateLabel,
   };
 }

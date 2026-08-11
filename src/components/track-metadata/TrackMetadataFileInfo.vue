@@ -13,6 +13,7 @@ withDefaults(defineProps<{
   filePathLabel: string;
   fileSizeLabel: string;
   losslessLabel: string;
+  modifiedAtLabel: string;
   sampleRateLabel: string;
   variant?: 'details' | 'properties';
 }>(), {
@@ -25,15 +26,16 @@ withDefaults(defineProps<{
     <h3>{{ variant === 'details' ? '文件信息' : '文件属性' }}</h3>
     <dl :class="{ 'property-grid': variant === 'properties' }">
       <template v-if="variant === 'details'">
+      <TrackMetadataInfoRow label="时长" :value="durationLabel" />
+      <TrackMetadataInfoRow label="文件大小" :value="fileSizeLabel" />
+      <TrackMetadataInfoRow label="编码" :value="codecLabel" />
       <TrackMetadataInfoRow label="文件名" :value="fileName" :title="fileName" />
       <TrackMetadataInfoRow label="文件位置" :value="filePathLabel" :title="filePathLabel" />
       <TrackMetadataInfoRow label="添加日期" :value="addedAtLabel" />
+      <TrackMetadataInfoRow label="修改时间" :value="modifiedAtLabel" />
       </template>
       <template v-else>
-        <TrackMetadataInfoRow label="文件大小" :value="fileSizeLabel" />
-        <TrackMetadataInfoRow label="时长" :value="durationLabel" />
         <TrackMetadataInfoRow label="容器格式" :value="containerFormatLabel" />
-        <TrackMetadataInfoRow v-if="codecLabel !== containerFormatLabel" label="编码" :value="codecLabel" />
         <TrackMetadataInfoRow label="码率" :value="bitrateLabel" />
         <TrackMetadataInfoRow label="采样率" :value="sampleRateLabel" />
         <TrackMetadataInfoRow label="位深" :value="bitDepthLabel" />
@@ -71,7 +73,7 @@ withDefaults(defineProps<{
 }
 
 .metadata-file-info dl.property-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -87,7 +89,7 @@ withDefaults(defineProps<{
 
 @media (max-width: 920px) {
   .metadata-file-info dl.property-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

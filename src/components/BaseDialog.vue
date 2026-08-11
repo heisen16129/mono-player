@@ -56,6 +56,38 @@ function stopDialogDrag(event: PointerEvent) {
 onBeforeUnmount(() => {
   dragStart = null;
 });
+
+function handleOverlayWheel(event: WheelEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function handleDialogWheel(event: WheelEvent) {
+  event.stopPropagation();
+  const scrollTarget = findScrollableTarget(event.target as Element | null, event.currentTarget as Element);
+  if (!scrollTarget || !canScrollWheelTarget(scrollTarget, event.deltaY)) {
+    event.preventDefault();
+  }
+}
+
+function findScrollableTarget(target: Element | null, boundary: Element): HTMLElement | null {
+  let element = target;
+  while (element && element !== boundary) {
+    if (element instanceof HTMLElement) {
+      const style = window.getComputedStyle(element);
+      const canScrollY = ['auto', 'scroll'].includes(style.overflowY) && element.scrollHeight > element.clientHeight;
+      if (canScrollY) return element;
+    }
+    element = element.parentElement;
+  }
+  return null;
+}
+
+function canScrollWheelTarget(target: HTMLElement, deltaY: number) {
+  if (deltaY < 0) return target.scrollTop > 0;
+  if (deltaY > 0) return target.scrollTop + target.clientHeight < target.scrollHeight;
+  return true;
+}
 </script>
 
 <template>
@@ -68,6 +100,7 @@ onBeforeUnmount(() => {
       '--base-dialog-z-index': zIndex,
     }"
     @click="closeOnOverlay && $emit('close')"
+    @wheel="handleOverlayWheel"
   >
     <section
       class="base-dialog"
@@ -85,6 +118,7 @@ onBeforeUnmount(() => {
       aria-modal="true"
       :aria-label="label"
       @click.stop
+      @wheel="handleDialogWheel"
     >
       <header
         class="base-dialog-head"
@@ -116,6 +150,7 @@ onBeforeUnmount(() => {
   padding: 24px;
   background: var(--base-dialog-overlay-background);
   backdrop-filter: var(--base-dialog-backdrop-filter);
+  overscroll-behavior: contain;
 }
 
 .base-dialog {
@@ -128,6 +163,7 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   background: var(--smw-bg-workspace);
   box-shadow: 0 18px 46px rgba(15, 23, 42, 0.14);
+  overscroll-behavior: contain;
   transform: translate(var(--base-dialog-translate-x, 0), var(--base-dialog-translate-y, 0));
 }
 

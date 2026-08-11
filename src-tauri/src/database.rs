@@ -93,6 +93,8 @@ pub(crate) struct TrackAudioInfo {
     pub(crate) channels: Option<u8>,
     #[serde(rename = "fileSizeBytes")]
     pub(crate) file_size_bytes: Option<u64>,
+    #[serde(rename = "modifiedAt")]
+    pub(crate) modified_at: Option<String>,
 }
 
 /**
@@ -232,15 +234,23 @@ pub(crate) fn refresh_track_duration(
 
 #[tauri::command]
 pub(crate) fn read_track_audio_info(
+    state: State<'_, AppState>,
     request: ReadTrackAudioInfoRequest,
 ) -> ApiResponse<TrackAudioInfo> {
-    ApiResponse::from_result(read_track_audio_info_inner(request))
+    ApiResponse::from_result((|| {
+        let path = normalized_local_file_path(&request.path)?;
+        let modified_at = {
+            let db = state.db.lock().map_err(|err| err.to_string())?;
+            read_track_updated_at(&db, &path.to_string_lossy())?
+        };
+        read_track_audio_info_inner(path, modified_at)
+    })())
 }
 
 fn read_track_audio_info_inner(
-    request: ReadTrackAudioInfoRequest,
+    path: PathBuf,
+    modified_at: Option<String>,
 ) -> Result<TrackAudioInfo, String> {
-    let path = normalized_local_file_path(&request.path)?;
     let file_size_bytes = fs::metadata(&path).map(|metadata| metadata.len()).ok();
     let (container_format, codec, lossless) = audio_format_labels(FileType::from_path(&path));
     let Ok(tagged_file) = crate::metadata::read_tagged_file(&path, "audio-info") else {
@@ -254,6 +264,7 @@ fn read_track_audio_info_inner(
             lossless,
             channels: None,
             file_size_bytes,
+            modified_at,
         });
     };
     let properties = tagged_file.properties();
@@ -269,6 +280,20 @@ fn read_track_audio_info_inner(
         lossless,
         channels: properties.channels().filter(|value| *value > 0),
         file_size_bytes,
+        modified_at,
+    })
+}
+
+fn read_track_updated_at(db: &Connection, path: &str) -> Result<Option<String>, String> {
+    db.query_row(
+        "SELECT updated_at FROM tracks WHERE path = ?1",
+        params![path],
+        |row| row.get(0),
+    )
+    .map(Some)
+    .or_else(|err| match err {
+        rusqlite::Error::QueryReturnedNoRows => Ok(None),
+        _ => Err(err.to_string()),
     })
 }
 

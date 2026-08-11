@@ -35,6 +35,7 @@ const {
   filePathLabel,
   fileSizeLabel,
   losslessLabel,
+  modifiedAtLabel,
   sampleRateLabel,
 } = useTrackMetadataDisplayLabels({
   audioInfo,
@@ -69,7 +70,7 @@ function submit() {
     :close-label="t(locale, 'close')"
     :close-disabled="saving"
     close-on-overlay
-    width="min(920px, calc(100vw - 40px))"
+    width="min(840px, calc(100vw - 40px))"
     max-height="min(640px, calc(100vh - var(--player-height) - 32px))"
     grid-template-rows="auto minmax(0, 1fr)"
     overflow="hidden"
@@ -96,6 +97,7 @@ function submit() {
           :file-path-label="filePathLabel"
           :file-size-label="fileSizeLabel"
           :lossless-label="losslessLabel"
+          :modified-at-label="modifiedAtLabel"
           :sample-rate-label="sampleRateLabel"
           @cover-error="handleCoverError"
         />
@@ -113,6 +115,7 @@ function submit() {
             :file-path-label="filePathLabel"
             :file-size-label="fileSizeLabel"
             :lossless-label="losslessLabel"
+            :modified-at-label="modifiedAtLabel"
             :sample-rate-label="sampleRateLabel"
             variant="properties"
           />
