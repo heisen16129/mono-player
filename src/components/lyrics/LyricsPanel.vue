@@ -10,6 +10,7 @@ defineProps<{
   activeLyricIndex: number;
   emptyMessage: string;
   isEmpty: boolean;
+  isPlayerDockHidden: boolean;
   isLyricsPending: boolean;
   isLyricSyncOpen: boolean;
   isScrolling: boolean;
@@ -37,7 +38,7 @@ defineExpose({ panel });
 </script>
 
 <template>
-  <div class="lyrics-panel-wrap" :class="{ 'is-scrolling': isScrolling }">
+  <div class="lyrics-panel-wrap" :class="{ 'is-dock-hidden': isPlayerDockHidden, 'is-scrolling': isScrolling }">
     <div
       ref="panel"
       class="lyrics-panel"
@@ -81,7 +82,7 @@ defineExpose({ panel });
   overflow: hidden;
 }
 
-.lyrics-panel-wrap {
+.lyrics-panel-wrap:not(.is-dock-hidden) {
   clip-path: inset(0 0 calc(var(--player-height) + 14px) 0);
 }
 
@@ -107,7 +108,4 @@ defineExpose({ panel });
   padding: 0 34px 0 0;
 }
 
-.lyrics-panel-wrap .lyrics-panel.is-empty {
-  padding-bottom: calc(var(--player-height) + 14px);
-}
 </style>

@@ -49,6 +49,7 @@ export interface LyricsStageProps {
   coverUrl: string;
   emptyMessage: string;
   isEmpty: boolean;
+  isPlayerDockHidden: boolean;
   isLyricSyncOpen: boolean;
   isLyricsPending: boolean;
   isScrolling: boolean;

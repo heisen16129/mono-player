@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import type { LyricLine } from '../../types/music';
 import LyricsCoverPanel from './LyricsCoverPanel.vue';
 import LyricsPanel from './LyricsPanel.vue';
@@ -8,6 +9,7 @@ defineProps<{
   coverUrl: string;
   emptyMessage: string;
   isEmpty: boolean;
+  isPlayerDockHidden: boolean;
   isLyricSyncOpen: boolean;
   isLyricsPending: boolean;
   isScrolling: boolean;
@@ -30,10 +32,24 @@ defineEmits<{
   shiftTiming: [deltaSeconds: number];
   wheel: [];
 }>();
+
+const stage = ref<HTMLElement | null>(null);
+
+function lyricsAnchorOffset() {
+  const cover = stage.value?.querySelector<HTMLElement>('.lyrics-stage-cover') ?? null;
+  const panel = stage.value?.querySelector<HTMLElement>('.lyrics-panel') ?? null;
+  if (!cover || !panel) return null;
+
+  const coverRect = cover.getBoundingClientRect();
+  const panelRect = panel.getBoundingClientRect();
+  return coverRect.top + coverRect.height / 2 - panelRect.top;
+}
+
+defineExpose({ lyricsAnchorOffset });
 </script>
 
 <template>
-  <div class="lyrics-stage">
+  <div ref="stage" class="lyrics-stage">
     <LyricsCoverPanel class="lyrics-stage-cover" :cover-url="coverUrl" @error="$emit('coverError')" />
 
     <LyricsPanel
@@ -42,6 +58,7 @@ defineEmits<{
       :active-lyric-index="activeLyricIndex"
       :empty-message="emptyMessage"
       :is-empty="isEmpty"
+      :is-player-dock-hidden="isPlayerDockHidden"
       :is-lyric-sync-open="isLyricSyncOpen"
       :is-lyrics-pending="isLyricsPending"
       :is-scrolling="isScrolling"

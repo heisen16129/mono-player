@@ -29,6 +29,7 @@ const emit = defineEmits<LyricsViewEmits>();
 
 const loadedLyricLines = ref<LyricLine[]>([]);
 const isLoadingLyrics = ref(false);
+const lyricsStageRef = ref<{ lyricsAnchorOffset: () => number | null } | null>(null);
 
 const player = usePlayerStore();
 const {
@@ -155,7 +156,9 @@ const {
   activeLyricIndex,
   isLoadingLyrics,
   lines: loadedLyricLines,
+  lyricFontSize,
   lyricTimeOffset,
+  getAnchorOffset: () => lyricsStageRef.value?.lyricsAnchorOffset() ?? null,
   onSeek: (time) => emit('seek', time),
 });
 const {
@@ -261,6 +264,7 @@ const {
     coverUrl: () => displayCoverUrl.value,
     emptyMessage: () => emptyLyricsMessage.value,
     isEmpty: () => !loadedLyricLines.value.length,
+    isPlayerDockHidden: () => props.isPlayerDockHidden,
     isLyricSyncOpen: () => isLyricSyncOpen.value,
     isLyricsPending: () => isLyricsPending.value,
     isScrolling: () => isLyricsListScrolling.value,
@@ -318,6 +322,7 @@ const {
     />
 
     <LyricsStage
+      ref="lyricsStageRef"
       v-bind="lyricsStageProps"
       @begin-browse="beginLyricBrowse"
       @cover-error="handleCoverError"

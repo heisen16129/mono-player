@@ -2,7 +2,6 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, typ
 import type { LyricLine } from '../types/music';
 import { useScrollingState } from './useScrollingState';
 
-const LYRICS_DOCK_CLIP_GAP = 14;
 const LYRICS_SCROLL_MIN_DURATION = 320;
 const LYRICS_SCROLL_MAX_DURATION = 560;
 const LYRICS_SCROLL_DISTANCE_DURATION = 6;
@@ -13,7 +12,9 @@ export function useLyricsScroll(options: {
   activeLyricIndex: ComputedRef<number>;
   isLoadingLyrics: Ref<boolean>;
   lines: Ref<LyricLine[]>;
+  lyricFontSize: Ref<number>;
   lyricTimeOffset: Ref<number>;
+  getAnchorOffset?: () => number | null;
   onSeek: (time: number) => void;
 }) {
   const lyricsPanel = ref<{ panel: HTMLElement | null } | null>(null);
@@ -38,7 +39,9 @@ export function useLyricsScroll(options: {
     const currentLine = panel.querySelector<HTMLElement>('.current');
     if (!currentLine) return;
 
-    const nextTop = currentLine.offsetTop - centerHeight / 2 + currentLine.clientHeight / 2;
+    const anchorOffset = options.getAnchorOffset?.();
+    const anchorY = typeof anchorOffset === 'number' && Number.isFinite(anchorOffset) ? anchorOffset : centerHeight / 2;
+    const nextTop = currentLine.offsetTop - anchorY + currentLine.clientHeight / 2;
     scrollLyricsPanelTo(panel, nextTop, behavior);
     requestAnimationFrame(syncScrollThumb);
   }
@@ -113,22 +116,15 @@ export function useLyricsScroll(options: {
     return 1 - (1 - progress) ** 3;
   }
 
-  function lyricsBottomInset(panel: HTMLElement) {
-    const styles = getComputedStyle(panel);
-    const playerHeight = Number.parseFloat(styles.getPropertyValue('--player-height')) || 0;
-    return playerHeight + LYRICS_DOCK_CLIP_GAP;
-  }
-
   function lyricsVisibleHeight(panel: HTMLElement) {
-    return Math.max(1, panel.clientHeight - lyricsBottomInset(panel));
+    return Math.max(1, panel.clientHeight);
   }
 
   function syncLyricsPanelMetrics(panel: HTMLElement) {
     const visibleHeight = lyricsVisibleHeight(panel);
-    const bottomInset = lyricsBottomInset(panel);
     const anchorPadding = Math.max(32, visibleHeight / 2);
     panel.style.setProperty('--lyrics-anchor-padding-top', `${anchorPadding}px`);
-    panel.style.setProperty('--lyrics-anchor-padding-bottom', `${anchorPadding + bottomInset}px`);
+    panel.style.setProperty('--lyrics-anchor-padding-bottom', `${anchorPadding}px`);
     return visibleHeight;
   }
 
@@ -234,6 +230,12 @@ export function useLyricsScroll(options: {
     const panel = lyricsPanel.value?.panel ?? null;
     if (!panel) return;
     syncLyricsPanelMetrics(panel);
+  }, { flush: 'post' });
+
+  watch(options.lyricFontSize, async () => {
+    if (options.activeLyricIndex.value < 0) return;
+    if (options.isLoadingLyrics.value) return;
+    await scrollToActiveLyric('auto');
   }, { flush: 'post' });
 
   onMounted(() => {
