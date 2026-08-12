@@ -4,6 +4,8 @@ import type { DownloadQueueEvent } from '../services/downloads';
 import type { DownloadItem, Track } from '../types/music';
 
 const DOWNLOAD_ITEMS_KEY = 'downloads.items';
+const DOWNLOAD_PROGRESS_UPDATE_INTERVAL_MS = 250;
+const DOWNLOAD_PROGRESS_STEP = 5;
 
 type DownloadQueueEventResult =
   | { status: 'downloaded'; item: DownloadItem }
@@ -12,6 +14,7 @@ type DownloadQueueEventResult =
 
 export function useDownloadState() {
   const downloadItems = ref<DownloadItem[]>([]);
+  const progressUpdatedAt = new Map<string, number>();
 
   const downloadedTrackKeys = computed(() => (
     downloadItems.value
@@ -45,11 +48,24 @@ export function useDownloadState() {
     await persistDownloadItems();
   }
 
-  function updateDownloadItem(id: string, patch: Partial<DownloadItem>) {
+  function updateDownloadItem(id: string, patch: Partial<DownloadItem>, options: { persist?: boolean } = {}) {
     downloadItems.value = downloadItems.value.map((item) => (
       item.id === id ? { ...item, ...patch } : item
     ));
-    void persistDownloadItems();
+    if (options.persist !== false) {
+      void persistDownloadItems();
+    }
+  }
+
+  function shouldApplyDownloadProgress(event: DownloadQueueEvent, item: DownloadItem | undefined) {
+    if (!item || item.status !== 'downloading') return true;
+    if (event.progress <= item.progress) return false;
+    if (event.progress >= 90) return true;
+    if (event.progress - item.progress >= DOWNLOAD_PROGRESS_STEP) return true;
+
+    const now = Date.now();
+    const updatedAt = progressUpdatedAt.get(event.taskId) ?? 0;
+    return now - updatedAt >= DOWNLOAD_PROGRESS_UPDATE_INTERVAL_MS;
   }
 
   function handleDownloadQueueEvent(event: DownloadQueueEvent): DownloadQueueEventResult {
@@ -62,6 +78,7 @@ export function useDownloadState() {
         lyricsPath: event.lyricsPath,
         error: null,
       });
+      progressUpdatedAt.delete(event.taskId);
       const item = downloadItems.value.find((entry) => entry.id === event.taskId);
       return item ? { status: 'downloaded', item } : null;
     }
@@ -74,16 +91,19 @@ export function useDownloadState() {
         progress: event.progress,
         error,
       });
+      progressUpdatedAt.delete(event.taskId);
       const item = downloadItems.value.find((entry) => entry.id === event.taskId);
       return item ? { status: 'failed', item, error } : null;
     }
 
     if (currentItem?.status === 'paused') return null;
+    if (!shouldApplyDownloadProgress(event, currentItem)) return null;
+    progressUpdatedAt.set(event.taskId, Date.now());
     updateDownloadItem(event.taskId, {
       status: 'downloading',
       progress: event.progress,
       error: null,
-    });
+    }, { persist: false });
     return null;
   }
 
