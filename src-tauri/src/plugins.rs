@@ -693,18 +693,19 @@ where
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
         wait_for_ready,
+        false,
         &mut should_continue,
     )?;
 
     normalize_plugin_playback_qualities(unwrap_plugin_response_envelope(response)?)
 }
 
-pub(crate) fn resolve_plugin_playback_source_backend(
+pub(crate) fn resolve_plugin_download_source_backend(
     worker: &crate::workers::plugin::PluginWorkerState,
     provider_id: String,
     track: serde_json::Value,
     preferred_quality: Option<String>,
-    _quality_fallback: String,
+    quality_fallback: String,
     include_metadata: bool,
     plugins: Vec<PluginPlaybackPlanPlugin>,
 ) -> Result<PluginPlaybackSource, String> {
@@ -713,10 +714,27 @@ pub(crate) fn resolve_plugin_playback_source_backend(
         provider_id,
         track,
         preferred_quality,
-        _quality_fallback,
+        quality_fallback,
         include_metadata,
         plugins,
         false,
+        true,
+        || Ok(()),
+    )
+}
+
+pub(crate) fn resolve_plugin_download_lyrics_metadata_backend(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    provider_id: String,
+    track: serde_json::Value,
+    plugins: Vec<PluginPlaybackPlanPlugin>,
+) -> Result<PluginLyricsMetadata, String> {
+    resolve_plugin_lyrics_metadata_backend_checked(
+        worker,
+        provider_id,
+        track,
+        plugins,
+        true,
         || Ok(()),
     )
 }
@@ -743,6 +761,7 @@ where
         include_metadata,
         plugins,
         true,
+        false,
         should_continue,
     )
 }
@@ -756,6 +775,7 @@ fn resolve_plugin_playback_source_backend_checked<F>(
     include_metadata: bool,
     plugins: Vec<PluginPlaybackPlanPlugin>,
     wait_for_ready: bool,
+    use_download_worker: bool,
     mut should_continue: F,
 ) -> Result<PluginPlaybackSource, String>
 where
@@ -787,6 +807,7 @@ where
         &plugin_track,
         preferred_quality.as_deref(),
         wait_for_ready,
+        use_download_worker,
         &mut should_continue,
     )?;
 
@@ -813,6 +834,7 @@ where
             Some(plugin.id.clone()),
             plugin.permissions.clone(),
             wait_for_ready,
+            use_download_worker,
             &mut should_continue,
         );
 
@@ -836,6 +858,7 @@ where
                                 &entry,
                                 &plugin,
                                 &plugin_track,
+                                use_download_worker,
                             )
                             .ok();
                         }
@@ -898,33 +921,31 @@ pub async fn resolve_plugin_lyrics_metadata(
 ) -> Result<ApiResponse<PluginLyricsMetadata>, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        resolve_plugin_lyrics_metadata_backend_checked(&worker, provider_id, track, plugins, || {
-            let Some(guard) = playback_guard.as_ref() else {
-                return Ok(());
-            };
-            if crate::player::is_current_plugin_queue_track(
-                &app,
-                &guard.provider_id,
-                &guard.source_id,
-            )? {
-                Ok(())
-            } else {
-                Err("Playback request was replaced.".to_string())
-            }
-        })
+        resolve_plugin_lyrics_metadata_backend_checked(
+            &worker,
+            provider_id,
+            track,
+            plugins,
+            false,
+            || {
+                let Some(guard) = playback_guard.as_ref() else {
+                    return Ok(());
+                };
+                if crate::player::is_current_plugin_queue_track(
+                    &app,
+                    &guard.provider_id,
+                    &guard.source_id,
+                )? {
+                    Ok(())
+                } else {
+                    Err("Playback request was replaced.".to_string())
+                }
+            },
+        )
     })
     .await
     .map_err(|err| err.to_string())?;
     Ok(ApiResponse::from_result(result))
-}
-
-pub(crate) fn resolve_plugin_lyrics_metadata_backend(
-    worker: &crate::workers::plugin::PluginWorkerState,
-    provider_id: String,
-    track: serde_json::Value,
-    plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> Result<PluginLyricsMetadata, String> {
-    resolve_plugin_lyrics_metadata_backend_checked(worker, provider_id, track, plugins, || Ok(()))
 }
 
 #[tauri::command]
@@ -990,6 +1011,7 @@ fn resolve_plugin_lyrics_metadata_backend_checked<F>(
     provider_id: String,
     track: serde_json::Value,
     plugins: Vec<PluginPlaybackPlanPlugin>,
+    use_download_worker: bool,
     mut should_continue: F,
 ) -> Result<PluginLyricsMetadata, String>
 where
@@ -1023,11 +1045,13 @@ where
     }));
 
     should_continue()?;
-    let response = worker.invoke_plugin(
+    let response = invoke_plugin_on_worker(
+        worker,
         entry,
         request,
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
+        use_download_worker,
     )?;
     should_continue()?;
 
@@ -1120,6 +1144,7 @@ fn resolve_playback_lyrics_metadata(
     entry: &str,
     plugin: &PluginPlaybackPlanPlugin,
     track: &serde_json::Value,
+    use_download_worker: bool,
 ) -> Result<PluginLyricsMetadata, String> {
     if !plugin
         .capabilities
@@ -1133,11 +1158,13 @@ fn resolve_playback_lyrics_metadata(
         "action": "lyrics",
         "track": track,
     }));
-    let response = worker.invoke_plugin(
+    let response = invoke_plugin_on_worker(
+        worker,
         entry.to_string(),
         request,
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
+        use_download_worker,
     )?;
     normalize_plugin_lyrics_metadata(unwrap_plugin_response_envelope(response)?)
 }
@@ -2108,13 +2135,34 @@ fn invoke_playback_plugin<F>(
     plugin_id: Option<String>,
     permissions: Option<Vec<String>>,
     wait_for_ready: bool,
+    use_download_worker: bool,
     should_continue: &mut F,
 ) -> Result<serde_json::Value, String>
 where
     F: FnMut() -> Result<(), String>,
 {
+    if use_download_worker {
+        should_continue()?;
+        return worker.invoke_download_plugin(entry, request, plugin_id, permissions);
+    }
+
     if wait_for_ready {
         worker.invoke_plugin_when_ready(entry, request, plugin_id, permissions, should_continue)
+    } else {
+        worker.invoke_plugin(entry, request, plugin_id, permissions)
+    }
+}
+
+fn invoke_plugin_on_worker(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    entry: String,
+    request: serde_json::Value,
+    plugin_id: Option<String>,
+    permissions: Option<Vec<String>>,
+    use_download_worker: bool,
+) -> Result<serde_json::Value, String> {
+    if use_download_worker {
+        worker.invoke_download_plugin(entry, request, plugin_id, permissions)
     } else {
         worker.invoke_plugin(entry, request, plugin_id, permissions)
     }
@@ -2174,6 +2222,7 @@ fn resolve_playback_quality_attempts<F>(
     track: &serde_json::Value,
     preferred_quality: Option<&str>,
     wait_for_ready: bool,
+    use_download_worker: bool,
     should_continue: &mut F,
 ) -> Result<Vec<String>, String>
 where
@@ -2190,6 +2239,7 @@ where
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
         wait_for_ready,
+        use_download_worker,
         should_continue,
     )?;
     let qualities =

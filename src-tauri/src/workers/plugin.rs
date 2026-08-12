@@ -76,6 +76,7 @@ fn value_has_plugin_search_payload(value: &Value) -> bool {
 
 pub(crate) struct PluginWorkerState {
     worker: Mutex<WorkerProcess>,
+    download_worker: Mutex<WorkerProcess>,
     cache_dir: PathBuf,
 }
 
@@ -87,6 +88,7 @@ impl PluginWorkerState {
         );
         Ok(Self {
             worker: Mutex::new(start_plugin_worker(&cache_dir)?),
+            download_worker: Mutex::new(start_plugin_worker(&cache_dir)?),
             cache_dir,
         })
     }
@@ -214,6 +216,50 @@ impl PluginWorkerState {
         }
     }
 
+    pub(crate) fn invoke_download_plugin(
+        &self,
+        entry: String,
+        request: Value,
+        plugin_id: Option<String>,
+        permissions: Option<Vec<String>>,
+    ) -> Result<Value, String> {
+        log_plugin_args(
+            "PluginWorkerState::invoke_download_plugin",
+            json!({
+                "entry": entry,
+                "request": request,
+                "pluginId": plugin_id,
+                "permissions": permissions,
+            }),
+        );
+        let response: Result<Value, String> = self.deserialize_download_response(WorkerRequest {
+            id: "plugin-download-invoke".to_string(),
+            method: methods::PLUGIN_INVOKE.to_string(),
+            payload: json!({
+                "entry": entry,
+                "request": request,
+                "pluginId": plugin_id,
+                "permissions": permissions,
+            }),
+        });
+        match response {
+            Ok(response) => {
+                log_plugin_args(
+                    "PluginWorkerState::invoke_download_plugin response",
+                    json!({ "response": response.clone() }),
+                );
+                Ok(response)
+            }
+            Err(error) => {
+                log_plugin_args(
+                    "PluginWorkerState::invoke_download_plugin error",
+                    json!({ "error": error }),
+                );
+                Err(error)
+            }
+        }
+    }
+
     pub(crate) fn invoke_plugin_when_ready<F>(
         &self,
         entry: String,
@@ -305,6 +351,14 @@ impl PluginWorkerState {
         self.request_with_locked_worker(&mut worker, request)
     }
 
+    fn download_request(&self, request: &WorkerRequest) -> Result<WorkerMessage, String> {
+        let mut worker = self
+            .download_worker
+            .lock()
+            .map_err(|err| err.to_string())?;
+        self.request_with_locked_worker(&mut worker, request)
+    }
+
     fn request_with_locked_worker(
         &self,
         worker: &mut WorkerProcess,
@@ -330,6 +384,13 @@ impl PluginWorkerState {
         request: WorkerRequest,
     ) -> Result<T, String> {
         Self::deserialize_worker_message(self.request(&request)?)
+    }
+
+    fn deserialize_download_response<T: for<'de> Deserialize<'de>>(
+        &self,
+        request: WorkerRequest,
+    ) -> Result<T, String> {
+        Self::deserialize_worker_message(self.download_request(&request)?)
     }
 
     fn deserialize_worker_message<T: for<'de> Deserialize<'de>>(

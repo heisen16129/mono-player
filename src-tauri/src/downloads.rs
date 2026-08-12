@@ -544,7 +544,7 @@ fn resolve_download_track_request(
             .to_string();
         let plugin_track = plugin_track_value(&track);
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        let source = crate::plugins::resolve_plugin_playback_source_backend(
+        let source = crate::plugins::resolve_plugin_download_source_backend(
             &worker,
             provider_id,
             plugin_track,
@@ -672,7 +672,7 @@ fn resolve_missing_track_lyrics(
         .filter(|value| !value.is_empty())?
         .to_string();
     let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-    crate::plugins::resolve_plugin_lyrics_metadata_backend(
+    crate::plugins::resolve_plugin_download_lyrics_metadata_backend(
         &worker,
         provider_id,
         plugin_track_value(track),
