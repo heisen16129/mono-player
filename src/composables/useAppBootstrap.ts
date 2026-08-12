@@ -24,7 +24,6 @@ interface UseAppBootstrapOptions {
   startDesktopLyricsReadyListener: () => Promise<void>;
   startDownloadEventListener: () => Promise<void>;
   startRustQueueEventListener: () => Promise<void>;
-  startSystemMediaActionListener: () => Promise<void>;
 }
 
 export function useAppBootstrap({
@@ -40,7 +39,6 @@ export function useAppBootstrap({
   startDesktopLyricsReadyListener,
   startDownloadEventListener,
   startRustQueueEventListener,
-  startSystemMediaActionListener,
 }: UseAppBootstrapOptions) {
   async function initializeApp() {
     try {
@@ -69,7 +67,6 @@ export function useAppBootstrap({
     await startDesktopLyricsReadyListener();
     await startDownloadEventListener();
     await startRustQueueEventListener();
-    await startSystemMediaActionListener();
   }
 
   onMounted(() => {

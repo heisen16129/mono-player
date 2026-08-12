@@ -45,7 +45,6 @@ export interface PlayerDockEmits {
   requestInitialPlayback: [startTime?: number];
   playbackStateChange: [isPlaying: boolean];
   playbackError: [message: string];
-  spectrumChange: [levels: number[]];
 }
 
 export interface PlayerDockListeners {
@@ -62,7 +61,6 @@ export interface PlayerDockListeners {
   onPlayQueueTrack: (...args: PlayerDockEmits['playQueueTrack']) => void;
   onPlaybackError: (...args: PlayerDockEmits['playbackError']) => void;
   onPlaybackStateChange: (...args: PlayerDockEmits['playbackStateChange']) => void;
-  onSpectrumChange: (...args: PlayerDockEmits['spectrumChange']) => void;
   onRequestInitialPlayback: (...args: PlayerDockEmits['requestInitialPlayback']) => void;
   onSeamlessAdvance: (...args: PlayerDockEmits['seamlessAdvance']) => void;
   onTimeChange: (...args: PlayerDockEmits['timeChange']) => void;
@@ -104,7 +102,6 @@ export interface PlaybackMetaControlProps {
   sleepTimerPresetMinutes: readonly number[];
   sleepTimerProgressPercent: number;
   sleepTimerRemainingLabel: string;
-  spectrumLevels: number[];
   volume: number;
 }
 

@@ -17,7 +17,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
 #[cfg(not(target_os = "windows"))]
 use tauri::Url;
-use tauri::{AppHandle, Manager, State};
+use tauri::State;
 
 static FAILED_EMBEDDED_COVER_KEYS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
@@ -140,33 +140,6 @@ pub(crate) fn clear_cover_thumbnail_cache(
 
         Ok(())
     })())
-}
-
-pub(crate) fn cached_cover_thumbnail_file_url(
-    app: &AppHandle,
-    path: &str,
-) -> Result<Option<String>, String> {
-    let audio_path = PathBuf::from(path);
-    let state = app.state::<PlayerState>();
-    cached_cover_thumbnail_file_url_in(&state.cache_dir()?, &audio_path)
-}
-
-pub(crate) fn cached_cover_thumbnail_file_url_in(
-    cache_root: &Path,
-    audio_path: &Path,
-) -> Result<Option<String>, String> {
-    let cache_path = cached_cover_thumbnail_path(cache_root, audio_path)?;
-    if cache_path.is_file() {
-        return Ok(cover_file_url(&cache_path));
-    }
-
-    let Some(cover) = read_thumbnail_cover_uncached(audio_path)? else {
-        return Ok(None);
-    };
-    let thumbnail = create_cover_thumbnail(&cover.data)?;
-    fs::write(&cache_path, &thumbnail).map_err(|err| err.to_string())?;
-
-    Ok(cover_file_url(&cache_path))
 }
 
 pub(crate) fn cached_cover_original_file_url_in(

@@ -33,6 +33,7 @@ const {
   playbackErrorMessage,
   showOutputDeviceFallbackNotice,
   showPlaybackError,
+  showPlaybackNotice,
 } = usePlaybackNotifications({
   getLocale: () => player.settings.locale,
   onPlaybackError: (message) => emit('playbackError', message),
@@ -78,6 +79,7 @@ const {
   currentTime,
   progress,
   runtimeDuration,
+  totalDuration,
   totalDurationLabel,
   commitSeekAudio,
   previewSeekAudio,
@@ -103,7 +105,6 @@ const {
   changeVolume,
   isMuted,
   queueTracks,
-  spectrumLevels,
   toggleMute,
   togglePlayback,
   volume,
@@ -129,10 +130,10 @@ const {
   onClearPlaybackError: clearPlaybackError,
   onOutputDeviceFallback: showOutputDeviceFallbackNotice,
   onPlaybackError: showPlaybackError,
+  onPlaybackNotice: (message) => showPlaybackNotice(`播放失败：${message}`),
   onPlaybackStateChange: (playing) => emit('playbackStateChange', playing),
   onRequestInitialPlayback: (startTime) => emit('requestInitialPlayback', startTime),
   onSeamlessAdvance: (track) => emit('seamlessAdvance', track),
-  onSpectrumChange: (levels) => emit('spectrumChange', levels),
 });
 
 const {
@@ -232,7 +233,6 @@ const {
     sleepTimerPresetMinutes: () => sleepTimerPresetMinutes,
     sleepTimerProgressPercent: () => sleepTimerProgressPercent.value,
     sleepTimerRemainingLabel: () => sleepTimerRemainingLabel.value,
-    spectrumLevels: () => spectrumLevels.value,
     volume: () => volume.value,
   },
   nowPlaying: {
@@ -263,6 +263,7 @@ const {
     @mouseleave="emit('mouseleave')"
   >
     <PlaybackProgressBar
+      :duration="totalDuration"
       :label="playbackLabel"
       :value="progress"
       @input="previewSeekAudio"

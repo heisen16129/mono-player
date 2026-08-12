@@ -23,7 +23,6 @@ import { useAppPlayerSurfaceBindings } from './composables/useAppPlayerSurfaceBi
 import { useAppRustPlaybackRuntime } from './composables/useAppRustPlaybackRuntime';
 import { useContentNavigationActions } from './composables/useContentNavigationActions';
 import { useDownloadController } from './composables/useDownloadController';
-import { useDownloadedOnlinePlaybackFallback } from './composables/useDownloadedOnlinePlaybackFallback';
 import { useDownloadedTrackActions } from './composables/useDownloadedTrackActions';
 import { useExternalPlaybackEventBridge } from './composables/useExternalPlaybackEventBridge';
 import { useFavoriteTrackActions } from './composables/useFavoriteTrackActions';
@@ -53,7 +52,7 @@ import { useTrackInteractionActions } from './composables/useTrackInteractionAct
 import { useTrackMetadataDialog } from './composables/useTrackMetadataDialog';
 import { useTrayIntegration } from './composables/useTrayIntegration';
 import { useWindowDrag } from './composables/useWindowDrag';
-import { changeRustBackendQueueTrackQuality, stopRustBackend } from './services/playerBackend';
+import { changeRustBackendQueueTrackQuality } from './services/playerBackend';
 import { usePlayerStore } from './stores/player';
 import type { PlaylistContextMenuListeners, TrackContextMenuListeners } from './types/appContextMenus';
 import type { AppDialogsListeners } from './types/appDialogs';
@@ -90,13 +89,11 @@ const {
 } = useLyricsViewVisibility();
 const {
   isAudioPlaying,
-  playbackSpectrumLevels,
   playbackTime,
   seekRequestId,
   seekTime,
   togglePlaybackRequestId,
   updatePlaybackRunningState,
-  updatePlaybackSpectrum,
   updatePlaybackTime,
 } = usePlaybackRuntimeState();
 const {
@@ -291,25 +288,13 @@ useNavigationAvailabilityGuards({
 });
 
 const {
-  retryActiveDownloadedOnlineTrackFromPlugin,
-  withDownloadedPlaybackSource,
-} = useDownloadedOnlinePlaybackFallback({
-  activeTrack,
-  downloadItems,
-  rustPlaybackQueue,
-  startRustPlaybackQueue,
-});
-
-const {
   buildOnlinePlaybackQueue,
   clearQueueSwitchingForTrack,
-  findNextOnlineSearchTrack,
   findPluginTrackForQueueTrack,
   getOnlineTrackKey,
 } = useOnlinePlaybackLookup({
   activePluginTrack: onlineActivePluginTrack,
   dedupeTracks: dedupePlaybackQueue,
-  mapPlaybackTrack: withDownloadedPlaybackSource,
   onlineSearchResults,
   queueSwitchingTrackKey,
 });
@@ -373,7 +358,6 @@ const {
 } = useOnlinePlaybackController({
   player,
   playbackTime,
-  isAudioPlaying,
   rustPlaybackQueue,
   onlineActiveTrack,
   onlineActivePluginTrack,
@@ -384,15 +368,11 @@ const {
   buildOnlinePlaybackQueue,
   changeRustQueueTrackQuality: changeRustBackendQueueTrackQuality,
   clearOnlineSearchError,
-  clearPreparingPlaybackState,
-  findNextOnlineSearchTrack,
   getOnlineTrackKey,
   handleRustQueueSnapshot,
+  handlePlaybackFailure,
   setOnlineSearchError,
-  showToast: showOnlineToast,
   startRustPlaybackQueue,
-  stopRustPlayback: stopRustBackend,
-  withDownloadedPlaybackSource,
 });
 
 const {
@@ -539,7 +519,6 @@ appRustPlaybackRuntime = useAppRustPlaybackRuntime({
   getOnlineTrackKey,
   loadLocalTrackLyricsInBackground,
   loadPlaybackTrackLyricsInBackground,
-  retryActiveDownloadedOnlineTrackFromPlugin,
   showToast: showOnlineToast,
   syncLyricsViewStateForTrack,
   crossfadeDurationMs: RUST_CROSSFADE_DURATION_MS,
@@ -568,13 +547,7 @@ const {
   startDesktopLyricsReadyListener,
   startDownloadEventListener,
   startRustQueueEventListener,
-  startSystemMediaActionListener,
 } = useExternalPlaybackEventBridge({
-  activeTrack,
-  isAudioPlaying,
-  playbackTime,
-  seekRequestId,
-  seekTime,
   togglePlaybackRequestId,
   broadcastCurrentDesktopLyricsState,
   getIsRestoringPlaybackQueue,
@@ -583,7 +556,6 @@ const {
   openSettingsView,
   playNextTrack,
   playPreviousTrack,
-  requestAppClose,
   setPlaybackMode,
 });
 
@@ -610,7 +582,6 @@ useAppBootstrap({
   startDesktopLyricsReadyListener,
   startDownloadEventListener,
   startRustQueueEventListener,
-  startSystemMediaActionListener,
 });
 
 const {
@@ -703,7 +674,6 @@ const { appMainContentListeners, appMainContentProps } = useAppMainContentSurfac
     onlinePreparingTrackKey,
     onlineSearchError,
     pendingDownloadTrackKeys,
-    playbackSpectrumLevels,
     recentAddedTrackCount,
     shouldShowDownloadsMenu,
     shouldShowLibraryResizeHandle,
@@ -814,7 +784,6 @@ const {
     togglePlaybackMode,
     updateActiveTrackLyrics,
     updatePlaybackRunningState,
-    updatePlaybackSpectrum,
     updatePlaybackTime,
   },
   handleSeamlessAdvance: rustQueueSnapshotController.handleSeamlessAdvance,
@@ -907,10 +876,6 @@ const {
     } satisfies TrackContextMenuListeners,
   },
 });
-
-function requestAppClose() {
-  return handleAppCloseRequest();
-}
 
 </script>
 

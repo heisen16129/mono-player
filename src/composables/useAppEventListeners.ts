@@ -8,14 +8,12 @@ import {
 import type { DownloadQueueEvent } from '../services/downloads';
 import { isTauriRuntime } from '../services/music';
 import { listenRustBackendQueue, type RustQueueSnapshot } from '../services/playerBackend';
-import { listenSystemMediaAction, type SystemMediaAction } from '../services/systemMedia';
 
 interface UseAppEventListenersOptions {
   onDesktopLyricsAction: (action: DesktopLyricsAction) => Promise<void> | void;
   onDesktopLyricsReady: () => void;
   onDownloadEvent: (event: DownloadQueueEvent) => void;
   onRustQueueSnapshot: (snapshot: RustQueueSnapshot) => void;
-  onSystemMediaAction: (action: SystemMediaAction) => Promise<void> | void;
 }
 
 export function useAppEventListeners({
@@ -23,13 +21,11 @@ export function useAppEventListeners({
   onDesktopLyricsReady,
   onDownloadEvent,
   onRustQueueSnapshot,
-  onSystemMediaAction,
 }: UseAppEventListenersOptions) {
   let desktopLyricsActionUnlisten: UnlistenFn | null = null;
   let desktopLyricsReadyUnlisten: UnlistenFn | null = null;
   let downloadEventUnlisten: UnlistenFn | null = null;
   let rustQueueUnlisten: UnlistenFn | null = null;
-  let systemMediaUnlisten: UnlistenFn | null = null;
 
   async function startDownloadEventListener() {
     if (!isTauriRuntime() || downloadEventUnlisten) return;
@@ -55,13 +51,6 @@ export function useAppEventListeners({
     rustQueueUnlisten = await listenRustBackendQueue(onRustQueueSnapshot);
   }
 
-  async function startSystemMediaActionListener() {
-    if (!isTauriRuntime() || systemMediaUnlisten) return;
-    systemMediaUnlisten = await listenSystemMediaAction((action) => {
-      void onSystemMediaAction(action);
-    });
-  }
-
   function stopAppEventListeners() {
     downloadEventUnlisten?.();
     downloadEventUnlisten = null;
@@ -71,8 +60,6 @@ export function useAppEventListeners({
     desktopLyricsReadyUnlisten = null;
     rustQueueUnlisten?.();
     rustQueueUnlisten = null;
-    systemMediaUnlisten?.();
-    systemMediaUnlisten = null;
   }
 
   onBeforeUnmount(stopAppEventListeners);
@@ -82,7 +69,6 @@ export function useAppEventListeners({
     startDesktopLyricsReadyListener,
     startDownloadEventListener,
     startRustQueueEventListener,
-    startSystemMediaActionListener,
     stopAppEventListeners,
   };
 }

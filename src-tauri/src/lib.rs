@@ -17,7 +17,6 @@ mod shell;
 mod sleep_timer;
 mod state;
 mod store;
-mod system_media;
 mod themes;
 mod tray;
 mod workers;
@@ -119,7 +118,6 @@ pub fn run() {
             app.manage(workers::plugin::PluginWorkerState::start(audio_cache_dir.clone())?);
             app.manage(workers::scanner::ScanWorkerState::default());
             app.manage(sleep_timer::SleepTimerState::default());
-            app.manage(system_media::init(app.handle()));
             themes::start_system_theme_watcher(app.handle().clone());
 
             if let Some(icon) = app.default_window_icon().cloned() {
@@ -229,8 +227,6 @@ pub fn run() {
             sleep_timer::sleep_timer_pause,
             sleep_timer::sleep_timer_resume,
             shell::open_track_in_folder,
-            system_media::system_media_update,
-            system_media::system_media_clear,
             store::store_get,
             store::store_set,
             store::store_delete,

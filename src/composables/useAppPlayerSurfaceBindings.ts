@@ -65,7 +65,6 @@ interface UseAppPlayerSurfaceBindingsActions {
   togglePlaybackMode: PlayerDockListeners['onTogglePlaybackMode'];
   updateActiveTrackLyrics: LyricsViewListeners['onLyricsFound'];
   updatePlaybackRunningState: PlayerDockListeners['onPlaybackStateChange'];
-  updatePlaybackSpectrum: PlayerDockListeners['onSpectrumChange'];
   updatePlaybackTime: PlayerDockListeners['onTimeChange'];
 }
 
@@ -121,7 +120,6 @@ export function useAppPlayerSurfaceBindings({
       onPlayQueueTrack: actions.playQueueTrack,
       onPlaybackError: actions.handlePlaybackFailure,
       onPlaybackStateChange: actions.updatePlaybackRunningState,
-      onSpectrumChange: actions.updatePlaybackSpectrum,
       onRequestInitialPlayback: actions.playActiveTrack,
       onSeamlessAdvance: handleSeamlessAdvance,
       onTimeChange: actions.updatePlaybackTime,

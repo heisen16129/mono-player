@@ -1,17 +1,11 @@
-import type { ComputedRef, Ref } from 'vue';
+import type { Ref } from 'vue';
 import { useAppEventListeners } from './useAppEventListeners';
 import { useExternalPlaybackActions } from './useExternalPlaybackActions';
-import { useSystemMediaSync } from './useSystemMediaSync';
 import type { DownloadQueueEvent } from '../services/downloads';
 import type { RustQueueSnapshot } from '../services/playerBackend';
-import type { PlaybackMode, Track } from '../types/music';
+import type { PlaybackMode } from '../types/music';
 
 interface UseExternalPlaybackEventBridgeOptions {
-  activeTrack: ComputedRef<Track | null>;
-  isAudioPlaying: Ref<boolean>;
-  playbackTime: Ref<number>;
-  seekRequestId: Ref<number>;
-  seekTime: Ref<number>;
   togglePlaybackRequestId: Ref<number>;
   broadcastCurrentDesktopLyricsState: () => Promise<void> | void;
   getIsRestoringPlaybackQueue: () => boolean;
@@ -20,16 +14,10 @@ interface UseExternalPlaybackEventBridgeOptions {
   openSettingsView: () => void;
   playNextTrack: () => Promise<void>;
   playPreviousTrack: () => Promise<void>;
-  requestAppClose: () => Promise<void> | void;
   setPlaybackMode: (mode: PlaybackMode) => Promise<void> | void;
 }
 
 export function useExternalPlaybackEventBridge({
-  activeTrack,
-  isAudioPlaying,
-  playbackTime,
-  seekRequestId,
-  seekTime,
   togglePlaybackRequestId,
   broadcastCurrentDesktopLyricsState,
   getIsRestoringPlaybackQueue,
@@ -38,29 +26,16 @@ export function useExternalPlaybackEventBridge({
   openSettingsView,
   playNextTrack,
   playPreviousTrack,
-  requestAppClose,
   setPlaybackMode,
 }: UseExternalPlaybackEventBridgeOptions) {
-  useSystemMediaSync({
-    activeTrack,
-    isAudioPlaying,
-    playbackTime,
-  });
-
   const {
     handleDesktopLyricsAction,
-    handleSystemMediaAction,
     handleTrayMenuAction,
   } = useExternalPlaybackActions({
-    isAudioPlaying,
-    playbackTime,
-    seekRequestId,
-    seekTime,
     togglePlaybackRequestId,
     openSettingsView,
     playNextTrack,
     playPreviousTrack,
-    requestAppClose,
     setPlaybackMode,
   });
 
@@ -73,7 +48,6 @@ export function useExternalPlaybackEventBridge({
     onRustQueueSnapshot: (snapshot) => {
       handleRustQueueSnapshot(snapshot, !getIsRestoringPlaybackQueue());
     },
-    onSystemMediaAction: handleSystemMediaAction,
   });
 
   return {
