@@ -31,9 +31,14 @@ defineEmits<{
 <style scoped>
 .lyrics-close {
   position: absolute;
-  top: calc(12px - var(--lyrics-view-padding-top, 0px));
-  left: calc(var(--lyrics-control-center-x) - var(--lyrics-view-padding-x, 0px) - 17px);
+  top: 0;
+  left: calc(var(--lyrics-control-center-x) - 17px);
   z-index: 20;
+  color: var(--smw-text-secondary);
+}
+
+.lyrics-close:hover {
+  color: var(--smw-text-primary);
 }
 
 .lyrics-heading {

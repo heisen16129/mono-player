@@ -87,6 +87,18 @@
   background: rgba(18, 32, 58, 0.08);
 }
 
+.mono-window.lyrics-open .player-dock {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 28;
+}
+
+.mono-window.lyrics-open .player-dock:not(.lyrics-auto-hidden) {
+  backdrop-filter: blur(10px);
+}
+
 .mono-window.has-theme-background .main-nav a:hover,
 .mono-window.has-theme-background .playlist-nav-item:hover,
 .mono-window.has-theme-background .main-nav .is-active,

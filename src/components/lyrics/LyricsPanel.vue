@@ -82,10 +82,6 @@ defineExpose({ panel });
   overflow: hidden;
 }
 
-.lyrics-panel-wrap:not(.is-dock-hidden) {
-  clip-path: inset(0 0 calc(var(--player-height) + 14px) 0);
-}
-
 .lyrics-panel {
   display: grid;
   gap: 20px;
@@ -93,7 +89,7 @@ defineExpose({ panel });
   height: 100%;
   min-height: 420px;
   overflow-y: auto;
-  padding: var(--lyrics-anchor-padding-top, 32%) 34px var(--lyrics-anchor-padding-bottom, 42%) 0;
+  padding: var(--lyrics-anchor-padding-top, 32%) 24px var(--lyrics-anchor-padding-bottom, 42%) 24px;
   color: var(--smw-text-secondary);
   text-align: center;
   scrollbar-width: none;
@@ -105,7 +101,7 @@ defineExpose({ panel });
 
 .lyrics-panel.is-empty {
   align-content: center;
-  padding: 0 34px 0 0;
+  padding: 0 24px;
 }
 
 </style>

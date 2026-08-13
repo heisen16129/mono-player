@@ -84,18 +84,21 @@ defineExpose({ lyricsAnchorOffset });
   display: grid;
   grid-template-columns: minmax(240px, 360px) minmax(520px, 1.7fr);
   grid-template-rows: minmax(0, 1fr) var(--player-height);
-  gap: clamp(44px, 6vw, 86px);
+  gap: clamp(32px, 4.5vw, 64px);
   align-items: center;
+  justify-items: center;
   max-width: 1280px;
-  height: calc(100% - 78px);
+  height: 100%;
   margin: 0 auto;
+  padding-top: 36px;
 }
 
 .lyrics-stage-cover {
-  grid-row: 1;
+  grid-row: 1 / 3;
 }
 
 .lyrics-stage-panel {
   grid-row: 1 / 3;
+  width: min(100%, 720px);
 }
 </style>

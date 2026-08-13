@@ -313,13 +313,15 @@ const {
     :style="lyricsViewStyle"
     @contextmenu.prevent="openActionMenu"
   >
-    <LyricsHeaderBar
-      :album="albumLabel"
-      :artist="artistLabel"
-      :close-label="closeLabel"
-      :title="titleLabel"
-      @close="closeLyricsView"
-    />
+    <div class="lyrics-header-slot">
+      <LyricsHeaderBar
+        :album="albumLabel"
+        :artist="artistLabel"
+        :close-label="closeLabel"
+        :title="titleLabel"
+        @close="closeLyricsView"
+      />
+    </div>
 
     <LyricsStage
       ref="lyricsStageRef"
@@ -366,10 +368,10 @@ const {
   position: relative;
   grid-row: 1;
   --lyrics-view-padding-x: clamp(28px, 5vw, 72px);
-  --lyrics-view-padding-top: 24px;
+  --lyrics-view-padding-top: 18px;
   min-height: 0;
   overflow: hidden;
-  padding: var(--lyrics-view-padding-top) var(--lyrics-view-padding-x) 16px;
+  padding: var(--lyrics-view-padding-top) var(--lyrics-view-padding-x) 8px;
   background: var(--smw-lyrics-bg, var(--smw-bg-canvas));
 }
 
@@ -422,9 +424,18 @@ const {
   opacity: 0.82;
 }
 
-.lyrics-view > * {
+.lyrics-view > *:not(.lyrics-header-slot) {
   position: relative;
   z-index: 1;
+}
+
+.lyrics-header-slot {
+  position: absolute;
+  inset: 16px 0 auto;
+  z-index: 20;
+  width: 100%;
+  display: grid;
+  justify-items: center;
 }
 
 </style>
