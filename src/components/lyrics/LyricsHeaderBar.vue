@@ -39,6 +39,7 @@ defineEmits<{
 
 .lyrics-close:hover {
   color: var(--smw-text-primary);
+  background: transparent;
 }
 
 .lyrics-heading {
