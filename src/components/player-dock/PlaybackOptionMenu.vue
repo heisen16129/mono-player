@@ -100,7 +100,12 @@ function closeControlPopover() {
   bottom: calc(100% + 12px);
   z-index: 20;
   display: grid;
-  min-width: 86px;
+  width: max-content;
+  min-width: 112px;
+  max-width: min(260px, calc(100vw - 24px));
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  scrollbar-width: none;
   padding: 6px;
   border: 1px solid var(--smw-border-soft);
   border-radius: 10px;
@@ -111,6 +116,10 @@ function closeControlPopover() {
   pointer-events: none;
   transform: translate(-50%, 4px);
   transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.quality-popover::-webkit-scrollbar {
+  display: none;
 }
 
 .quality-control:hover .quality-popover,

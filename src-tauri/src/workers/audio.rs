@@ -583,6 +583,11 @@ impl AudioBackend {
         fade: bool,
         fade_duration_ms: Option<u64>,
     ) -> Result<(), String> {
+        eprintln!(
+            "[audio] play_start kind=local format={} path={}",
+            audio_format_label(path.trim()),
+            path.trim()
+        );
         let path = PathBuf::from(path.trim());
         if !path.is_file() {
             return self.fail("Audio file does not exist.");
@@ -596,10 +601,27 @@ impl AudioBackend {
             }
         }
 
-        let decoder = decode_local_file(&path)?;
+        let decoder = match decode_local_file(&path) {
+            Ok(decoder) => decoder,
+            Err(error) => {
+                eprintln!(
+                    "[audio] decoder_failed kind=local format={} path={} error={}",
+                    audio_format_label(&path.to_string_lossy()),
+                    path.display(),
+                    error
+                );
+                return Err(error);
+            }
+        };
         let duration = source_total_duration(&decoder, "local-file");
         let source = SpectrumSource::new(decoder, Arc::clone(&self.spectrum_levels));
-        let stream = self.ensure_output_stream()?;
+        let stream = match self.ensure_output_stream() {
+            Ok(stream) => stream,
+            Err(error) => {
+                eprintln!("[audio] output_stream_failed kind=local error={}", error);
+                return Err(error);
+            }
+        };
         let sink = Arc::new(Sink::connect_new(stream.mixer()));
         if fade {
             sink.set_volume(0.0);
@@ -631,6 +653,10 @@ impl AudioBackend {
         cache_dir: PathBuf,
     ) -> Result<(), String> {
         let url = url.trim().to_string();
+        eprintln!(
+            "[audio] play_start kind=online  url={}",
+            url
+        );
         if !url.starts_with("http://") && !url.starts_with("https://") {
             return self.fail("Only HTTP and HTTPS audio URLs are supported.");
         }
@@ -642,18 +668,42 @@ impl AudioBackend {
             }
         }
 
-        let reader = StreamingHttpReader::open(url.clone(), cache_dir, cache_identity)?;
-        let content_length = reader.content_length();
+        let reader = match StreamingHttpReader::open(url.clone(), cache_dir, cache_identity) {
+            Ok(reader) => reader,
+            Err(error) => {
+                eprintln!(
+                    "[audio] stream_open_failed format={} url={} error={}",
+                    audio_format_label(&url),
+                    audio_url_label(&url),
+                    error
+                );
+                return Err(error);
+            }
+        };
         let stream_state = reader.shared_state();
         let cache_path = reader.cache_path();
-        let mut decoder_builder = Decoder::builder().with_data(reader);
-        if let Some(content_length) = content_length {
-            decoder_builder = decoder_builder.with_byte_len(content_length);
-        }
-        let decoder = build_stream_decoder(decoder_builder)?;
+        let decoder_builder = Decoder::builder().with_data(reader);
+        let decoder = match build_stream_decoder(decoder_builder) {
+            Ok(decoder) => decoder,
+            Err(error) => {
+                eprintln!(
+                    "[audio] decoder_failed kind=online format={} url={} error={}",
+                    audio_format_label(&url),
+                    audio_url_label(&url),
+                    error
+                );
+                return Err(error);
+            }
+        };
         let duration = source_total_duration(&decoder, "http-stream");
         let source = SpectrumSource::new(decoder, Arc::clone(&self.spectrum_levels));
-        let stream = self.ensure_output_stream()?;
+        let stream = match self.ensure_output_stream() {
+            Ok(stream) => stream,
+            Err(error) => {
+                eprintln!("[audio] output_stream_failed kind=online error={}", error);
+                return Err(error);
+            }
+        };
         let sink = Arc::new(Sink::connect_new(stream.mixer()));
         if fade {
             sink.set_volume(0.0);
@@ -748,10 +798,15 @@ impl AudioBackend {
 
     fn transition_to_sink(&mut self, sink: &Arc<Sink>, fade: bool, fade_duration_ms: Option<u64>) {
         let previous_sink = self.sink.take();
-        if !fade {
+        let can_crossfade = fade
+            && previous_sink
+                .as_ref()
+                .is_some_and(|previous_sink| !previous_sink.empty());
+        if !can_crossfade {
             if let Some(previous_sink) = previous_sink {
                 previous_sink.stop();
             }
+            sink.set_volume(self.volume);
             return;
         }
 
@@ -846,6 +901,36 @@ impl AudioBackend {
             .as_ref()
             .ok_or_else(|| "Audio output stream is not available.".to_string())
     }
+}
+
+fn audio_url_label(url: &str) -> String {
+    reqwest::Url::parse(url)
+        .map(|parsed| {
+            let query_keys = parsed
+                .query_pairs()
+                .map(|(name, _)| name.into_owned())
+                .collect::<Vec<_>>()
+            .join(",");
+            format!(
+                "{}://{}{}?keys=[{}]&len={}",
+                parsed.scheme(),
+                parsed.host_str().unwrap_or("unknown"),
+                parsed.path(),
+                query_keys,
+                url.len()
+            )
+        })
+        .unwrap_or_else(|_| format!("invalid-url?len={}", url.len()))
+}
+
+fn audio_format_label(source: &str) -> String {
+    let path = reqwest::Url::parse(source)
+        .map(|url| url.path().to_string())
+        .unwrap_or_else(|_| source.to_string());
+    path.rsplit_once('.')
+        .map(|(_, extension)| extension.trim_matches('/').to_ascii_lowercase())
+        .filter(|extension| !extension.is_empty() && extension.len() <= 8)
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 fn open_output_stream(device_id: Option<&str>) -> Result<OutputStream, String> {
@@ -1270,14 +1355,6 @@ impl StreamingHttpReader {
         }))
     }
 
-    fn content_length(&self) -> Option<u64> {
-        self.shared
-            .0
-            .lock()
-            .ok()
-            .and_then(|state| state.content_length)
-    }
-
     fn cache_path(&self) -> PathBuf {
         self.shared
             .0
@@ -1289,6 +1366,7 @@ impl StreamingHttpReader {
     fn shared_state(&self) -> Arc<(Mutex<StreamingHttpState>, Condvar)> {
         Arc::clone(&self.shared)
     }
+
 }
 
 impl Read for StreamingHttpReader {
@@ -1309,8 +1387,22 @@ impl Read for StreamingHttpReader {
 
             if let Some(content_length) = state.content_length {
                 if self.position >= content_length {
-                    state.is_buffering = false;
-                    return Ok(0);
+                    if state.completed {
+                        state.is_buffering = false;
+                        return Ok(0);
+                    }
+                    state.is_buffering = true;
+                    let (next_state, wait_result) = cvar
+                        .wait_timeout(state, Duration::from_secs(10))
+                        .map_err(|_| io::Error::other("stream lock poisoned"))?;
+                    if wait_result.timed_out() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "Audio stream did not finish downloading within 10 seconds.",
+                        ));
+                    }
+                    state = next_state;
+                    continue;
                 }
             }
 
@@ -1336,9 +1428,16 @@ impl Read for StreamingHttpReader {
                 state.requested_range_start = Some(self.position);
                 cvar.notify_all();
             }
-            state = cvar
-                .wait(state)
+            let (next_state, wait_result) = cvar
+                .wait_timeout(state, Duration::from_secs(10))
                 .map_err(|_| io::Error::other("stream lock poisoned"))?;
+            if wait_result.timed_out() {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "Audio stream did not provide data within 10 seconds.",
+                ));
+            }
+            state = next_state;
         }
     }
 }
@@ -1398,23 +1497,23 @@ fn download_http_stream(
     loop {
         match download_http_response(&mut response, &mut writer, &shared, range_start) {
             DownloadRangeResult::Completed => {
-                let next_start = take_requested_range_start(&shared);
-                let Some(next_start) = next_start else {
+                if shared
+                    .0
+                    .lock()
+                    .map(|state| state.is_fully_cached())
+                    .unwrap_or(false)
+                {
                     mark_http_stream_completed(&shared);
                     return;
-                };
-                match request_http_range(&client, &url, next_start) {
-                    Ok((next_response, start)) => {
-                        response = next_response;
-                        range_start = start;
-                    }
-                    Err(error) => {
-                        mark_http_stream_failed(&shared, error);
-                        return;
-                    }
                 }
-            }
-            DownloadRangeResult::SwitchRange(next_start) => {
+                let next_start = take_requested_range_start(&shared);
+                let Some(next_start) = next_start else {
+                    mark_http_stream_failed(
+                        &shared,
+                        "Audio stream ended before the complete file was cached.".to_string(),
+                    );
+                    return;
+                };
                 match request_http_range(&client, &url, next_start) {
                     Ok((next_response, start)) => {
                         response = next_response;
@@ -1436,7 +1535,6 @@ fn download_http_stream(
 
 enum DownloadRangeResult {
     Completed,
-    SwitchRange(u64),
     Failed(String),
 }
 
@@ -1450,14 +1548,21 @@ fn download_http_response(
     let mut position = start;
 
     loop {
-        if let Some(next_start) = take_requested_range_start(shared) {
-            if next_start != position {
-                return DownloadRangeResult::SwitchRange(next_start);
-            }
-        }
-
         match response.read(&mut chunk) {
-            Ok(0) => return DownloadRangeResult::Completed,
+            Ok(0) => {
+                let incomplete = shared
+                    .0
+                    .lock()
+                    .ok()
+                    .and_then(|state| state.content_length)
+                    .is_some_and(|content_length| position < content_length);
+                if incomplete {
+                    return DownloadRangeResult::Failed(format!(
+                        "Audio stream ended early at byte {position} (expected more data)."
+                    ));
+                }
+                return DownloadRangeResult::Completed;
+            }
             Ok(count) => {
                 if let Err(error) = writer
                     .seek(SeekFrom::Start(position))
@@ -1490,6 +1595,12 @@ fn take_requested_range_start(shared: &Arc<(Mutex<StreamingHttpState>, Condvar)>
         return None;
     };
     let requested = state.requested_range_start.take()?;
+    if state
+        .content_length
+        .is_some_and(|content_length| requested >= content_length)
+    {
+        return None;
+    }
     if state.cached_end_for(requested).is_some() {
         return None;
     }
@@ -1519,8 +1630,14 @@ fn request_http_range(
         return Ok((response, start));
     }
 
-    if response.status().is_success() {
+    if response.status().is_success() && start == 0 {
         return Ok((response, 0));
+    }
+
+    if response.status().is_success() {
+        return Err(format!(
+            "Audio server ignored byte range request at offset {start}."
+        ));
     }
 
     Err(format!(
@@ -1556,6 +1673,12 @@ fn mark_http_stream_failed(shared: &Arc<(Mutex<StreamingHttpState>, Condvar)>, e
     let (lock, cvar) = &**shared;
     let mut failed_cache = None;
     if let Ok(mut state) = lock.lock() {
+        eprintln!(
+            "[audio] stream_failed format={} url={} error={}",
+            audio_format_label(&state.url),
+            audio_url_label(&state.url),
+            error
+        );
         state.error = Some(error);
         state.completed = true;
         state.is_buffering = false;

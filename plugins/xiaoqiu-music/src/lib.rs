@@ -3,7 +3,8 @@ use std::cell::Cell;
 
 const PROVIDER_ID: &str = "mono-native-wasm-xiaoqiu";
 const AQ_API_BASE: &str = "https://api.vkeys.cn/v2/music/tencent";
-const DEFAULT_QUALITY: &str = "320k";
+const LINK_API_BASE: &str = "https://api.vkeys.cn/music/tencent/song/link";
+const DEFAULT_QUALITY: &str = "14";
 const PROVIDER_NAME: &str = "小秋音乐";
 
 thread_local! { static LAST_LEN: Cell<usize> = const { Cell::new(0) }; }
@@ -83,9 +84,21 @@ fn metadata_response() -> Value {
                 "type": "select",
                 "defaultValue": DEFAULT_QUALITY,
                 "options": [
-                    { "label": "\u{6807}\u{51c6}\u{97f3}\u{8d28}", "value": "128k" },
-                    { "label": "\u{9ad8}\u{54c1}\u{97f3}\u{8d28}", "value": "320k" },
-                    { "label": "\u{65e0}\u{635f}\u{97f3}\u{8d28}", "value": "flac" }
+                    { "label": "\u{97f3}\u{4e50}\u{8bd5}\u{542c}", "value": "0" },
+                    { "label": "\u{6709}\u{635f}\u{97f3}\u{8d28}", "value": "1" },
+                    { "label": "\u{6709}\u{635f}\u{97f3}\u{8d28}", "value": "2" },
+                    { "label": "\u{6709}\u{635f}\u{97f3}\u{8d28}", "value": "3" },
+                    { "label": "\u{6807}\u{51c6}\u{97f3}\u{8d28}", "value": "4" },
+                    { "label": "\u{6807}\u{51c6}\u{97f3}\u{8d28}", "value": "5" },
+                    { "label": "\u{6807}\u{51c6}\u{97f3}\u{8d28}", "value": "6" },
+                    { "label": "\u{6807}\u{51c6}\u{97f3}\u{8d28}", "value": "7" },
+                    { "label": "HQ\u{9ad8}\u{97f3}\u{8d28}", "value": "8" },
+                    { "label": "HQ\u{9ad8}\u{97f3}\u{8d28}\u{ff08}\u{97f3}\u{8d28}\u{589e}\u{5f3a}\u{ff09}", "value": "9" },
+                    { "label": "SQ\u{65e0}\u{635f}\u{97f3}\u{8d28}", "value": "10" },
+                    { "label": "Hi-Res\u{97f3}\u{8d28}", "value": "11" },
+                    { "label": "\u{675c}\u{6bd4}\u{5168}\u{666f}\u{58f0}", "value": "12" },
+                    { "label": "\u{81fb}\u{54c1}\u{5168}\u{666f}\u{58f0}", "value": "13" },
+                    { "label": "\u{81fb}\u{54c1}\u{6bcd}\u{5e26}2.0", "value": "14" }
                 ]
             }]
         }
@@ -123,16 +136,15 @@ fn play_request(request: &Value) -> Value {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| configured_default_quality(request));
-    let Some(songmid) = source_raw_field(track, &["songmid", "mid"]) else {
-        return json!({"error":"QQ track has no playable songmid."});
+    let quality = normalize_quality(quality);
+    let query = if let Some(mid) = source_raw_field(track, &["mid", "songmid"]) {
+        format!("mid={}&quality={quality}", url_encode(&mid, false))
+    } else if let Some(id) = source_raw_field(track, &["id"]) {
+        format!("id={}&quality={quality}", url_encode(&id, false))
+    } else {
+        return json!({"error":"QQ track has no playable id or mid."});
     };
-    host_get(
-        &format!("https://lxmusicapi.onrender.com/url/tx/{songmid}/{quality}"),
-        headers(&[
-            ("X-Request-Key", "share-v3"),
-            ("User-Agent", browser_user_agent()),
-        ]),
-    )
+    host_get(&format!("{LINK_API_BASE}?{query}"), aq_headers())
 }
 fn lyrics_request(request: &Value) -> Value {
     let track = request.get("track").unwrap_or(&Value::Null);
@@ -192,7 +204,26 @@ fn parse_lyrics_response(_request: &Value, body: &str) -> Value {
     json!({"defaultFormat":default_format,"lyrics":lyrics})
 }
 fn qualities_response(request: &Value) -> Value {
-    json!({"qualities":[{"id":"128k","name":"标准音质","available":true},{"id":"320k","name":"高品音质","available":true},{"id":"flac","name":"无损音质","available":true}],"defaultQuality":configured_default_quality(request)})
+    json!({
+        "qualities": [
+            {"id":"0","name":"音乐试听","available":true},
+            {"id":"1","name":"有损音质","available":true},
+            {"id":"2","name":"有损音质","available":true},
+            {"id":"3","name":"有损音质","available":true},
+            {"id":"4","name":"标准音质","available":true},
+            {"id":"5","name":"标准音质","available":true},
+            {"id":"6","name":"标准音质","available":true},
+            {"id":"7","name":"标准音质","available":true},
+            {"id":"8","name":"HQ高音质","available":true},
+            {"id":"9","name":"HQ高音质（音质增强）","available":true},
+            {"id":"10","name":"SQ无损音质","available":true},
+            {"id":"11","name":"Hi-Res音质","available":true},
+            {"id":"12","name":"杜比全景声","available":true},
+            {"id":"13","name":"臻品全景声","available":true},
+            {"id":"14","name":"臻品母带2.0","available":true}
+        ],
+        "defaultQuality": configured_default_quality(request)
+    })
 }
 
 fn configured_default_quality(request: &Value) -> &'static str {
@@ -206,10 +237,25 @@ fn configured_default_quality(request: &Value) -> &'static str {
 }
 
 fn normalize_quality(quality: &str) -> &'static str {
-    match quality.trim() {
-        "128k" => "128k",
-        "320k" => "320k",
-        "flac" => "flac",
+    match quality.trim().parse::<u8>() {
+        Ok(value) if value <= 14 => match value {
+            0 => "0",
+            1 => "1",
+            2 => "2",
+            3 => "3",
+            4 => "4",
+            5 => "5",
+            6 => "6",
+            7 => "7",
+            8 => "8",
+            9 => "9",
+            10 => "10",
+            11 => "11",
+            12 => "12",
+            13 => "13",
+            14 => "14",
+            _ => DEFAULT_QUALITY,
+        },
         _ => DEFAULT_QUALITY,
     }
 }
@@ -248,6 +294,7 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| configured_default_quality(request));
+    let quality = normalize_quality(quality);
     json!({"url":url,"path":url,"title":track.get("title").cloned().unwrap_or(Value::Null),"artist":track.get("artist").cloned().unwrap_or(Value::Null),"album":track.get("album").cloned().unwrap_or(Value::Null),"duration":normalize_seconds(track.get("duration")),"artwork":track.get("artwork").cloned().unwrap_or(Value::Null),"quality":quality,"lyrics":play_lyrics_metadata(track),"sourceId":source_id_value(track),"sourceName":PROVIDER_NAME,"sourceProviderId":PROVIDER_ID,"sourceRaw":track_source_raw(track)})
 }
 

@@ -8,7 +8,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -923,6 +923,8 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
         let mut inactive_ticks = 0_u8;
         let mut state_ticks = 0_u64;
         let mut had_active_source = false;
+        let mut last_online_position = 0.0_f64;
+        let mut online_stalled_ticks = 0_u16;
         loop {
             if let Some(expected_generation) = generation {
                 let player_state = app.state::<PlayerState>();
@@ -958,8 +960,49 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
                 had_active_source = true;
             }
 
+            if snapshot.source_type.as_deref() == Some("url") && snapshot.is_playing {
+                if (snapshot.position - last_online_position).abs() < 0.05 {
+                    online_stalled_ticks = online_stalled_ticks.saturating_add(1);
+                } else {
+                    online_stalled_ticks = 0;
+                    last_online_position = snapshot.position;
+                }
+                if online_stalled_ticks >= 40 {
+                    eprintln!(
+                        "[player] online playback stalled position={:.2} duration={:?}; retrying source",
+                        snapshot.position,
+                        snapshot.duration
+                    );
+                    let _ = handle_worker_playback_failure(
+                        &app,
+                        "Online audio playback stalled without a stream error.",
+                        snapshot.position,
+                    );
+                    break;
+                }
+            } else {
+                online_stalled_ticks = 0;
+                last_online_position = snapshot.position;
+            }
+
             if snapshot.current_path.is_none() {
                 if had_active_source {
+                    if is_premature_online_end(&app, &snapshot) {
+                        eprintln!(
+                            "[player] online playback ended before duration position={:.2} duration={:?}; retrying source",
+                            snapshot.position,
+                            snapshot.duration
+                        );
+                        let _ = handle_worker_playback_failure(
+                            &app,
+                            "Online audio stream ended before the track duration.",
+                            snapshot.position,
+                        );
+                        had_active_source = false;
+                        inactive_ticks = 0;
+                        thread::sleep(Duration::from_millis(250));
+                        continue;
+                    }
                     if !advance_worker_queue_after_end(&app).unwrap_or(false) {
                         let _ = app.emit("player://ended", ());
                     }
@@ -979,6 +1022,26 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
             thread::sleep(Duration::from_millis(250));
         }
     });
+}
+
+fn is_premature_online_end(app: &AppHandle, snapshot: &PlayerSnapshot) -> bool {
+    if snapshot.source_type.as_deref() != Some("url") {
+        return false;
+    }
+    let player_state = app.state::<PlayerState>();
+    let Ok(backend) = player_state.inner.lock() else {
+        return false;
+    };
+    let Some(source) = backend.current_source.as_deref() else {
+        return false;
+    };
+    let Some(track) = queue_track_for_source(&backend, source) else {
+        return false;
+    };
+    let Some(duration) = track.duration else {
+        return false;
+    };
+    duration > 5.0 && snapshot.position + 2.0 < duration
 }
 
 fn handle_worker_playback_failure(app: &AppHandle, message: &str, position: f64) -> Result<bool, String> {
@@ -1028,7 +1091,13 @@ fn retry_current_queue_track_from_plugin(
         let Some(current_source) = backend.current_source.as_deref().map(str::trim).filter(|source| !source.is_empty()) else {
             return Ok(None);
         };
-        if is_rust_playable_url(current_source) || is_plugin_queue_source(current_source) {
+        let current_track = queue_track_for_source(&backend, current_source)
+            .or_else(|| backend.queue_index.and_then(|index| backend.queue_tracks.get(index).cloned()));
+        let is_plugin_track = current_track.as_ref().is_some_and(|track| {
+            track.source_provider_id.as_deref().is_some_and(|value| !value.trim().is_empty())
+                && track.source_id.as_deref().is_some_and(|value| !value.trim().is_empty())
+        });
+        if !is_plugin_track {
             return Ok(None);
         }
 
@@ -1461,6 +1530,14 @@ fn play_queue_source_raw(
     generation: Option<u64>,
     preferred_quality: Option<String>,
 ) -> Result<QueueSnapshot, String> {
+    let started_at = Instant::now();
+    let requested_source_label = playback_source_label(&source);
+    eprintln!(
+        "[playback] start source={} queue_index={:?} position={:.2}",
+        requested_source_label,
+        queue_index,
+        position
+    );
     commit_pending_queue_source(state, app, &source, queue_index)?;
     let resolved = match resolve_queue_source_for_playback(
         state,
@@ -1472,7 +1549,15 @@ fn play_queue_source_raw(
     ) {
         Ok(source) => source,
         Err(error) if error == "Playback request was replaced." => return queue_snapshot(state),
-        Err(error) => return Err(error),
+        Err(error) => {
+            eprintln!(
+                "[playback] resolve failed source={} elapsed_ms={} error={}",
+                requested_source_label,
+                started_at.elapsed().as_millis(),
+                error
+            );
+            return Err(error);
+        }
     };
     let source = resolved.source;
     let cache_identity = resolved.cache_identity;
@@ -1488,17 +1573,36 @@ fn play_queue_source_raw(
             if let Some(identity) = &cache_identity {
                 audio_worker.remove_cached_track(identity);
             }
+            eprintln!(
+                "[playback] audio url failed source={} elapsed_ms={} error={}",
+                playback_source_label(&source),
+                started_at.elapsed().as_millis(),
+                error
+            );
             return Err(error);
         }
     } else {
         let path = PathBuf::from(source.trim());
         if !path.is_file() {
-            return Err("Audio file does not exist.".to_string());
+            let error = "Audio file does not exist.".to_string();
+            eprintln!(
+                "[playback] local file failed source={} elapsed_ms={} error={}",
+                playback_source_label(&source),
+                started_at.elapsed().as_millis(),
+                error
+            );
+            return Err(error);
         }
         if let Err(error) = audio_worker.play_path(source.clone(), true, fade, fade_duration_ms) {
             if let Some(identity) = &cache_identity {
                 audio_worker.remove_cached_track(identity);
             }
+            eprintln!(
+                "[playback] local audio failed source={} elapsed_ms={} error={}",
+                playback_source_label(&source),
+                started_at.elapsed().as_millis(),
+                error
+            );
             return Err(error);
         }
     }
@@ -1513,8 +1617,22 @@ fn play_queue_source_raw(
     }
 
     let snapshot = queue_snapshot(state)?;
-    let _ = app.emit("player://advanced", source);
+    let source_label = playback_source_label(&source);
+    let _ = app.emit("player://advanced", &source);
     let _ = app.emit("player://queue", &snapshot);
     spawn_audio_worker_state_watcher(app.clone(), generation);
+    eprintln!(
+        "[playback] started source={} elapsed_ms={}",
+        source_label,
+        started_at.elapsed().as_millis()
+    );
     Ok(snapshot)
+}
+
+fn playback_source_label(source: &str) -> String {
+    let source = source.trim();
+    if let Ok(url) = reqwest::Url::parse(source) {
+        return format!("{}://{}{}", url.scheme(), url.host_str().unwrap_or("unknown"), url.path());
+    }
+    source.to_string()
 }

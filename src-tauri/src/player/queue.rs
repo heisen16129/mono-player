@@ -76,7 +76,7 @@ pub(super) fn set_queue_backend(
     tracks: Vec<QueueTrack>,
     current_source: Option<&str>,
     playback_mode: String,
-    _seamless_playback: bool,
+    seamless_playback: bool,
     crossfade_playback: bool,
     crossfade_duration_ms: u64,
 ) {
@@ -101,7 +101,9 @@ pub(super) fn set_queue_backend(
     backend.queue_tracks = next_queue_tracks;
     backend.queue_sources = next_queue_sources;
     backend.playback_mode = next_playback_mode;
-    backend.crossfade_playback = crossfade_playback;
+    // Seamless playback uses the existing overlapping-sink transition so the
+    // next track starts before the previous sink is torn down.
+    backend.crossfade_playback = crossfade_playback || seamless_playback;
     backend.crossfade_duration = Duration::from_millis(crossfade_duration_ms.clamp(300, 30_000));
 
     backend.queue_index = active_source

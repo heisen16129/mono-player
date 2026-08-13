@@ -4,25 +4,29 @@
   transform: translateY(calc(100% + 2px));
 }
 
+.mono-window:not(.lyrics-open) .player-dock.has-cover-background,
 .mono-window.lyrics-open .player-dock.has-cover-background {
   isolation: isolate;
   border-top-color: transparent;
   background: transparent;
 }
 
-.mono-window.lyrics-open .player-dock.has-cover-background::after {
+.mono-window .player-dock.has-cover-background::before,
+.mono-window .player-dock.has-cover-background::after {
   position: absolute;
   inset: 0;
+  z-index: -1;
   content: "";
   pointer-events: none;
+  transition: opacity 180ms ease;
 }
 
-.mono-window.lyrics-open .player-dock.has-cover-background::before {
-  display: none;
+.mono-window .player-dock.has-cover-background::before {
+  background: var(--smw-player-bg);
 }
 
-.mono-window.lyrics-open .player-dock.has-cover-background::after {
-  z-index: -1;
+.mono-window .player-dock.has-cover-background::after {
+  opacity: 0;
   background:
     linear-gradient(
       180deg,
@@ -30,4 +34,12 @@
       color-mix(in srgb, var(--smw-lyrics-bg) 30%, transparent) 54%,
       color-mix(in srgb, var(--smw-lyrics-bg) 42%, transparent) 100%
     );
+}
+
+.mono-window.lyrics-open .player-dock.has-cover-background::before {
+  opacity: 0;
+}
+
+.mono-window.lyrics-open .player-dock.has-cover-background::after {
+  opacity: 1;
 }

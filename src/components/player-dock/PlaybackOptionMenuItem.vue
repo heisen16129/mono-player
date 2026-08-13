@@ -29,13 +29,18 @@ const emit = defineEmits<{
 button {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  width: 100%;
   height: 28px;
+  min-width: max-content;
+  padding: 0 8px;
   border: 0;
   border-radius: 7px;
   color: var(--smw-text-secondary);
   background: transparent;
   font: inherit;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
 

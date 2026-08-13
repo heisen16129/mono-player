@@ -2596,7 +2596,12 @@ fn redact_sensitive_url(url: &str) -> String {
 
 fn is_sensitive_query_name(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
-    name == "key" || name.contains("apikey") || name.contains("api_key") || name.contains("token") || name.contains("secret")
+    name == "key"
+        || name == "vkey"
+        || name.contains("apikey")
+        || name.contains("api_key")
+        || name.contains("token")
+        || name.contains("secret")
 }
 
 fn is_sensitive_header(name: &str) -> bool {
