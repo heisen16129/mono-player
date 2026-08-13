@@ -17,7 +17,6 @@ const props = defineProps<{
   artistGroups: ArtistGroup[];
   favoriteTrackIds: number[];
   isPlaying: boolean;
-  spectrumLevels: number[];
   modelValue: string;
 }>();
 
@@ -49,7 +48,6 @@ const artistTrackListProps = computed<ArtistTrackListProps>(() => ({
   favoriteTrackIds: props.favoriteTrackIds,
   isPlaying: props.isPlaying,
   label: t(player.settings.locale, 'artistSongs'),
-  spectrumLevels: props.spectrumLevels,
   tracks: selectedArtist.value?.tracks ?? null,
 }));
 

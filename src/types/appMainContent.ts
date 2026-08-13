@@ -34,7 +34,6 @@ export interface AppMainContentProps {
   onlinePreparingTrackKey: string | null;
   onlineSearchError: string | null;
   pendingDownloadTrackKeys: string[];
-  playbackSpectrumLevels: number[];
   playerError: string | null;
   playerQuery: string;
   playlists: UserPlaylist[];

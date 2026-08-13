@@ -62,7 +62,6 @@ const displayArtistNames = computed(() => {
       :loading="preparing && active"
       :playing="isPlaying && active"
       :show-cover="showTrackCovers"
-      :spectrum-levels="active ? spectrumLevels : []"
       :track="track"
     />
     <TrackArtistCell :artist-names="displayArtistNames" :enable-link="enableArtistLinks" @open-artist="$emit('openArtist', $event)" />

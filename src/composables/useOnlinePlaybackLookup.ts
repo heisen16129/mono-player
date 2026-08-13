@@ -16,7 +16,6 @@ interface UseOnlinePlaybackLookupOptions {
   onlineSearchResults: ReadonlyRefValue<PluginSearchTrack[]>;
   queueSwitchingTrackKey: Ref<string | null>;
   dedupeTracks: (tracks: Track[]) => Track[];
-  mapPlaybackTrack: (track: Track) => Track;
 }
 
 export function useOnlinePlaybackLookup({
@@ -24,7 +23,6 @@ export function useOnlinePlaybackLookup({
   onlineSearchResults,
   queueSwitchingTrackKey,
   dedupeTracks,
-  mapPlaybackTrack,
 }: UseOnlinePlaybackLookupOptions) {
   function getOnlineTrackKey(track: PluginSearchTrack) {
     return pluginSearchTrackKey(track);
@@ -52,22 +50,13 @@ export function useOnlinePlaybackLookup({
       queueTracks,
       searchResults: onlineSearchResults.value,
       findPluginTrack: findPluginTrackForQueueTrack,
-      mapPlaybackTrack,
       dedupeTracks,
     });
-  }
-
-  function findNextOnlineSearchTrack(track: PluginSearchTrack) {
-    const trackKey = getOnlineTrackKey(track);
-    const index = onlineSearchResults.value.findIndex((item) => getOnlineTrackKey(item) === trackKey);
-    if (index < 0) return null;
-    return onlineSearchResults.value[index + 1] ?? null;
   }
 
   return {
     buildOnlinePlaybackQueue,
     clearQueueSwitchingForTrack,
-    findNextOnlineSearchTrack,
     findPluginTrackForQueueTrack,
     getOnlineTrackKey,
     onlineTrackKeyForQueueTrack,

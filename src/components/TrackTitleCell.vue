@@ -7,7 +7,6 @@ defineProps<{
   loading: boolean;
   playing: boolean;
   showCover: boolean;
-  spectrumLevels: number[];
   track: Track;
 }>();
 </script>
@@ -20,7 +19,6 @@ defineProps<{
       :active="active"
       :loading="loading"
       :playing="playing"
-      :spectrum-levels="spectrumLevels"
     />
     <span class="track-title-text" :title="track.title">{{ track.title }}</span>
   </span>

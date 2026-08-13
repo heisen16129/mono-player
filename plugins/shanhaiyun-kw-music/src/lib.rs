@@ -52,6 +52,7 @@ fn handle_request(request: Value) -> Value {
         Some("qualities") => qualities_request(&request),
         Some("play") => play_request(&request),
         Some("lyrics") => lyrics_request(&request),
+        Some("cover") => cover_request(&request),
         Some("host_response") => host_response(&request),
         action => json!({ "error": format!("unsupported action: {:?}", action) }),
     }
@@ -76,7 +77,7 @@ fn metadata_response() -> Value {
         "author": "Mono",
         "description": "接入山海云 APIByte 酷我音乐，支持搜索、播放地址、音质和歌词。",
         "updatedAt": "2026-08-10",
-        "capabilities": ["search", "play", "lyrics"],
+        "capabilities": ["search", "play", "lyrics", "cover"],
         "highlights": ["支持酷我音乐搜索", "支持流畅/标准/高品质/无损音质", "支持歌词获取"],
         "permissions": ["network"],
         "configSchema": {
@@ -168,6 +169,14 @@ fn lyrics_request(request: &Value) -> Value {
     host_get(&api_url("lyric", &[("music_id", id)]), api_key(request))
 }
 
+fn cover_request(request: &Value) -> Value {
+    let track = request.get("track").unwrap_or(&Value::Null);
+    let Some(id) = track_id(track) else {
+        return json!({ "error": "Kuwo cover track missing music_id." });
+    };
+    host_get(&api_url("music_info", &[("music_id", id)]), api_key(request))
+}
+
 fn host_response(request: &Value) -> Value {
     let original = request.get("request").unwrap_or(&Value::Null);
     let status = request.pointer("/response/status").and_then(Value::as_u64).unwrap_or(0);
@@ -180,6 +189,7 @@ fn host_response(request: &Value) -> Value {
         Some("qualities") => parse_qualities_response(original, body),
         Some("play") => parse_play_response(original, body),
         Some("lyrics") => parse_lyrics_response(original, body),
+        Some("cover") => parse_cover_response(body),
         action => json!({ "error": format!("unsupported host response action: {:?}", action) }),
     }
 }
@@ -272,6 +282,21 @@ fn parse_lyrics_response(request: &Value, body: &str) -> Value {
     };
     let translation = string_field(data, &["tlyric_text", "tlyricText"]);
     lyrics_response(content, translation, request.get("track").unwrap_or(&Value::Null))
+}
+
+fn parse_cover_response(body: &str) -> Value {
+    let Ok(payload) = serde_json::from_str::<Value>(body) else {
+        return json!({ "error": format!("{} cover response is not JSON", PROVIDER_NAME) });
+    };
+    if !api_success(&payload) {
+        return json!({ "error": api_message(&payload, "cover failed") });
+    }
+    let data = api_data(&payload);
+    string_field(data, &["album_pic"])
+        .or_else(|| data.get("images").and_then(|images| string_field(images, &["album_pic", "pic", "pic_120"])))
+        .filter(|value| is_http_url(value))
+        .map(Value::String)
+        .unwrap_or_else(|| json!({ "error": format!("{} did not return a cover url.", PROVIDER_NAME) }))
 }
 
 fn normalized_track(item: &Value) -> Option<Value> {

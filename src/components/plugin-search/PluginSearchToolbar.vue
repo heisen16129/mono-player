@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, watch } from 'vue';
 import type { PluginSearchProvider } from '../../types/plugin';
 import PluginSearchInput from './PluginSearchInput.vue';
@@ -9,9 +9,12 @@ const props = defineProps<{
   loading: boolean;
   providers: PluginSearchProvider[];
   query: string;
+  searchHistory: string[];
 }>();
 
 const emit = defineEmits<{
+  clearSearchHistory: [];
+  removeSearchHistory: [keyword: string];
   search: [keyword: string];
   selectProvider: [providerId: string];
 }>();
@@ -25,10 +28,11 @@ watch(
   },
 );
 
-function submitSearch() {
-  const keyword = searchText.value.trim();
-  if (!keyword || props.loading) return;
-  emit('search', keyword);
+function submitSearch(keyword = searchText.value) {
+  const value = keyword.trim();
+  searchText.value = value;
+  if (!value || props.loading) return;
+  emit('search', value);
 }
 
 </script>
@@ -40,6 +44,9 @@ function submitSearch() {
         v-model="searchText"
         placeholder="搜索歌曲 / 歌手 / 专辑"
         enter-hint="按 Enter 搜索"
+        :search-history="searchHistory"
+        @clear-search-history="$emit('clearSearchHistory')"
+        @remove-search-history="$emit('removeSearchHistory', $event)"
         @submit="submitSearch"
       />
     </header>

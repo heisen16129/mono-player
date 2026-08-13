@@ -23,7 +23,6 @@ export interface TrackTableProps {
   highlightClass?: string;
   preparingTrackId?: number | null;
   recent?: boolean;
-  spectrumLevels?: number[];
   tracks: Track[];
   scrollable?: boolean;
   showFavoriteAction?: boolean;
@@ -82,7 +81,6 @@ export interface TrackTableRowProps {
   showTrackCovers: boolean;
   showTrackNumbers: boolean;
   showFavoriteAction: boolean;
-  spectrumLevels: number[];
   toggleFavoriteLabel: string;
   track: Track;
   unknownArtistLabel: string;

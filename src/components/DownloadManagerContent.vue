@@ -18,7 +18,6 @@ const emit = defineEmits<DownloadManagerContentEmits>();
       :is-playing="isPlaying"
       :row-class="rowClass"
       :show-favorite-action="showFavoriteAction"
-      :spectrum-levels="spectrumLevels"
       :tracks="tracks"
       @open-track-menu="(track, x, y) => emit('openTrackMenu', track, x, y)"
       @play-track="emit('playTrack', $event)"

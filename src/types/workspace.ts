@@ -9,7 +9,6 @@ export interface WorkspaceViewProps {
   favoriteTrackIds: number[];
   isPlaying: boolean;
   preparingTrackId?: number | null;
-  spectrumLevels: number[];
   libraryFilter: LibraryFilter;
   libraryMeta: { count: number; minutes: number };
   libraryTitle: string;
@@ -50,7 +49,6 @@ export interface WorkspaceTrackListProps {
   isPlaying: boolean;
   isWideCollection: boolean;
   preparingTrackId: number | null;
-  spectrumLevels: number[];
   tracks: Track[];
 }
 

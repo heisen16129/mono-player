@@ -167,7 +167,7 @@ pub struct PluginPlaybackSource {
     pub(crate) source_raw: serde_json::Value,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginLyricsMetadata {
     pub(crate) provider_id: Option<String>,
@@ -185,7 +185,7 @@ pub struct PluginLyricsPlaybackGuard {
     source_id: String,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginLyricVariant {
     pub(crate) format: String,
@@ -852,6 +852,15 @@ where
                     normalize_plugin_playback_source(data, &quality, &plugin_track, &plugin)
                 }) {
                     Ok(mut source) => {
+                        if let Ok(artwork) = resolve_playback_cover_metadata(
+                            &worker,
+                            &entry,
+                            &plugin,
+                            &plugin_track,
+                            use_download_worker,
+                        ) {
+                            source.artwork = Some(artwork);
+                        }
                         if include_metadata && playback_source_needs_lyrics(&source) {
                             source.lyrics = resolve_playback_lyrics_metadata(
                                 &worker,
@@ -920,10 +929,17 @@ pub async fn resolve_plugin_lyrics_metadata(
     playback_guard: Option<PluginLyricsPlaybackGuard>,
 ) -> Result<ApiResponse<PluginLyricsMetadata>, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let track_id = json_string_field(&track, &["sourceId", "id"])
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if let Some(cached) = crate::player::read_cached_plugin_lyrics_metadata(&app, &provider_id, &track_id) {
+            return Ok(cached);
+        }
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        resolve_plugin_lyrics_metadata_backend_checked(
+        let lyrics = resolve_plugin_lyrics_metadata_backend_checked(
             &worker,
-            provider_id,
+            provider_id.clone(),
             track,
             plugins,
             false,
@@ -941,7 +957,9 @@ pub async fn resolve_plugin_lyrics_metadata(
                     Err("Playback request was replaced.".to_string())
                 }
             },
-        )
+        )?;
+        crate::player::write_cached_plugin_lyrics_metadata(&app, &provider_id, &track_id, &lyrics);
+        Ok(lyrics)
     })
     .await
     .map_err(|err| err.to_string())?;
@@ -1167,6 +1185,39 @@ fn resolve_playback_lyrics_metadata(
         use_download_worker,
     )?;
     normalize_plugin_lyrics_metadata(unwrap_plugin_response_envelope(response)?)
+}
+
+fn resolve_playback_cover_metadata(
+    worker: &crate::workers::plugin::PluginWorkerState,
+    entry: &str,
+    plugin: &PluginPlaybackPlanPlugin,
+    track: &serde_json::Value,
+    use_download_worker: bool,
+) -> Result<String, String> {
+    if !plugin
+        .capabilities
+        .iter()
+        .any(|capability| capability == "cover")
+    {
+        return Err("Plugin does not support cover.".to_string());
+    }
+
+    let request = plugin_request(
+        plugin,
+        json!({
+            "action": "cover",
+            "track": track,
+        }),
+    );
+    let response = invoke_plugin_on_worker(
+        worker,
+        entry.to_string(),
+        request,
+        Some(plugin.id.clone()),
+        plugin.permissions.clone(),
+        use_download_worker,
+    )?;
+    normalize_plugin_cover_metadata(unwrap_plugin_response_envelope(response)?)
 }
 
 fn json_duration_seconds(value: &serde_json::Value) -> Option<u64> {

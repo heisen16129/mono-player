@@ -17,7 +17,6 @@ const props = defineProps<{
   pendingDownloadTrackKeys: string[];
   resolvingTrackKey: string | null;
   results: PluginSearchTrack[];
-  spectrumLevels: number[];
 }>();
 
 const emit = defineEmits<{
@@ -66,7 +65,6 @@ function openTableTrackMenu(track: Track, x: number, y: number) {
       :downloaded-track-keys="downloadedTrackKeys"
       :pending-download-track-keys="pendingDownloadTrackKeys"
       :preparing-track-id="preparingTrackId"
-      :spectrum-levels="spectrumLevels"
       :track-key="getTrackIdentityKey"
       enable-download-action
       :favorite-track-ids="favoriteTrackIds"

@@ -9,7 +9,6 @@ const props = defineProps<{
   active?: boolean;
   loading?: boolean;
   playing?: boolean;
-  spectrumLevels?: number[];
 }>();
 
 const { coverUrl, handleImageError, setCoverRoot } = useTrackCoverThumbUrl(toRef(props, 'track'));
@@ -22,7 +21,6 @@ const { coverUrl, handleImageError, setCoverRoot } = useTrackCoverThumbUrl(toRef
       :cover-url="coverUrl"
       :loading="loading"
       :playing="playing"
-      :spectrum-levels="spectrumLevels"
       :track-id="track.id"
       :track-title="track.title"
       @image-error="handleImageError"

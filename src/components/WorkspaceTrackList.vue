@@ -42,7 +42,6 @@ defineExpose({
       :active-track="activeTrack"
       :favorite-track-ids="favoriteTrackIds"
       :preparing-track-id="preparingTrackId"
-      :spectrum-levels="spectrumLevels"
       :is-playing="isPlaying"
       :wide="isWideCollection"
       disable-internal-paging

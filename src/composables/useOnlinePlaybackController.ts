@@ -14,7 +14,6 @@ interface ReadonlyRefValue<T> {
 interface UseOnlinePlaybackControllerOptions {
   player: ReturnType<typeof usePlayerStore>;
   playbackTime: Ref<number>;
-  isAudioPlaying: Ref<boolean>;
   rustPlaybackQueue: Ref<Track[]>;
   onlineActiveTrack: ReadonlyRefValue<Track | null>;
   onlineActivePluginTrack: ReadonlyRefValue<PluginSearchTrack | null>;
@@ -31,21 +30,16 @@ interface UseOnlinePlaybackControllerOptions {
     track?: Track | null,
   ) => Promise<RustQueueSnapshot>;
   clearOnlineSearchError: () => void;
-  clearPreparingPlaybackState: () => void;
-  findNextOnlineSearchTrack: (track: PluginSearchTrack) => PluginSearchTrack | null;
   getOnlineTrackKey: (track: PluginSearchTrack) => string;
   handleRustQueueSnapshot: (snapshot: RustQueueSnapshot) => void;
+  handlePlaybackFailure: (message: string) => Promise<void> | void;
   setOnlineSearchError: (message: string) => void;
-  showToast: (message: string) => void;
   startRustPlaybackQueue: (tracks: Track[], requestedTrack: Track | null, startPosition?: number) => Promise<boolean>;
-  stopRustPlayback: (fade?: boolean) => Promise<void>;
-  withDownloadedPlaybackSource: (track: Track) => Track;
 }
 
 export function useOnlinePlaybackController({
   player,
   playbackTime,
-  isAudioPlaying,
   rustPlaybackQueue,
   onlineActiveTrack,
   onlineActivePluginTrack,
@@ -56,18 +50,14 @@ export function useOnlinePlaybackController({
   buildOnlinePlaybackQueue,
   changeRustQueueTrackQuality,
   clearOnlineSearchError,
-  clearPreparingPlaybackState,
-  findNextOnlineSearchTrack,
   getOnlineTrackKey,
   handleRustQueueSnapshot,
+  handlePlaybackFailure,
   setOnlineSearchError,
-  showToast,
   startRustPlaybackQueue,
-  stopRustPlayback,
-  withDownloadedPlaybackSource,
 }: UseOnlinePlaybackControllerOptions) {
   async function playOnlineTrack(track: PluginSearchTrack, startTime = 0, queueTracks?: Track[]) {
-    const playbackTrack = withDownloadedPlaybackSource(createOnlineQueueTrack(track));
+    const playbackTrack = createOnlineQueueTrack(track);
     const trackKey = getOnlineTrackKey(track);
 
     playbackTime.value = startTime;
@@ -81,33 +71,13 @@ export function useOnlinePlaybackController({
     } catch (error) {
       const message = normalizeOnlineErrorMessage(error, resolveLocale(player.settings.locale) === 'en-US' ? 'Could not get playback URL.' : '无法获取播放地址', player.settings.locale);
       setOnlineSearchError(message);
-      await handleOnlinePlaybackFailure(track, message);
+      onlinePlaybackSource.value = '';
+      await handlePlaybackFailure(message);
     } finally {
       if (onlineResolvingTrackKey.value === trackKey) {
         onlineResolvingTrackKey.value = null;
       }
     }
-  }
-
-  async function handleOnlinePlaybackFailure(track: PluginSearchTrack, message: string) {
-    clearPreparingPlaybackState();
-    onlinePlaybackSource.value = '';
-    await stopRustPlayback(false);
-    isAudioPlaying.value = false;
-
-    if (player.settings.onlinePlaybackFailureAction !== 'next') {
-      showToast(message);
-      return;
-    }
-
-    const nextTrack = findNextOnlineSearchTrack(track);
-    if (!nextTrack) {
-      showToast(`${message}，没有下一首可播放`);
-      return;
-    }
-
-    showToast(`${message}，正在播放下一首`);
-    await playOnlineTrack(nextTrack);
   }
 
   async function changeOnlinePlaybackQuality(quality: PluginPlaybackQuality) {
@@ -151,13 +121,13 @@ export function useOnlinePlaybackController({
       });
       const message = normalizeOnlineErrorMessage(error, resolveLocale(player.settings.locale) === 'en-US' ? 'Failed to switch quality.' : '切换音质失败', player.settings.locale);
       setOnlineSearchError(message);
-      await handleOnlinePlaybackFailure(track, message);
+      onlinePlaybackSource.value = '';
+      await handlePlaybackFailure(message);
     }
   }
 
   return {
     changeOnlinePlaybackQuality,
-    handleOnlinePlaybackFailure,
     playOnlineTrack,
   };
 }

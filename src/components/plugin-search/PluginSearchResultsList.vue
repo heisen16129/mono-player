@@ -20,7 +20,6 @@ const props = defineProps<{
   pendingDownloadTrackKeys: string[];
   resolvingTrackKey: string | null;
   results: PluginSearchTrack[];
-  spectrumLevels: number[];
 }>();
 
 const emit = defineEmits<{
@@ -63,7 +62,6 @@ function handleResultScroll(event: Event) {
       :pending-download-track-keys="pendingDownloadTrackKeys"
       :resolving-track-key="resolvingTrackKey"
       :results="results"
-      :spectrum-levels="spectrumLevels"
       @download-track="emit('downloadTrack', $event)"
       @open-track-menu="(track, x, y) => emit('openTrackMenu', track, x, y)"
       @play-track="emit('playTrack', $event)"

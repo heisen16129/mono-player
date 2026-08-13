@@ -29,7 +29,6 @@ export interface AppPageOutletProps {
   onlinePreparingTrackKey: string | null;
   onlineSearchError: string | null;
   pendingDownloadTrackKeys: string[];
-  playbackSpectrumLevels: number[];
   playerError: string | null;
   playerQuery: string;
   recentAddedTrackCount: number;
@@ -83,7 +82,6 @@ export interface AppLibraryHomePageOutletProps {
   libraryTitle: string;
   localFolderTrackCount: number;
   localFolders: LocalFolderItem[];
-  playbackSpectrumLevels: number[];
   playerError: string | null;
   playerQuery: string;
   recentAddedTrackCount: number;
@@ -133,7 +131,6 @@ export interface AppDiscoverPageOutletProps {
   pendingDownloadTrackKeys: string[];
   resolvingTrackKey: string | null;
   searchError: string | null;
-  spectrumLevels: number[];
 }
 
 export interface AppDiscoverPageOutletEmits {
@@ -174,7 +171,6 @@ export interface AppWorkspacePageOutletProps {
   libraryMeta: { count: number; minutes: number };
   libraryTitle: string;
   modelValue: string;
-  spectrumLevels: number[];
   tracks: Track[];
 }
 
@@ -207,7 +203,6 @@ export interface AppArtistsPageOutletProps {
   favoriteTrackIds: number[];
   isPlaying: boolean;
   modelValue: string;
-  spectrumLevels: number[];
 }
 
 export interface AppArtistsPageOutletEmits {

@@ -33,7 +33,6 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
     libraryTitle: props.libraryTitle,
     localFolderTrackCount: props.localFolderTrackCount,
     localFolders: props.localFolders,
-    playbackSpectrumLevels: props.playbackSpectrumLevels,
     playerError: props.playerError,
     playerQuery: props.playerQuery,
     recentAddedTrackCount: props.recentAddedTrackCount,
@@ -65,7 +64,6 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
     pendingDownloadTrackKeys: props.pendingDownloadTrackKeys,
     resolvingTrackKey: props.onlinePreparingTrackKey,
     searchError: props.onlineSearchError,
-    spectrumLevels: props.playbackSpectrumLevels,
   }));
 
   const discoverPageOutletListeners: AppDiscoverPageOutletListeners = {
@@ -92,7 +90,6 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
     libraryMeta: props.libraryMeta,
     libraryTitle: props.libraryTitle,
     modelValue: props.playerQuery,
-    spectrumLevels: props.playbackSpectrumLevels,
     tracks: props.visibleTracks,
   }));
 
@@ -114,7 +111,6 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
     favoriteTrackIds: props.favoriteTrackIds,
     isPlaying: props.isAudioPlaying,
     modelValue: props.playerQuery,
-    spectrumLevels: props.playbackSpectrumLevels,
   }));
 
   const artistsPageOutletListeners: AppArtistsPageOutletListeners = {
@@ -131,7 +127,6 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
     favoriteTrackIds: props.favoriteTrackIds,
     isPlaying: props.isAudioPlaying,
     items: props.downloadItems,
-    spectrumLevels: props.playbackSpectrumLevels,
   }));
 
   const downloadsPageOutletListeners: AppDownloadsPageOutletListeners = {

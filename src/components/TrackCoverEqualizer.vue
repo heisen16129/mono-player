@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { listenRustBackendState } from '../services/playerBackend';
 import type { TrackCoverEqualizerBarStyle, TrackCoverEqualizerProps } from '../types/trackCoverEqualizer';
 
 const BAR_COUNT = 5;
@@ -17,7 +18,10 @@ const SETTLE_EPSILON = 0.004;
 const props = defineProps<TrackCoverEqualizerProps>();
 
 const barScales = ref<number[]>(Array.from({ length: BAR_COUNT }, () => BASELINE_SCALE));
+const spectrumLevels = ref<number[]>([]);
 let animationFrame = 0;
+let disposed = false;
+let unlistenState: (() => void) | null = null;
 
 const spectrumBars = computed<TrackCoverEqualizerBarStyle[]>(() => {
   if (props.loading) return Array.from({ length: BAR_COUNT }, () => ({}));
@@ -38,7 +42,7 @@ function responseLevel(level: number) {
 }
 
 function targetScale(index: number) {
-  const level = normalizeSpectrumLevel(props.spectrumLevels?.[index]);
+  const level = normalizeSpectrumLevel(spectrumLevels.value[index]);
   return BASELINE_SCALE + (MAX_PLAY_SCALE - BASELINE_SCALE) * responseLevel(level);
 }
 
@@ -49,6 +53,25 @@ function isSettledAtBaseline(scales: number[]) {
 function requestAnimation() {
   if (animationFrame) return;
   animationFrame = window.requestAnimationFrame(animateBars);
+}
+
+function stopSpectrumListener() {
+  unlistenState?.();
+  unlistenState = null;
+  spectrumLevels.value = [];
+}
+
+async function startSpectrumListener() {
+  if (unlistenState || disposed || !props.playing) return;
+  const unlisten = await listenRustBackendState((state) => {
+    spectrumLevels.value = state.isPlaying ? (state.spectrumLevels ?? []) : [];
+    if (props.playing) requestAnimation();
+  });
+  if (disposed || !props.playing) {
+    unlisten();
+    return;
+  }
+  unlistenState = unlisten;
 }
 
 function animateBars() {
@@ -76,18 +99,21 @@ function animateBars() {
 
 watch(
   () => props.playing,
-  () => requestAnimation(),
+  (playing) => {
+    if (playing) {
+      void startSpectrumListener();
+      requestAnimation();
+    } else {
+      stopSpectrumListener();
+      requestAnimation();
+    }
+  },
   { immediate: true },
 );
 
-watch(
-  () => props.spectrumLevels,
-  () => {
-    if (props.playing) requestAnimation();
-  },
-);
-
 onBeforeUnmount(() => {
+  disposed = true;
+  stopSpectrumListener();
   if (animationFrame) {
     window.cancelAnimationFrame(animationFrame);
   }

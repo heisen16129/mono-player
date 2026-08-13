@@ -22,7 +22,6 @@ const props = defineProps<{
   libraryTitle: string;
   localFolderTrackCount: number;
   localFolders: LocalFolderItem[];
-  playbackSpectrumLevels: number[];
   playerError: string | null;
   playerQuery: string;
   recentAddedTrackCount: number;
@@ -76,7 +75,6 @@ const workspaceViewProps = computed<WorkspaceViewProps>(() => ({
   libraryTitle: props.libraryTitle,
   modelValue: props.playerQuery,
   preparingTrackId: props.isPreparingActiveTrack ? props.activeTrack?.id ?? null : null,
-  spectrumLevels: props.playbackSpectrumLevels,
   tracks: props.visibleTracks,
 }));
 

@@ -42,10 +42,10 @@ interface PlayerDockRuntimeOptions {
   onOutputDeviceFallback: (previousDeviceId: string) => void;
   onClearPlaybackError: () => void;
   onPlaybackError: (error: unknown) => void;
+  onPlaybackNotice: (message: string) => void;
   onPlaybackStateChange: (isPlaying: boolean) => void;
   onRequestInitialPlayback: (startTime?: number) => void;
   onSeamlessAdvance: (track: Track) => void;
-  onSpectrumChange: (levels: number[]) => void;
 }
 
 const FADE_STATE_HOLD_MS = 900;
@@ -66,17 +66,16 @@ export function usePlayerDockRuntime({
   onOutputDeviceFallback,
   onClearPlaybackError,
   onPlaybackError,
+  onPlaybackNotice,
   onPlaybackStateChange,
   onRequestInitialPlayback,
   onSeamlessAdvance,
-  onSpectrumChange,
 }: PlayerDockRuntimeOptions) {
   const player = usePlayerStore();
   const rustQueueSnapshot = ref<RustQueueSnapshot | null>(null);
   const volume = ref(72);
   const previousVolume = ref(72);
   const isMuted = ref(false);
-  const spectrumLevels = ref<number[]>([]);
   let seamlessQueuedSource = '';
   let rustPlaybackStateHoldUntil = 0;
 
@@ -246,19 +245,15 @@ export function usePlayerDockRuntime({
         progress.stopSmoothProgress();
         onPlaybackStateChange(false);
       }
-      spectrumLevels.value = [];
       progress.runtimeDuration.value = 0;
-      onSpectrumChange([]);
       return;
     }
 
     rustBackendActive.value = true;
     const isHoldingStoppedState = !isPlaying.value && state.isPlaying && Date.now() < rustPlaybackStateHoldUntil;
-    spectrumLevels.value = state.isPlaying && !isHoldingStoppedState ? (state.spectrumLevels ?? []) : [];
     if (!activeTrack.value?.duration && state.duration && state.duration > 0) {
       progress.runtimeDuration.value = state.duration;
     }
-    onSpectrumChange(spectrumLevels.value);
     if (isHoldingStoppedState) {
       progress.stopSmoothProgress();
       return;
@@ -359,6 +354,13 @@ export function usePlayerDockRuntime({
     onQueue: (snapshot) => {
       rustQueueSnapshot.value = snapshot;
     },
+    onError: (message) => {
+      rustBackendActive.value = false;
+      isPlaying.value = false;
+      progress.stopSmoothProgress();
+      onPlaybackStateChange(false);
+      onPlaybackNotice(message);
+    },
     onOutputDeviceFallback: (event) => {
       if (player.settings.audioOutputDeviceId) {
         player.setAudioOutputDeviceId('');
@@ -390,7 +392,6 @@ export function usePlayerDockRuntime({
     queueTracks,
     rustBackendActive,
     rustQueueSnapshot,
-    spectrumLevels,
     stopPlayback,
     toggleMute,
     togglePlayback,

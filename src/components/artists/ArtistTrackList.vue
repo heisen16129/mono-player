@@ -30,7 +30,6 @@ function handleScroll(event: Event) {
       :tracks="tracks"
       :active-track="activeTrack"
       :favorite-track-ids="favoriteTrackIds"
-      :spectrum-levels="spectrumLevels"
       :is-playing="isPlaying"
       wide
       enable-context-menu

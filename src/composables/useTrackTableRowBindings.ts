@@ -86,7 +86,6 @@ export function useTrackTableRowBindings({
       showTrackCovers: showTrackCovers(),
       showTrackNumbers: showTrackNumbers(),
       showFavoriteAction: props.showFavoriteAction ?? true,
-      spectrumLevels: props.spectrumLevels ?? [],
       toggleFavoriteLabel: toggleFavoriteLabel.value,
       track,
       unknownArtistLabel: unknownArtistLabel.value,

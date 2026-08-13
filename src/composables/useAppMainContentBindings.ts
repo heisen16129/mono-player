@@ -40,7 +40,6 @@ export function useAppMainContentBindings({ listeners, props }: UseAppMainConten
     onlinePreparingTrackKey: props.onlinePreparingTrackKey(),
     onlineSearchError: props.onlineSearchError(),
     pendingDownloadTrackKeys: props.pendingDownloadTrackKeys(),
-    playbackSpectrumLevels: props.playbackSpectrumLevels(),
     playerError: props.playerError(),
     playerQuery: props.playerQuery(),
     playlists: props.playlists(),

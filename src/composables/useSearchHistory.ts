@@ -28,6 +28,19 @@ export function useSearchHistory(limit: Ref<number>) {
     await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
   }
 
+  async function removeSearchHistory(keyword: string) {
+    const normalizedKeyword = keyword.trim();
+    if (!normalizedKeyword) return;
+
+    searchHistory.value = searchHistory.value.filter((item) => item !== normalizedKeyword);
+    await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
+  }
+
+  async function clearSearchHistory() {
+    searchHistory.value = [];
+    await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
+  }
+
   watch(limit, async (nextLimit) => {
     if (searchHistory.value.length <= nextLimit) return;
     searchHistory.value = searchHistory.value.slice(0, nextLimit);
@@ -35,7 +48,9 @@ export function useSearchHistory(limit: Ref<number>) {
   });
 
   return {
+    clearSearchHistory,
     loadSearchHistory,
+    removeSearchHistory,
     saveSearchHistory,
     searchHistory,
   };

@@ -1,45 +1,134 @@
 <script setup lang="ts">
 import { Search } from '@lucide/vue';
+import { ref } from 'vue';
 import SearchEnterHint from './SearchEnterHint.vue';
+import DiscoverSearchHistoryPopover from './DiscoverSearchHistoryPopover.vue';
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   disabled?: boolean;
   enterHint?: string;
   iconSize?: number;
   modelValue: string;
   placeholder: string;
   rootClass?: string;
+  searchHistory?: string[];
   showEnterHint?: boolean;
 }>(), {
   disabled: false,
   enterHint: '',
   iconSize: 16,
   rootClass: 'search-field top-search',
+  searchHistory: () => [],
   showEnterHint: false,
 });
 
-defineEmits<{
+const emit = defineEmits<{
+  'clear-search-history': [];
+  'remove-search-history': [keyword: string];
   submit: [value: string];
   'update:modelValue': [value: string];
 }>();
+
+const rootRef = ref<HTMLElement | null>(null);
+const inputRef = ref<HTMLInputElement | null>(null);
+const isHistoryOpen = ref(false);
+
+function focusInput() {
+  inputRef.value?.focus();
+}
+
+function openHistory() {
+  if (props.searchHistory.length > 0) {
+    isHistoryOpen.value = true;
+  }
+}
+
+function closeHistory() {
+  isHistoryOpen.value = false;
+}
+
+function handleFocus() {
+  openHistory();
+}
+
+function handleBlur(event: FocusEvent) {
+  const nextTarget = event.relatedTarget as Node | null;
+  if (nextTarget && rootRef.value?.contains(nextTarget)) return;
+  window.setTimeout(() => {
+    const activeElement = document.activeElement;
+    if (activeElement && rootRef.value?.contains(activeElement)) return;
+    closeHistory();
+  }, 0);
+}
+
+function submitSearch() {
+  closeHistory();
+  emit('submit', props.modelValue.trim());
+}
+
+function submitHistorySearch(keyword: string) {
+  closeHistory();
+  emit('submit', keyword.trim());
+}
+
+function clearHistory() {
+  emit('clear-search-history');
+  closeHistory();
+}
+
+function removeHistory(keyword: string) {
+  emit('remove-search-history', keyword);
+}
+
+defineExpose({
+  focusInput,
+});
 </script>
 
 <template>
-  <form :class="rootClass" @submit.prevent="$emit('submit', modelValue.trim())">
-    <Search :size="iconSize" />
-    <input
-      :value="modelValue"
-      type="search"
-      :disabled="disabled"
-      :placeholder="placeholder"
-      @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+  <div
+    ref="rootRef"
+    class="search-input-shell"
+    :class="{ 'search-input-shell--history': searchHistory.length > 0 }"
+  >
+    <form :class="rootClass" @pointerdown="focusInput" @submit.prevent="submitSearch">
+      <Search :size="iconSize" />
+      <input
+        ref="inputRef"
+        :value="modelValue"
+        type="search"
+        :disabled="disabled"
+        :placeholder="placeholder"
+        @blur="handleBlur"
+        @focus="handleFocus"
+        @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+      />
+      <SearchEnterHint v-if="showEnterHint" :hint="enterHint" />
+      <slot name="after" />
+    </form>
+
+    <DiscoverSearchHistoryPopover
+      :history="searchHistory"
+      :visible="isHistoryOpen && searchHistory.length > 0"
+      @clear="clearHistory"
+      @close="closeHistory"
+      @remove="removeHistory"
+      @search="submitHistorySearch"
     />
-    <SearchEnterHint v-if="showEnterHint" :hint="enterHint" />
-    <slot name="after" />
-  </form>
+  </div>
 </template>
 
 <style scoped>
+.search-input-shell {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.search-input-shell--history {
+  width: fit-content;
+}
+
 .search-field {
   display: flex;
   align-items: center;
@@ -55,6 +144,7 @@ defineEmits<{
 
 .search-field input {
   appearance: none;
+  flex: 1 1 auto;
   width: 100%;
   min-width: 0;
   border: 0;
@@ -125,6 +215,8 @@ defineEmits<{
 
 .plugin-search-input input,
 .lyrics-search-input input {
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   border: 0;
   outline: 0;

@@ -55,7 +55,6 @@ const downloadManagerContentProps = computed<DownloadManagerContentProps>(() => 
   isPlaying: props.isPlaying,
   rowClass: downloadRowClass,
   showFavoriteAction: activeTab.value === 'downloaded',
-  spectrumLevels: props.spectrumLevels,
   tracks: visibleTracks.value,
 }));
 

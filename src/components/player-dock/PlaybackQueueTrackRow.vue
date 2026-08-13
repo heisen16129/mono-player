@@ -14,7 +14,6 @@ defineProps<{
   locale: Locale;
   showTrackCovers: boolean;
   showTrackNumbers: boolean;
-  spectrumLevels: number[];
   track: Track;
 }>();
 
@@ -34,7 +33,7 @@ const emit = defineEmits<{
       'has-cover': showTrackCovers,
     }"
     type="button"
-    @click="emit('playTrack', track)"
+    @dblclick="emit('playTrack', track)"
   >
     <span v-if="showTrackNumbers" class="queue-index">
       {{ index + 1 }}
@@ -46,7 +45,6 @@ const emit = defineEmits<{
       :active="active"
       :playing="isPlaying"
       :loading="isLoading"
-      :spectrum-levels="spectrumLevels"
     />
     <PlaybackQueueTrackInfo :artist="artistLabel(track.artist, t(locale, 'unknownArtist'))" :title="track.title" />
     <PlaybackQueueTrackDuration :duration="track.duration" />

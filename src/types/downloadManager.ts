@@ -37,7 +37,6 @@ export interface DownloadManagerViewProps {
   favoriteTrackIds: number[];
   isPlaying: boolean;
   items: DownloadItem[];
-  spectrumLevels: number[];
 }
 
 export interface DownloadManagerViewEmits extends DownloadItemContextMenuEmits {
@@ -60,7 +59,6 @@ export interface DownloadManagerContentProps {
   isPlaying: boolean;
   rowClass: (track: Track) => Record<string, boolean>;
   showFavoriteAction: boolean;
-  spectrumLevels: number[];
   tracks: Track[];
 }
 

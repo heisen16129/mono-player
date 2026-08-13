@@ -12,7 +12,6 @@ defineProps<{
   isPlaying: boolean;
   rowClass: (track: Track) => Record<string, boolean>;
   showFavoriteAction: boolean;
-  spectrumLevels: number[];
   tracks: Track[];
 }>();
 
@@ -38,7 +37,6 @@ const emit = defineEmits<{
     :row-class="rowClass"
     scrollable
     :show-favorite-action="showFavoriteAction"
-    :spectrum-levels="spectrumLevels"
     :tracks="tracks"
     :track-key="downloadTrackIdentityKey"
     wide

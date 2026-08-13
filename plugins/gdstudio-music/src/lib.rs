@@ -53,6 +53,7 @@ fn handle_request(request: Value) -> Value {
         Some("qualities") => qualities_response(&request),
         Some("play") => play_request(&request),
         Some("lyrics") => lyrics_request(&request),
+        Some("cover") => cover_request(&request),
         Some("host_response") => host_response(&request),
         action => json!({ "error": format!("unsupported action: {:?}", action) }),
     }
@@ -82,7 +83,7 @@ fn metadata_response() -> Value {
         "author": "GD Studio",
         "description": "基于 GD音乐台 API 的学习用途音源插件，默认使用 netease，搜索列表不预取封面。",
         "updatedAt": "2026-07-24",
-        "capabilities": ["search", "play", "lyrics"],
+        "capabilities": ["search", "play", "lyrics", "cover"],
         "highlights": ["支持 GD音乐台搜索", "搜索列表不预取封面", "支持 LRC 与翻译歌词"],
         "permissions": ["network"],
         "configSchema": {
@@ -177,6 +178,20 @@ fn lyrics_request(request: &Value) -> Value {
     host_get(&url)
 }
 
+fn cover_request(request: &Value) -> Value {
+    let track = request.get("track").unwrap_or(&Value::Null);
+    let Some(id) = pic_id(track) else {
+        return json!({ "error": "GD cover track missing pic id." });
+    };
+    let source = track_source(track).unwrap_or_else(|| request_source(request));
+    let url = format!(
+        "{API_BASE}?types=pic&source={}&id={}&size=500",
+        url_encode(&source, false),
+        url_encode(&id, false)
+    );
+    host_get(&url)
+}
+
 fn host_response(request: &Value) -> Value {
     let original = request.get("request").unwrap_or(&Value::Null);
     let status = request.pointer("/response/status").and_then(Value::as_u64).unwrap_or(0);
@@ -189,6 +204,7 @@ fn host_response(request: &Value) -> Value {
         Some("search") => parse_search_response(original, body),
         Some("play") => parse_play_response(original, body),
         Some("lyrics") => parse_lyrics_response(original, body),
+        Some("cover") => parse_cover_response(body),
         action => json!({ "error": format!("unsupported host response action: {:?}", action) }),
     }
 }
@@ -277,6 +293,25 @@ fn parse_lyrics_response(request: &Value, body: &str) -> Value {
         "defaultFormat": "lrc",
         "lyrics": lyrics
     })
+}
+
+fn parse_cover_response(body: &str) -> Value {
+    let value = body.trim();
+    if value.starts_with("http://") || value.starts_with("https://") {
+        return Value::String(value.to_string());
+    }
+
+    let Ok(payload) = serde_json::from_str::<Value>(body) else {
+        return json!({ "error": format!("{} cover response is not a URL", PROVIDER_NAME) });
+    };
+    ["/url", "/data/url", "/data", "/pic", "/cover"]
+        .iter()
+        .filter_map(|path| payload.pointer(path))
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .find(|value| value.starts_with("http://") || value.starts_with("https://"))
+        .map(|value| Value::String(value.to_string()))
+        .unwrap_or_else(|| json!({ "error": format!("{} did not return a cover url.", PROVIDER_NAME) }))
 }
 
 fn normalized_track(item: &Value) -> Option<Value> {
@@ -384,6 +419,14 @@ fn track_id(track: &Value) -> Option<String> {
 fn lyric_id(track: &Value) -> Option<String> {
     track.get("sourceRaw").and_then(|source_raw| {
         ["lyricId", "lyric_id"]
+            .iter()
+            .find_map(|key| value_to_string(source_raw.get(*key)))
+    })
+}
+
+fn pic_id(track: &Value) -> Option<String> {
+    track.get("sourceRaw").and_then(|source_raw| {
+        ["picId", "pic_id"]
             .iter()
             .find_map(|key| value_to_string(source_raw.get(*key)))
     })

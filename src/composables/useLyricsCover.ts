@@ -124,6 +124,9 @@ export function useLyricsCover(options: {
   function prepareTrackCover(identityKey: string, artwork: string | null | undefined, coverVersion: number | undefined) {
     const previousCoverCacheKey = activeCoverCacheKey.value;
     activeCoverCacheKey.value = null;
+    coverUrl.value = '';
+    coverData.value = null;
+    coverMimeType.value = null;
     const usableArtworkUrl = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
     const playerCoverCache = usableArtworkUrl ? null : getPlayerOriginalCoverCache(playerCoverCacheKey(options.activeTrack.value));
     const nextCoverCacheKey = lyricsCoverCacheKey(identityKey, artwork, coverVersion);

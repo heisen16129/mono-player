@@ -7,7 +7,6 @@ defineProps<{
   coverUrl: string | null;
   loading?: boolean;
   playing?: boolean;
-  spectrumLevels?: number[];
   trackId: number;
   trackTitle: string;
 }>();
@@ -24,7 +23,6 @@ const emit = defineEmits<{
     v-if="active || loading"
     :loading="loading"
     :playing="playing"
-    :spectrum-levels="spectrumLevels"
     :track-id="trackId"
     :track-title="trackTitle"
   />

@@ -284,6 +284,14 @@ export function listenRustBackendEnded(callback: () => void): Promise<() => void
   return listen('player://ended', callback);
 }
 
+export function listenRustBackendError(callback: (message: string) => void): Promise<() => void> {
+  if (!isTauriRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<string>('player://error', (event) => callback(event.payload));
+}
+
 export function listenRustBackendState(callback: (state: RustPlayerState) => void): Promise<() => void> {
   if (!isTauriRuntime()) {
     return Promise.resolve(() => {});

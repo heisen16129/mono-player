@@ -1,4 +1,4 @@
-import { onBeforeUnmount, onMounted, ref, type ComponentPublicInstance, type MaybeRefOrGetter, toValue, watch } from 'vue';
+import { onBeforeUnmount, ref, type MaybeRefOrGetter, toValue, watch } from 'vue';
 import { readCoverThumbnail } from '../services/music';
 import type { Track } from '../types/music';
 import { coverImageObjectUrl, isTemporaryObjectUrl, revokeTemporaryObjectUrl, trackArtworkSource, usableArtworkDisplaySrc } from '../utils/artwork';
@@ -14,10 +14,7 @@ const pendingCoverReads: Array<() => void> = [];
 
 export function useTrackCoverThumbUrl(track: MaybeRefOrGetter<Track>) {
   const coverUrl = ref('');
-  const coverRoot = ref<HTMLElement | null>(null);
-  const isVisible = ref(false);
   let loadId = 0;
-  let observer: IntersectionObserver | null = null;
 
   async function loadCurrentCover() {
     const currentTrack = toValue(track);
@@ -34,7 +31,7 @@ export function useTrackCoverThumbUrl(track: MaybeRefOrGetter<Track>) {
       return;
     }
 
-    if (!path || !isVisible.value) return;
+    if (!path) return;
 
     const cachedUrl = await getCachedCoverUrl(path, `${id}:${path}:${artwork ?? ''}:${coverVersion ?? ''}`);
     if (currentLoadId !== loadId || !cachedUrl) return;
@@ -59,15 +56,8 @@ export function useTrackCoverThumbUrl(track: MaybeRefOrGetter<Track>) {
     void loadCurrentCover();
   }
 
-  function setCoverRoot(element: Element | ComponentPublicInstance | null) {
-    const nextElement = element instanceof HTMLElement ? element : null;
-    if (coverRoot.value && coverRoot.value !== nextElement) {
-      observer?.unobserve(coverRoot.value);
-    }
-    coverRoot.value = nextElement;
-    if (coverRoot.value && observer) {
-      observer.observe(coverRoot.value);
-    }
+  function setCoverRoot() {
+    return undefined;
   }
 
   watch(
@@ -81,32 +71,8 @@ export function useTrackCoverThumbUrl(track: MaybeRefOrGetter<Track>) {
     { immediate: true },
   );
 
-  watch(isVisible, (visible) => {
-    if (!visible || coverUrl.value) return;
-    void loadCurrentCover();
-  });
-
-  onMounted(() => {
-    if (!('IntersectionObserver' in window)) {
-      isVisible.value = true;
-      return;
-    }
-
-    observer = new IntersectionObserver(
-      ([entry]) => {
-        isVisible.value = Boolean(entry?.isIntersecting);
-      },
-      { rootMargin: '160px 0px' },
-    );
-    if (coverRoot.value) {
-      observer.observe(coverRoot.value);
-    }
-  });
-
   onBeforeUnmount(() => {
     loadId += 1;
-    observer?.disconnect();
-    observer = null;
   });
 
   return {

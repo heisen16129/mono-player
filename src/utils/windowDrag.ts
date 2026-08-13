@@ -5,6 +5,7 @@ export function shouldSkipWindowDrag(target: EventTarget | null) {
     target.closest(
       [
         'button',
+        'form',
         'a',
         'input',
         'select',

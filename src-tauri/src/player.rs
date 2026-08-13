@@ -1,5 +1,5 @@
 use crate::api_response::ApiResponse;
-use crate::models::Track;
+use crate::models::{Track, TrackLyricVariant, TrackLyrics};
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -165,6 +165,120 @@ fn read_quality_fallback(app: &AppHandle) -> String {
         .unwrap_or_else(|| "lower".to_string())
 }
 
+fn read_playback_failure_action(app: &AppHandle) -> String {
+    crate::store::read_value(app, "mono-player-settings")
+        .ok()
+        .flatten()
+        .and_then(|settings| {
+            settings
+                .get("onlinePlaybackFailureAction")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .filter(|value| matches!(value.trim(), "next" | "pause"))
+        .unwrap_or_else(|| "pause".to_string())
+}
+
+fn plugin_cover_cache_key(provider_id: &str, track_id: &str) -> String {
+    let input = format!("{}\0{}", provider_id.trim(), track_id.trim());
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in input.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
+fn plugin_cover_cache_path(cache_root: &std::path::Path, provider_id: &str, track_id: &str) -> PathBuf {
+    mono_cache_dir(cache_root)
+        .join("plugin-covers")
+        .join(format!("{}.txt", plugin_cover_cache_key(provider_id, track_id)))
+}
+
+fn plugin_lyrics_cache_path(cache_root: &std::path::Path, provider_id: &str, track_id: &str) -> PathBuf {
+    mono_cache_dir(cache_root)
+        .join("plugin-lyrics")
+        .join(format!("{}.json", plugin_cover_cache_key(provider_id, track_id)))
+}
+
+fn read_cached_plugin_cover(app: &AppHandle, provider_id: &str, track_id: &str) -> Option<String> {
+    if provider_id.trim().is_empty() || track_id.trim().is_empty() {
+        return None;
+    }
+    let cache_root = app.state::<PlayerState>().cache_dir().ok()?;
+    let cache_path = plugin_cover_cache_path(&cache_root, provider_id, track_id);
+    fs::read_to_string(cache_path)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn write_cached_plugin_cover(app: &AppHandle, provider_id: &str, track_id: &str, artwork: &str) {
+    if provider_id.trim().is_empty() || track_id.trim().is_empty() {
+        return;
+    }
+    let artwork = artwork.trim();
+    if artwork.is_empty() {
+        return;
+    }
+    let Ok(cache_root) = app.state::<PlayerState>().cache_dir() else {
+        return;
+    };
+    let cache_path = plugin_cover_cache_path(&cache_root, provider_id, track_id);
+    if let Some(parent) = cache_path.parent() {
+        if let Err(error) = fs::create_dir_all(parent) {
+            eprintln!("[plugin-cover-cache] create cache dir failed: {error}");
+            return;
+        }
+    }
+    if let Err(error) = fs::write(cache_path, artwork) {
+        eprintln!("[plugin-cover-cache] write cover cache failed: {error}");
+    }
+}
+
+pub(crate) fn read_cached_plugin_lyrics_metadata(
+    app: &AppHandle,
+    provider_id: &str,
+    track_id: &str,
+) -> Option<crate::plugins::PluginLyricsMetadata> {
+    if provider_id.trim().is_empty() || track_id.trim().is_empty() {
+        return None;
+    }
+    let cache_root = app.state::<PlayerState>().cache_dir().ok()?;
+    let cache_path = plugin_lyrics_cache_path(&cache_root, provider_id, track_id);
+    fs::read_to_string(cache_path)
+        .ok()
+        .and_then(|value| serde_json::from_str::<crate::plugins::PluginLyricsMetadata>(&value).ok())
+        .filter(|lyrics| !lyrics.lyrics.is_empty())
+}
+
+pub(crate) fn write_cached_plugin_lyrics_metadata(
+    app: &AppHandle,
+    provider_id: &str,
+    track_id: &str,
+    lyrics: &crate::plugins::PluginLyricsMetadata,
+) {
+    if provider_id.trim().is_empty() || track_id.trim().is_empty() || lyrics.lyrics.is_empty() {
+        return;
+    }
+    let Ok(cache_root) = app.state::<PlayerState>().cache_dir() else {
+        return;
+    };
+    let cache_path = plugin_lyrics_cache_path(&cache_root, provider_id, track_id);
+    if let Some(parent) = cache_path.parent() {
+        if let Err(error) = fs::create_dir_all(parent) {
+            eprintln!("[plugin-lyrics-cache] create cache dir failed: {error}");
+            return;
+        }
+    }
+    let Ok(content) = serde_json::to_string(lyrics) else {
+        return;
+    };
+    if let Err(error) = fs::write(cache_path, content) {
+        eprintln!("[plugin-lyrics-cache] write lyrics cache failed: {error}");
+    }
+}
+
 #[tauri::command]
 pub(crate) fn player_set_cache_dir(
     state: State<'_, PlayerState>,
@@ -268,7 +382,7 @@ pub(crate) async fn player_start_queue(
             .state::<crate::workers::audio::AudioWorkerState>()
             .stop(false);
 
-        play_worker_queue_source_by_index_at_position(
+        play_queue_source_at_position(
             &state,
             &app,
             source,
@@ -359,7 +473,7 @@ pub(crate) async fn player_next(
         let _ = app
             .state::<crate::workers::audio::AudioWorkerState>()
             .stop(false);
-        play_worker_queue_source_by_index(&state, &app, source, Some(next_index), Some(generation))
+        play_queue_source(&state, &app, source, Some(next_index), Some(generation))
     })
     .await
     .map_err(|err| err.to_string())
@@ -383,7 +497,7 @@ pub(crate) async fn player_previous(
         let _ = app
             .state::<crate::workers::audio::AudioWorkerState>()
             .stop(false);
-        play_worker_queue_source_by_index(
+        play_queue_source(
             &state,
             &app,
             source,
@@ -433,7 +547,7 @@ pub(crate) async fn player_change_queue_track_quality(
             (queue_source, queue_index, generation)
         };
 
-        play_worker_queue_source_by_index_at_position(
+        play_queue_source_at_position(
             &state,
             &app,
             source,
@@ -721,7 +835,7 @@ fn play_mcp_queue(
     let _ = app
         .state::<crate::workers::audio::AudioWorkerState>()
         .stop(false);
-    play_worker_queue_source_by_index(
+    play_queue_source(
         &state.inner,
         app,
         source,
@@ -768,7 +882,7 @@ pub(crate) fn mcp_next(app: &AppHandle) -> Result<QueueSnapshot, String> {
         let generation = next_playback_generation(&mut backend);
         (source, next_index, generation)
     };
-    play_worker_queue_source_by_index(
+    play_queue_source(
         &state.inner,
         app,
         source,
@@ -785,7 +899,7 @@ pub(crate) fn mcp_previous(app: &AppHandle) -> Result<QueueSnapshot, String> {
         let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
         next_playback_generation(&mut backend)
     };
-    play_worker_queue_source_by_index(
+    play_queue_source(
         &state.inner,
         app,
         source,
@@ -830,6 +944,16 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
             state_ticks = state_ticks.wrapping_add(1);
             let _ = app.emit("player://state", &snapshot);
 
+            if let Some(error) = snapshot
+                .last_error
+                .as_deref()
+                .map(str::trim)
+                .filter(|error| !error.is_empty())
+            {
+                let _ = handle_worker_playback_failure(&app, error, snapshot.position);
+                break;
+            }
+
             if snapshot.current_path.is_some() {
                 had_active_source = true;
             }
@@ -857,6 +981,81 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
     });
 }
 
+fn handle_worker_playback_failure(app: &AppHandle, message: &str, position: f64) -> Result<bool, String> {
+    eprintln!("[player] playback failed: {message}");
+
+    match retry_current_queue_track_from_plugin(app, position, None) {
+        Ok(Some(_)) => return Ok(true),
+        Ok(None) => {}
+        Err(error) => eprintln!("[player] plugin playback retry after local failure failed: {error}"),
+    }
+
+    if read_playback_failure_action(app) == "next" {
+        if advance_worker_queue_after_failure(app, message, None)?.is_some() {
+            return Ok(true);
+        }
+    }
+
+    let _ = app
+        .state::<crate::workers::audio::AudioWorkerState>()
+        .stop(false);
+    let player_state = app.state::<PlayerState>();
+    {
+        let mut backend = player_state.inner.lock().map_err(|err| err.to_string())?;
+        next_playback_generation(&mut backend);
+        backend.current_source = None;
+        refresh_queue_index(&mut backend);
+    }
+    let _ = app.emit("player://error", message.to_string());
+    Ok(false)
+}
+
+fn retry_current_queue_track_from_plugin(
+    app: &AppHandle,
+    position: f64,
+    failed_generation: Option<u64>,
+) -> Result<Option<QueueSnapshot>, String> {
+    if let Some(expected_generation) = failed_generation {
+        let player_state = app.state::<PlayerState>();
+        if current_playback_generation(&player_state.inner).ok() != Some(expected_generation) {
+            return Err("Playback request was replaced.".to_string());
+        }
+    }
+
+    let player_state = app.state::<PlayerState>();
+    let (plugin_source, queue_index, generation) = {
+        let mut backend = player_state.inner.lock().map_err(|err| err.to_string())?;
+        let Some(current_source) = backend.current_source.as_deref().map(str::trim).filter(|source| !source.is_empty()) else {
+            return Ok(None);
+        };
+        if is_rust_playable_url(current_source) || is_plugin_queue_source(current_source) {
+            return Ok(None);
+        }
+
+        let Some((plugin_source, queue_index)) = current_plugin_queue_source_for_backend(&backend) else {
+            return Ok(None);
+        };
+        let generation = next_playback_generation(&mut backend);
+        (plugin_source, queue_index, generation)
+    };
+
+    let _ = app
+        .state::<crate::workers::audio::AudioWorkerState>()
+        .stop(false);
+    play_queue_source_raw(
+        &player_state.inner,
+        app,
+        plugin_source,
+        queue_index,
+        position.max(0.0),
+        false,
+        None,
+        Some(generation),
+        None,
+    )
+    .map(Some)
+}
+
 fn advance_worker_queue_after_end(app: &AppHandle) -> Result<bool, String> {
     if crate::sleep_timer::consume_finish_track_pending(app) {
         let _ = mcp_stop(app);
@@ -871,7 +1070,7 @@ fn advance_worker_queue_after_end(app: &AppHandle) -> Result<bool, String> {
         let mut backend = player_state.inner.lock().map_err(|err| err.to_string())?;
         next_playback_generation(&mut backend)
     };
-    play_worker_queue_source_by_index(
+    play_queue_source(
         &player_state.inner,
         app,
         source,
@@ -879,6 +1078,43 @@ fn advance_worker_queue_after_end(app: &AppHandle) -> Result<bool, String> {
         Some(generation),
     )?;
     Ok(true)
+}
+
+fn advance_worker_queue_after_failure(
+    app: &AppHandle,
+    _message: &str,
+    failed_generation: Option<u64>,
+) -> Result<Option<QueueSnapshot>, String> {
+    if read_playback_failure_action(app) != "next" {
+        return Ok(None);
+    }
+
+    if let Some(expected_generation) = failed_generation {
+        let player_state = app.state::<PlayerState>();
+        if current_playback_generation(&player_state.inner).ok() != Some(expected_generation) {
+            return Err("Playback request was replaced.".to_string());
+        }
+    }
+
+    let player_state = app.state::<PlayerState>();
+    let Some((source, next_index)) = next_queue_source_after_failure(&player_state.inner)? else {
+        return Ok(None);
+    };
+    let generation = {
+        let mut backend = player_state.inner.lock().map_err(|err| err.to_string())?;
+        next_playback_generation(&mut backend)
+    };
+    let _ = app
+        .state::<crate::workers::audio::AudioWorkerState>()
+        .stop(false);
+    play_queue_source(
+        &player_state.inner,
+        app,
+        source,
+        Some(next_index),
+        Some(generation),
+    )
+    .map(Some)
 }
 
 fn resolve_queue_source_for_playback(
@@ -919,6 +1155,16 @@ fn resolve_queue_source_for_playback(
             preferred_quality.as_deref(),
         );
     if let Some(cached_source) = cached_source {
+        if let Some(track_id) = track.source_id.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+            if let Some(artwork) = read_cached_plugin_cover(app, &provider_id, track_id) {
+                apply_plugin_cover_to_queue_track(state, &track, artwork);
+            } else if let Some(artwork) = resolve_and_cache_plugin_cover_for_queue_track(app, &provider_id, &track) {
+                apply_plugin_cover_to_queue_track(state, &track, artwork);
+            }
+            if let Some(lyrics) = read_cached_plugin_lyrics_metadata(app, &provider_id, track_id) {
+                apply_plugin_lyrics_to_queue_track(state, &track, plugin_lyrics_to_track_lyrics(&track, lyrics));
+            }
+        }
         eprintln!(
             "[plugin-playback] cache hit args={}",
             json!({
@@ -940,7 +1186,7 @@ fn resolve_queue_source_for_playback(
     let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
     let source_result = crate::plugins::resolve_plugin_playback_source_backend_when_ready(
         &worker,
-        provider_id,
+        provider_id.clone(),
         track_value,
         preferred_quality,
         quality_fallback,
@@ -948,6 +1194,26 @@ fn resolve_queue_source_for_playback(
         plugins,
         || ensure_current_playback_generation(state, generation),
     )?;
+    if let Some(artwork) = source_result.artwork.as_deref() {
+        if let Some(track_id) = track
+            .source_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            write_cached_plugin_cover(app, &provider_id, track_id, artwork);
+        }
+    }
+    if let Some(lyrics) = source_result.lyrics.as_ref() {
+        if let Some(track_id) = track
+            .source_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            write_cached_plugin_lyrics_metadata(app, &provider_id, track_id, lyrics);
+        }
+    }
     let resolved_source = source_result.url.clone();
     let mut cache_track_id = source_result.source_id.trim().to_string();
     if cache_track_id.is_empty() {
@@ -979,6 +1245,95 @@ fn resolve_queue_source_for_playback(
     })
 }
 
+fn resolve_and_cache_plugin_cover_for_queue_track(
+    app: &AppHandle,
+    provider_id: &str,
+    track: &QueueTrack,
+) -> Option<String> {
+    let track_id = track.source_id.as_deref()?.trim();
+    if provider_id.trim().is_empty() || track_id.is_empty() {
+        return None;
+    }
+    let plugins = read_installed_playback_plugins(app).ok()?;
+    let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
+    let artwork = crate::plugins::resolve_plugin_cover_metadata_backend(
+        &worker,
+        provider_id.to_string(),
+        queue_track_plugin_value(track),
+        plugins,
+    )
+    .ok()?;
+    write_cached_plugin_cover(app, provider_id, track_id, &artwork);
+    Some(artwork)
+}
+
+fn apply_plugin_cover_to_queue_track(
+    state: &Arc<Mutex<PlayerBackend>>,
+    track: &QueueTrack,
+    artwork: String,
+) {
+    if artwork.trim().is_empty() {
+        return;
+    }
+    let Ok(mut backend) = state.lock() else {
+        return;
+    };
+    let track_key = queue_track_source_key(track);
+    if let Some(queue_track) = backend
+        .queue_tracks
+        .iter_mut()
+        .find(|item| queue_track_source_key(item) == track_key)
+    {
+        queue_track.artwork = Some(artwork);
+    }
+}
+
+fn apply_plugin_lyrics_to_queue_track(
+    state: &Arc<Mutex<PlayerBackend>>,
+    track: &QueueTrack,
+    lyrics: TrackLyrics,
+) {
+    if lyrics.lyrics.is_empty() {
+        return;
+    }
+    let Ok(mut backend) = state.lock() else {
+        return;
+    };
+    let track_key = queue_track_source_key(track);
+    if let Some(queue_track) = backend
+        .queue_tracks
+        .iter_mut()
+        .find(|item| queue_track_source_key(item) == track_key)
+    {
+        queue_track.lyrics = Some(lyrics);
+    }
+}
+
+fn plugin_lyrics_to_track_lyrics(
+    track: &QueueTrack,
+    lyrics: crate::plugins::PluginLyricsMetadata,
+) -> TrackLyrics {
+    TrackLyrics {
+        provider_id: lyrics
+            .provider_id
+            .or_else(|| track.source_provider_id.clone()),
+        provider_name: lyrics.provider_name.or_else(|| track.source_name.clone()),
+        track_id: lyrics.track_id.or_else(|| track.source_id.clone()),
+        default_format: lyrics.default_format,
+        lyrics: lyrics
+            .lyrics
+            .into_iter()
+            .map(|variant| TrackLyricVariant {
+                format: variant.format,
+                content: variant.content,
+                source_url: variant.source_url,
+                quality: variant.quality,
+            })
+            .collect(),
+        track_raw: lyrics.track_raw.or_else(|| track.source_raw.clone()),
+    }
+}
+
 fn apply_plugin_playback_source(
     queue_track: &mut QueueTrack,
     source_result: &crate::plugins::PluginPlaybackSource,
@@ -1004,9 +1359,12 @@ fn apply_plugin_playback_source(
         .artwork
         .clone()
         .or(queue_track.artwork.clone());
+    if let Some(lyrics) = source_result.lyrics.clone() {
+        queue_track.lyrics = Some(plugin_lyrics_to_track_lyrics(queue_track, lyrics));
+    }
 }
 
-fn play_worker_queue_source_by_index(
+fn play_queue_source(
     state: &Arc<Mutex<PlayerBackend>>,
     app: &AppHandle,
     source: String,
@@ -1014,7 +1372,7 @@ fn play_worker_queue_source_by_index(
     generation: Option<u64>,
 ) -> Result<QueueSnapshot, String> {
     let (fade, fade_duration_ms) = queue_crossfade_options(state)?;
-    play_worker_queue_source_by_index_at_position(
+    play_queue_source_at_position(
         state,
         app,
         source,
@@ -1025,6 +1383,55 @@ fn play_worker_queue_source_by_index(
         generation,
         None,
     )
+}
+
+fn play_queue_source_at_position(
+    state: &Arc<Mutex<PlayerBackend>>,
+    app: &AppHandle,
+    source: String,
+    queue_index: Option<usize>,
+    position: f64,
+    fade: bool,
+    fade_duration_ms: Option<u64>,
+    generation: Option<u64>,
+    preferred_quality: Option<String>,
+) -> Result<QueueSnapshot, String> {
+    let requested_source = source.clone();
+    match play_queue_source_raw(
+        state,
+        app,
+        source,
+        queue_index,
+        position,
+        fade,
+        fade_duration_ms,
+        generation,
+        preferred_quality.clone(),
+    ) {
+        Ok(snapshot) => Ok(snapshot),
+        Err(error) if error == "Playback request was replaced." => queue_snapshot(state),
+        Err(error) => {
+            if is_plugin_queue_source(&requested_source) {
+                if let Ok(snapshot) = play_queue_source_raw(
+                    state,
+                    app,
+                    requested_source,
+                    queue_index,
+                    position,
+                    fade,
+                    fade_duration_ms,
+                    generation,
+                    preferred_quality.clone(),
+                ) {
+                    return Ok(snapshot);
+                }
+            }
+            if let Some(snapshot) = retry_current_queue_track_from_plugin(app, position, generation)? {
+                return Ok(snapshot);
+            }
+            advance_worker_queue_after_failure(app, &error, generation)?.ok_or(error)
+        }
+    }
 }
 
 fn commit_pending_queue_source(
@@ -1043,7 +1450,7 @@ fn commit_pending_queue_source(
     Ok(())
 }
 
-fn play_worker_queue_source_by_index_at_position(
+fn play_queue_source_raw(
     state: &Arc<Mutex<PlayerBackend>>,
     app: &AppHandle,
     source: String,

@@ -48,7 +48,6 @@ const workspaceTrackListProps = computed<WorkspaceTrackListProps>(() => ({
   isPlaying: props.isPlaying,
   isWideCollection: isWideCollection.value,
   preparingTrackId: props.preparingTrackId ?? null,
-  spectrumLevels: props.spectrumLevels,
   tracks: props.tracks,
 }));
 

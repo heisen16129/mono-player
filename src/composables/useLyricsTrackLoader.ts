@@ -52,12 +52,15 @@ export function useLyricsTrackLoader(options: {
       options.lyricFormat.value,
       options.activeTrack.value?.coverVersion,
     ] as const,
-    async ([identityKey, path, _title, _artist, artwork, _lyrics, lyricFormat, coverVersion]) => {
+    async ([identityKey, path, _title, _artist, artwork, _lyrics, lyricFormat, coverVersion], previousValue) => {
       const requestId = ++lyricsLoadRequestId;
+      const previousIdentityKey = previousValue?.[0] ?? null;
+      if (identityKey !== previousIdentityKey) {
+        options.lines.value = [];
+      }
       options.lyricTimeOffset.value = 0;
       options.isLyricSyncOpen.value = false;
       if (!identityKey || !path) {
-        options.lines.value = [];
         options.clearCoverState();
         return;
       }

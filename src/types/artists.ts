@@ -5,7 +5,6 @@ export interface ArtistTrackListProps {
   favoriteTrackIds: number[];
   isPlaying: boolean;
   label: string;
-  spectrumLevels: number[];
   tracks: Track[] | null;
 }
 

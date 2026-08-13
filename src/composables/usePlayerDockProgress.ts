@@ -205,6 +205,7 @@ export function usePlayerDockProgress({
     currentTime,
     progress,
     runtimeDuration,
+    totalDuration,
     totalDurationLabel,
     commitSeekAudio,
     previewSeekAudio,

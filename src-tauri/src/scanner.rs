@@ -161,13 +161,17 @@ fn read_track_metadata(path: &Path) -> Result<Track, String> {
         .map(|value| value.to_string())
         .filter(|value| !value.trim().is_empty());
 
+    let tagged_duration = tagged_file.properties().duration().as_secs();
+
     Ok(Track {
         id: 0,
         path: path.to_string_lossy().to_string(),
         title,
         artist,
         album,
-        duration: Some(tagged_file.properties().duration().as_secs()),
+        duration: Some(tagged_duration)
+            .filter(|duration| *duration > 0)
+            .or_else(|| read_audio_duration(path)),
         added_at: None,
         scan_id: None,
         year: None,
@@ -206,7 +210,7 @@ fn fallback_track_metadata(path: &Path) -> Track {
         },
         artist: artist.filter(|value| !value.is_empty()),
         album: None,
-        duration: None,
+        duration: read_audio_duration(path),
         added_at: None,
         scan_id: None,
         year: None,
@@ -221,6 +225,10 @@ fn fallback_track_metadata(path: &Path) -> Track {
         source_provider_id: None,
         source_raw: None,
     }
+}
+
+fn read_audio_duration(path: &Path) -> Option<u64> {
+    crate::database::read_track_duration_seconds(path).ok()
 }
 
 fn is_audio_file(path: &Path) -> bool {

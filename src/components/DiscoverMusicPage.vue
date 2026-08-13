@@ -19,7 +19,9 @@ const emit = defineEmits<DiscoverMusicPageEmits>();
 const player = usePlayerStore();
 const searchHistoryLimitRef = computed(() => Math.max(1, Math.round(player.settings.searchHistoryLimit)));
 const {
+  clearSearchHistory,
   loadSearchHistory,
+  removeSearchHistory,
   saveSearchHistory,
   searchHistory,
 } = useSearchHistory(searchHistoryLimitRef);
@@ -124,7 +126,6 @@ const pluginSearchViewProps = computed<PluginSearchViewProps>(() => ({
   favoriteTrackIds: props.favoriteTrackIds,
   hasMore: onlineSearchHasMore.value,
   isPlaying: props.isPlaying,
-  spectrumLevels: props.spectrumLevels,
   loadMoreError: onlineLoadMoreError.value,
   loading: isOnlineSearching.value,
   loadingMore: isOnlineLoadingMore.value,
@@ -132,6 +133,7 @@ const pluginSearchViewProps = computed<PluginSearchViewProps>(() => ({
   query: onlineSearchQuery.value,
   resolvingTrackKey: props.resolvingTrackKey,
   results: onlineSearchResults.value,
+  searchHistory: searchHistory.value,
 }));
 </script>
 
@@ -140,12 +142,14 @@ const pluginSearchViewProps = computed<PluginSearchViewProps>(() => ({
     v-if="isOnlineSearchOpen"
     v-bind="pluginSearchViewProps"
     @back-local="clearSearch"
+    @clear-search-history="clearSearchHistory"
     @download-track="emit('downloadTrack', createOnlineQueueTrack($event))"
     @load-more="loadMoreOnlineMusic(false)"
     @open-track-menu="(track, x, y) => emit('openTrackMenu', track, x, y)"
     @retry="retrySearch"
     @retry-load-more="loadMoreOnlineMusic(true)"
     @search="searchOnlineMusic"
+    @remove-search-history="removeSearchHistory"
     @select-provider="selectOnlineProvider"
     @toggle-favorite="emit('toggleFavorite', $event)"
     @play-track="emit('playTrack', $event)"
@@ -154,6 +158,7 @@ const pluginSearchViewProps = computed<PluginSearchViewProps>(() => ({
     v-else
     v-model="onlineSearchQuery"
     :search-history="searchHistory"
+    @remove-search-history="removeSearchHistory"
     @search="searchOnlineMusic"
   />
 </template>

@@ -1,16 +1,31 @@
 <script setup lang="ts">
-import { Music } from '@lucide/vue';
+import { ref, watch } from 'vue';
+import DefaultCover from '../DefaultCover.vue';
 import { artworkDisplaySrc } from '../../utils/artwork';
 
-defineProps<{
+const props = defineProps<{
   artwork?: string | null;
 }>();
+
+const hasArtworkError = ref(false);
+
+watch(
+  () => props.artwork,
+  () => {
+    hasArtworkError.value = false;
+  },
+);
 </script>
 
 <template>
   <span class="lyrics-search-cover">
-    <img v-if="artwork" :src="artworkDisplaySrc(artwork)" alt="" />
-    <Music v-else :size="20" :stroke-width="2.4" />
+    <img
+      v-if="artworkDisplaySrc(props.artwork) && !hasArtworkError"
+      :src="artworkDisplaySrc(props.artwork)"
+      alt=""
+      @error="hasArtworkError = true"
+    />
+    <DefaultCover v-else :size="20" :stroke-width="2.4" />
   </span>
 </template>
 

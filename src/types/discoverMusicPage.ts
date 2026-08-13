@@ -10,8 +10,8 @@ export interface DiscoverMusicPageProps {
   isPlaying: boolean;
   pendingDownloadTrackKeys: string[];
   resolvingTrackKey: string | null;
+  searchHistory: string[];
   searchError: string | null;
-  spectrumLevels: number[];
 }
 
 export interface DiscoverMusicPageEmits {
@@ -36,7 +36,6 @@ export interface PluginSearchViewProps {
   favoriteTrackIds: number[];
   hasMore: boolean;
   isPlaying: boolean;
-  spectrumLevels: number[];
   loadMoreError: string | null;
   loading: boolean;
   loadingMore: boolean;
@@ -44,4 +43,5 @@ export interface PluginSearchViewProps {
   query: string;
   resolvingTrackKey: string | null;
   results: PluginSearchTrack[];
+  searchHistory: string[];
 }

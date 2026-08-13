@@ -179,11 +179,20 @@ function canScrollWheelTarget(target: HTMLElement, deltaY: number) {
   user-select: none;
 }
 
+.base-dialog-head > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
 .base-dialog-head h2 {
   margin: 0;
   color: var(--smw-text-primary);
   font-size: 17px;
   font-weight: 650;
+}
+
+.base-dialog-head :is(form, input, textarea, select) {
+  cursor: text;
 }
 
 .base-dialog-head .icon-button {

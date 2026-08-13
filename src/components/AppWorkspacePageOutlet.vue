@@ -21,7 +21,6 @@ const workspaceViewProps = computed<WorkspaceViewProps>(() => ({
   libraryTitle: props.libraryTitle,
   modelValue: props.modelValue,
   preparingTrackId: props.isPreparingActiveTrack ? props.activeTrack?.id ?? null : null,
-  spectrumLevels: props.spectrumLevels,
   tracks: props.tracks,
 }));
 

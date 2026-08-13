@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
 import DiscoverHotActions from './DiscoverHotActions.vue';
 import DiscoverQuickKeywords from './DiscoverQuickKeywords.vue';
@@ -10,6 +10,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  'remove-search-history': [keyword: string];
   'update:modelValue': [value: string];
   search: [keyword: string];
 }>();
@@ -33,9 +34,17 @@ function submitSearch(keyword = query.value) {
     <div class="discover-stage">
       <h1>发现音乐</h1>
 
-      <DiscoverSearchInput v-model="query" placeholder="搜索歌曲 / 歌手 / 专辑" @submit="submitSearch" />
+      <DiscoverSearchInput
+        v-model="query"
+        placeholder="搜索歌曲 / 歌手 / 专辑"
+        @submit="submitSearch"
+      />
 
-      <DiscoverQuickKeywords :keywords="searchHistory" @search="submitSearch" />
+      <DiscoverQuickKeywords
+        :keywords="searchHistory"
+        @remove="emit('remove-search-history', $event)"
+        @search="submitSearch"
+      />
 
       <DiscoverHotActions @search="submitSearch" />
     </div>

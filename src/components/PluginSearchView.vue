@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import type { Track } from '../types/music';
 import type { PluginSearchTrack } from '../types/plugin';
 import type { PluginSearchViewProps } from '../types/discoverMusicPage';
@@ -8,11 +8,13 @@ import PluginSearchToolbar from './plugin-search/PluginSearchToolbar.vue';
 defineProps<PluginSearchViewProps>();
 
 const emit = defineEmits<{
+  clearSearchHistory: [];
   retry: [];
   backLocal: [];
   downloadTrack: [track: PluginSearchTrack];
   loadMore: [];
   retryLoadMore: [];
+  removeSearchHistory: [keyword: string];
   openTrackMenu: [track: PluginSearchTrack, x: number, y: number];
   search: [keyword: string];
   selectProvider: [providerId: string];
@@ -29,6 +31,9 @@ const emit = defineEmits<{
       :loading="loading"
       :providers="providers"
       :query="query"
+      :search-history="searchHistory"
+      @clear-search-history="$emit('clearSearchHistory')"
+      @remove-search-history="$emit('removeSearchHistory', $event)"
       @search="emit('search', $event)"
       @select-provider="emit('selectProvider', $event)"
     />
@@ -47,7 +52,6 @@ const emit = defineEmits<{
       :pending-download-track-keys="pendingDownloadTrackKeys"
       :resolving-track-key="resolvingTrackKey"
       :results="results"
-      :spectrum-levels="spectrumLevels"
       @download-track="emit('downloadTrack', $event)"
       @load-more="emit('loadMore')"
       @open-track-menu="(track, x, y) => emit('openTrackMenu', track, x, y)"

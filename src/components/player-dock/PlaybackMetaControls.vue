@@ -44,7 +44,6 @@ defineProps<{
   sleepTimerPresetMinutes: readonly number[];
   sleepTimerProgressPercent: number;
   sleepTimerRemainingLabel: string;
-  spectrumLevels: number[];
   volume: number;
 }>();
 
@@ -139,7 +138,6 @@ const emit = defineEmits<{
       :queue-tracks="queueTracks"
       :show-track-covers="showTrackCovers"
       :show-track-numbers="showTrackNumbers"
-      :spectrum-levels="spectrumLevels"
       @locate="emit('locateQueueTrack')"
       @play-track="emit('playQueueTrack', $event)"
       @set-control="emit('setQueueControl', $event)"

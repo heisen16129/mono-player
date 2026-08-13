@@ -46,7 +46,6 @@ export function usePlayerDockControlBindings({ meta, nowPlaying, transport }: Us
     sleepTimerPresetMinutes: meta.sleepTimerPresetMinutes(),
     sleepTimerProgressPercent: meta.sleepTimerProgressPercent(),
     sleepTimerRemainingLabel: meta.sleepTimerRemainingLabel(),
-    spectrumLevels: meta.spectrumLevels(),
     volume: meta.volume(),
   }));
 

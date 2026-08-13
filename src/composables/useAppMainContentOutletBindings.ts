@@ -30,7 +30,6 @@ export function useAppMainContentOutletBindings(props: AppMainContentProps, emit
     onlinePreparingTrackKey: props.onlinePreparingTrackKey,
     onlineSearchError: props.onlineSearchError,
     pendingDownloadTrackKeys: props.pendingDownloadTrackKeys,
-    playbackSpectrumLevels: props.playbackSpectrumLevels,
     playerError: props.playerError,
     playerQuery: props.playerQuery,
     recentAddedTrackCount: props.recentAddedTrackCount,

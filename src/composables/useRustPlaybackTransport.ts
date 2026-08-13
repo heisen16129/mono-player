@@ -5,23 +5,19 @@ import { isPlaybackRequestReplacedError, normalizePlaybackErrorMessage } from '.
 
 interface UseRustPlaybackTransportOptions {
   isAudioPlaying: Ref<boolean>;
-  playbackTime: Ref<number>;
   queueSwitchingTrackKey: Ref<string | null>;
   player: ReturnType<typeof usePlayerStore>;
   clearPreparingPlaybackState: () => void;
   handleRustQueueSnapshot: (snapshot: RustQueueSnapshot) => void;
-  retryActiveDownloadedOnlineTrackFromPlugin: (startPosition?: number) => Promise<boolean>;
   showToast: (message: string) => void;
 }
 
 export function useRustPlaybackTransport({
   isAudioPlaying,
-  playbackTime,
   queueSwitchingTrackKey,
   player,
   clearPreparingPlaybackState,
   handleRustQueueSnapshot,
-  retryActiveDownloadedOnlineTrackFromPlugin,
   showToast,
 }: UseRustPlaybackTransportOptions) {
   async function playPreviousTrack() {
@@ -56,27 +52,7 @@ export function useRustPlaybackTransport({
     await stopRustBackend(false);
     isAudioPlaying.value = false;
 
-    try {
-      if (await retryActiveDownloadedOnlineTrackFromPlugin(playbackTime.value)) {
-        return;
-      }
-    } catch (error) {
-      message = normalizePlaybackErrorMessage(error, '在线源播放失败');
-    }
-
     showToast(message);
-
-    if (player.settings.onlinePlaybackFailureAction !== 'next') {
-      return;
-    }
-
-    try {
-      handleRustQueueSnapshot(await playRustBackendNext());
-    } catch (error) {
-      if (isPlaybackRequestReplacedError(error)) return;
-      const nextMessage = normalizePlaybackErrorMessage(error, '没有下一首可播放');
-      showToast(nextMessage);
-    }
   }
 
   return {

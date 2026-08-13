@@ -11,7 +11,6 @@ defineProps<{
   queueTracks: readonly Track[];
   showTrackCovers: boolean;
   showTrackNumbers: boolean;
-  spectrumLevels: number[];
 }>();
 
 const emit = defineEmits<{
@@ -32,7 +31,6 @@ const emit = defineEmits<{
       :locale="locale"
       :show-track-covers="showTrackCovers"
       :show-track-numbers="showTrackNumbers"
-      :spectrum-levels="activeTrack?.id === track.id ? spectrumLevels : []"
       :track="track"
       @play-track="emit('playTrack', $event)"
       @set-track-ref="(trackId, element) => emit('setTrackRef', trackId, element)"

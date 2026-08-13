@@ -29,7 +29,6 @@ interface UseAppRustPlaybackRuntimeOptions {
   getOnlineTrackKey: (track: PluginSearchTrack) => string;
   loadLocalTrackLyricsInBackground: (track: Track) => Promise<void> | void;
   loadPlaybackTrackLyricsInBackground: (track: PluginSearchTrack, playbackTrack: Track) => Promise<void> | void;
-  retryActiveDownloadedOnlineTrackFromPlugin: (startPosition?: number) => Promise<boolean>;
   showToast: (message: string, variant?: 'success' | 'error') => void;
   syncLyricsViewStateForTrack: (track: Track | null) => void;
   crossfadeDurationMs: number;
@@ -55,7 +54,6 @@ export function useAppRustPlaybackRuntime({
   getOnlineTrackKey,
   loadLocalTrackLyricsInBackground,
   loadPlaybackTrackLyricsInBackground,
-  retryActiveDownloadedOnlineTrackFromPlugin,
   showToast,
   syncLyricsViewStateForTrack,
   crossfadeDurationMs,
@@ -131,12 +129,10 @@ export function useAppRustPlaybackRuntime({
     playPreviousTrack,
   } = useRustPlaybackTransport({
     isAudioPlaying,
-    playbackTime,
     queueSwitchingTrackKey,
     player,
     clearPreparingPlaybackState,
     handleRustQueueSnapshot,
-    retryActiveDownloadedOnlineTrackFromPlugin,
     showToast,
   });
 

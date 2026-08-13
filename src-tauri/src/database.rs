@@ -332,7 +332,7 @@ fn refresh_track_duration_inner(
     })
 }
 
-fn read_track_duration_seconds(path: &Path) -> Result<u64, String> {
+pub(crate) fn read_track_duration_seconds(path: &Path) -> Result<u64, String> {
     let file = File::open(path).map_err(|err| err.to_string())?;
     let decoder = match catch_unwind(AssertUnwindSafe(|| Decoder::try_from(file))) {
         Ok(Ok(decoder)) => decoder,

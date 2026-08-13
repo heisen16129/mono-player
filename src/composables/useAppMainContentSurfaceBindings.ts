@@ -37,7 +37,6 @@ interface UseAppMainContentSurfaceBindingsState {
   onlinePreparingTrackKey: ReadonlyRefValue<string | null>;
   onlineSearchError: ReadonlyRefValue<string | null>;
   pendingDownloadTrackKeys: ReadonlyRefValue<string[]>;
-  playbackSpectrumLevels: ReadonlyRefValue<number[]>;
   recentAddedTrackCount: ReadonlyRefValue<number>;
   shouldShowDownloadsMenu: ReadonlyRefValue<boolean>;
   shouldShowLibraryResizeHandle: ReadonlyRefValue<boolean>;
@@ -129,7 +128,6 @@ export function useAppMainContentSurfaceBindings({
       onlinePreparingTrackKey: () => state.onlinePreparingTrackKey.value,
       onlineSearchError: () => state.onlineSearchError.value,
       pendingDownloadTrackKeys: () => state.pendingDownloadTrackKeys.value,
-      playbackSpectrumLevels: () => state.playbackSpectrumLevels.value,
       playerError: () => player.error,
       playerQuery: () => player.query,
       playlists: () => player.settings.playlists ?? [],

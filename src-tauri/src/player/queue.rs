@@ -219,6 +219,20 @@ pub(super) fn next_queue_source_from_backend(
     next_index.and_then(|index| queue_source_at(backend, index))
 }
 
+pub(super) fn next_queue_source_after_failure(
+    state: &Arc<Mutex<PlayerBackend>>,
+) -> Result<Option<(String, usize)>, String> {
+    let backend = state.lock().map_err(|err| err.to_string())?;
+    if backend.queue_sources.len() <= 1 {
+        return Ok(None);
+    }
+
+    let current_index = current_queue_index(&backend).unwrap_or(0);
+    Ok(next_valid_queue_index(&backend, current_index)
+        .and_then(|index| queue_source_at(&backend, index))
+        .filter(|(source, _)| backend.current_source.as_deref() != Some(source.as_str())))
+}
+
 pub(super) fn queue_snapshot(state: &Arc<Mutex<PlayerBackend>>) -> Result<QueueSnapshot, String> {
     let mut backend = state.lock().map_err(|err| err.to_string())?;
     Ok(queue_snapshot_from_backend(&mut backend))

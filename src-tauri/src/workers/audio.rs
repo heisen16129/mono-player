@@ -871,7 +871,12 @@ fn find_output_device(device_id: &str) -> Option<rodio::Device> {
 
 fn decode_local_file(path: &PathBuf) -> Result<Decoder<io::BufReader<File>>, String> {
     let file = File::open(path).map_err(|err| err.to_string())?;
-    match catch_unwind(AssertUnwindSafe(|| Decoder::try_from(file))) {
+    let byte_len = file.metadata().ok().map(|metadata| metadata.len());
+    let mut builder = Decoder::builder().with_data(io::BufReader::new(file));
+    if let Some(byte_len) = byte_len {
+        builder = builder.with_byte_len(byte_len);
+    }
+    match catch_unwind(AssertUnwindSafe(|| builder.build())) {
         Ok(Ok(decoder)) => Ok(decoder),
         Ok(Err(error)) => Err(error.to_string()),
         Err(_) => {
