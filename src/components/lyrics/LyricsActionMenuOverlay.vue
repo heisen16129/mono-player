@@ -25,6 +25,7 @@ defineEmits<{
   increaseFontSize: [];
   openLyricSearch: [];
   openLyricSync: [];
+  openSettings: [];
   toggleFullscreen: [];
   togglePlayerDock: [];
 }>();
@@ -54,6 +55,7 @@ defineEmits<{
       @toggle-player-dock="$emit('togglePlayerDock')"
       @open-lyric-search="$emit('openLyricSearch')"
       @open-lyric-sync="$emit('openLyricSync')"
+      @open-settings="$emit('openSettings')"
       @toggle-fullscreen="$emit('toggleFullscreen')"
     />
   </Teleport>

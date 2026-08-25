@@ -142,7 +142,6 @@ button:disabled {
   min-height: 100vh;
   overflow: hidden;
   background: var(--smw-bg-canvas);
-  border: 1px solid var(--smw-window-border);
   user-select: none;
 }
 

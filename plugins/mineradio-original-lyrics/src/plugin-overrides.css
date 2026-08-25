@@ -1,0 +1,63 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #070708;
+}
+
+[data-mineradio-original-root] {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+#desktop-window-shell {
+  position: fixed;
+  inset: 0;
+}
+
+#splash,
+#search-area,
+#home-btn,
+#user-btn,
+#update-entry,
+#visual-guide-btn,
+#empty-home,
+#upload-panel,
+#upload-tip,
+#desktop-mode-control-dock,
+.desktop-window-btn[data-window-action] {
+  display: none !important;
+}
+
+#desktop-titlebar {
+  pointer-events: none;
+}
+
+#desktop-titlebar #diy-mode-btn,
+#fullscreen-diy-zone,
+#fx-fab,
+#fx-panel,
+#bottom-controls {
+  pointer-events: auto;
+}
+
+#control-title-badges .source-tag,
+#control-title-badges .vip-tag {
+  display: none !important;
+}
+
+#playlist-panel,
+#fx-panel,
+#mini-queue-popover {
+  scrollbar-color: rgba(255, 255, 255, 0.38) rgba(255, 255, 255, 0.06);
+  scrollbar-width: thin;
+}
+
+@media (max-width: 760px), (max-height: 620px) {
+  #bottom-bar {
+    max-width: calc(100vw - 24px) !important;
+  }
+}

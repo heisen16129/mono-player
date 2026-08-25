@@ -1,0 +1,41 @@
+import type { ComputedRef } from 'vue';
+import type { PlayerSettings, Track } from './music';
+import type { PluginPlaybackQuality } from './plugin';
+import type { PlaybackMetaControlProps, TransportControlProps } from './playerDock';
+
+export interface PlayerDockController {
+  playbackMetaControlProps: ComputedRef<PlaybackMetaControlProps>;
+  transportControlProps: ComputedRef<TransportControlProps>;
+  progress: ComputedRef<number>;
+  totalDuration: ComputedRef<number>;
+  togglePlayback: () => void;
+  requestNextTrack: () => void;
+  requestPreviousTrack: () => void;
+  requestFavoriteToggle: () => void;
+  requestPlaybackModeToggle: () => void;
+  previewSeekAudio: (event: Event) => void;
+  commitSeekAudio: () => void;
+  changeVolume: (value: number) => void;
+  toggleMute: () => void;
+  changePlaybackRate: (value: number) => void;
+  clearSleepTimer: () => void;
+  closeSleepTimerDialog: () => void;
+  closeSleepTimerStatus: () => void;
+  downloadActiveTrack: () => void;
+  locateQueueTrack: () => void;
+  changeLyricFormat: (format: string) => void;
+  changeOnlineQuality: (quality: PluginPlaybackQuality) => void;
+  openDesktopLyrics: () => void;
+  pauseSleepTimer: () => void;
+  playQueueTrack: (track: Track) => void;
+  resumeSleepTimer: () => void;
+  setQueueControlElement: (element: unknown) => void;
+  setQueueTrackElement: (trackId: number, element: unknown) => void;
+  setSleepTimerAction: (action: PlayerSettings['sleepTimerAction']) => void;
+  setSleepTimerHours: (value: number) => void;
+  setSleepTimerMinutes: (value: number) => void;
+  setSleepTimerPreset: (minutes: number) => void;
+  startSleepTimer: () => void;
+  toggleQueuePanel: () => void;
+  toggleSleepTimer: () => void;
+}

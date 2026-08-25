@@ -32,6 +32,7 @@ import { useLibraryPanelResize } from './composables/useLibraryPanelResize';
 import { useLocalPlaybackActions } from './composables/useLocalPlaybackActions';
 import { useLocalLibraryQueuePruning } from './composables/useLocalLibraryQueuePruning';
 import { useLyricsDockAutoHide } from './composables/useLyricsDockAutoHide';
+import { useLyricsRendererSettings } from './composables/useLyricsRendererSettings';
 import { useLyricsViewVisibility } from './composables/useLyricsViewVisibility';
 import { useMusicSourcePluginAvailability } from './composables/useMusicSourcePluginAvailability';
 import { useNavigationAvailabilityGuards } from './composables/useNavigationAvailabilityGuards';
@@ -57,6 +58,7 @@ import { usePlayerStore } from './stores/player';
 import type { PlaylistContextMenuListeners, TrackContextMenuListeners } from './types/appContextMenus';
 import type { AppDialogsListeners } from './types/appDialogs';
 import type { AppSidebarOutletListeners, AppSidebarOutletProps } from './types/sidebar';
+import type { PlayerDockController } from './types/playerDockController';
 import {
   dedupePlaybackQueue,
   isRemoteTrack,
@@ -64,6 +66,9 @@ import {
 
 const player = usePlayerStore();
 const isAppReady = ref(false);
+const appPlayerSurfaceRef = ref<{ getController: () => PlayerDockController | null } | null>(null);
+const { activeRenderer: activeLyricsRenderer } = useLyricsRendererSettings();
+const lyricsRendererOwnsSurface = computed(() => Boolean(activeLyricsRenderer.value?.ownsSurface));
 type AppRustPlaybackRuntime = ReturnType<typeof useAppRustPlaybackRuntime>;
 let appRustPlaybackRuntime: AppRustPlaybackRuntime;
 const startRustPlaybackQueue = (...args: Parameters<AppRustPlaybackRuntime['startRustPlaybackQueue']>) => appRustPlaybackRuntime.startRustPlaybackQueue(...args);
@@ -96,6 +101,9 @@ const {
   updatePlaybackRunningState,
   updatePlaybackTime,
 } = usePlaybackRuntimeState();
+const requestPlaybackToggle = () => {
+  togglePlaybackRequestId.value += 1;
+};
 const {
   closeOnlineToast,
   onlineToastMessage,
@@ -771,6 +779,7 @@ const {
     hoverLyricsDock,
     leaveLyricsDock,
     openDesktopLyrics,
+    openSettingsView,
     toggleDesktopLyrics,
     playActiveTrack,
     playNextTrack,
@@ -780,6 +789,7 @@ const {
     showLyricsDock,
     showOnlineToast,
     toggleFavoriteTrack,
+    requestPlaybackToggle,
     toggleLyricsView,
     togglePlaybackMode,
     updateActiveTrackLyrics,
@@ -788,6 +798,11 @@ const {
   },
   handleSeamlessAdvance: rustQueueSnapshotController.handleSeamlessAdvance,
 });
+
+const lyricsViewPropsWithPlayerDock = computed(() => ({
+  ...lyricsViewProps.value,
+  playerDockController: appPlayerSurfaceRef.value?.getController() ?? null,
+}));
 
 const { appDialogsListeners, appDialogsProps } = useAppDialogsBindings({
   props: {
@@ -912,11 +927,14 @@ const {
           <LyricsView
             v-if="activeTrack"
             v-show="isLyricsOpen"
-            v-bind="{ ...lyricsViewProps, ...lyricsViewListeners }"
+            v-bind="{ ...lyricsViewPropsWithPlayerDock, ...lyricsViewListeners }"
           />
         </Transition>
 
-        <LyricsDockHotZone v-if="shouldAutoHideLyricsDock" @hover="hoverLyricsDock" />
+        <LyricsDockHotZone
+          v-if="shouldAutoHideLyricsDock && !lyricsRendererOwnsSurface"
+          @hover="hoverLyricsDock"
+        />
 
         <AppOnlineToast :message="onlineToastMessage" :variant="onlineToastVariant" @close="closeOnlineToast" />
       </template>
@@ -937,7 +955,8 @@ const {
 
     <template v-if="isAppReady" #dock>
       <AppPlayerSurface
-        :hidden="isLyricsDockHidden"
+        ref="appPlayerSurfaceRef"
+        :hidden="isLyricsDockHidden || (isLyricsOpen && lyricsRendererOwnsSurface)"
         :listeners="playerDockListeners"
         :props="playerDockProps"
       />

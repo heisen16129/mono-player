@@ -19,6 +19,7 @@ export function shouldSkipWindowDrag(target: EventTarget | null) {
         '.lyrics-panel',
         '.plugin-table',
         '.drag-handle',
+        'iframe',
       ].join(', '),
     ),
   );

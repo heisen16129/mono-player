@@ -252,6 +252,14 @@ export function readCover(path: string): Promise<CoverImage | null> {
   return invokeApi<CoverImage | null>('read_cover', { path });
 }
 
+export function readArtworkFile(artwork: string): Promise<CoverImage | null> {
+  if (!isTauriRuntime() || !artwork) {
+    return Promise.resolve(null);
+  }
+
+  return invokeApi<CoverImage | null>('read_artwork_file', { artwork });
+}
+
 export function readCoverThumbnail(path: string): Promise<CoverImage | null> {
   if (!isTauriRuntime() || !path) {
     return Promise.resolve(null);

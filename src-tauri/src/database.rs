@@ -202,16 +202,26 @@ pub(crate) fn update_track_cover(
         let track_path = Path::new(&request.path);
         let cover_path = Path::new(&request.cover_path);
         let artwork = if request.embed_metadata {
-            match write_track_cover_metadata(&request.path, &request.cover_path) {
-                Ok(()) => crate::covers::cached_cover_original_file_url_in(
+            match catch_unwind(AssertUnwindSafe(|| {
+                write_track_cover_metadata(&request.path, &request.cover_path)
+            })) {
+                Ok(Ok(())) => crate::covers::cached_cover_original_file_url_in(
                     &player_state.cache_dir()?,
                     track_path,
                 )?,
-                Err(error) => {
+                Ok(Err(error)) => {
                     eprintln!(
-                        "[cover] embed metadata failed path={} error={}",
+                        "[cover] embed cover failed, fallback to sidecar image: path={} error={}",
                         request.path,
                         error
+                    );
+                    crate::covers::write_sidecar_cover_file_url(track_path, cover_path)?
+                }
+                Err(error) => {
+                    eprintln!(
+                        "[cover] embed cover skipped after panic, fallback to sidecar image: path={} panic={}",
+                        request.path,
+                        panic_message(error)
                     );
                     crate::covers::write_sidecar_cover_file_url(track_path, cover_path)?
                 }
@@ -866,6 +876,16 @@ fn normalized_local_file_path(path: &str) -> Result<PathBuf, String> {
         return Err("歌曲文件不存在。".to_string());
     }
     Ok(path)
+}
+
+fn panic_message(error: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = error.downcast_ref::<&str>() {
+        return (*message).to_string();
+    }
+    if let Some(message) = error.downcast_ref::<String>() {
+        return message.clone();
+    }
+    "unknown panic".to_string()
 }
 
 fn image_mime_type(path: &Path, data: &[u8]) -> Option<MimeType> {

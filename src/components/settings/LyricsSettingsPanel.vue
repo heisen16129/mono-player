@@ -4,6 +4,7 @@ import { t } from '../../i18n';
 import { usePlayerStore } from '../../stores/player';
 import LyricsFontColorSetting from './LyricsFontColorSetting.vue';
 import LyricsFontSizeSetting from './LyricsFontSizeSetting.vue';
+import LyricsRendererSetting from './LyricsRendererSetting.vue';
 
 const player = usePlayerStore();
 const locale = computed(() => player.settings.locale);
@@ -36,6 +37,7 @@ const lyricFontSizeOptions = Array.from({ length: 21 }, (_, index) => String(ind
       @set-color="player.setLyricFontColor"
       @set-use-theme-color="player.setUseThemeLyricColor"
     />
+    <LyricsRendererSetting />
   </section>
 </template>
 

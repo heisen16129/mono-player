@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import {
   installCatalogPlugin,
   installLocalPlugin,
+  installLocalLyricsRendererManifest,
   readPluginTheme,
   setPluginEnabled,
   uninstallPlugin,
@@ -190,11 +191,14 @@ export function usePluginInstallActions({
       multiple: false,
       filters: [
         { name: 'WASM Plugin', extensions: ['wasm'] },
+        { name: 'Lyrics Renderer Manifest', extensions: ['json'] },
       ],
     });
 
     if (typeof selected !== 'string') return;
-    installedPlugins.value = await installLocalPlugin(selected);
+    installedPlugins.value = selected.toLowerCase().endsWith('.json')
+      ? await installLocalLyricsRendererManifest(selected)
+      : await installLocalPlugin(selected);
     notifyInstalledPluginsChanged();
     const manifest = installedPlugins.value[0];
     let themeInstalled = false;

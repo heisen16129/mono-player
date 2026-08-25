@@ -1,4 +1,4 @@
-export type PluginRuntime = 'wasm';
+export type PluginRuntime = 'wasm' | 'module';
 
 export type PluginPlaybackQuality = string;
 
@@ -28,9 +28,10 @@ export type PluginCapability =
   | 'history-sync'
   | 'batch-rename'
   | 'lyric-convert'
-  | 'lyric-translate';
+  | 'lyric-translate'
+  | 'lyrics-renderer';
 
-export type PluginKind = 'music' | 'lyrics' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
+export type PluginKind = 'music' | 'lyrics' | 'lyrics-renderer' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
 
 export type PluginSourceKind = 'official' | 'subscription' | 'local';
 
@@ -69,7 +70,7 @@ export type PluginConfigValue = string | number | boolean | string[] | null | un
 
 export type PluginConfig = Record<string, PluginConfigValue>;
 
-export type PluginConfigFieldType = 'text' | 'password' | 'number' | 'select' | 'radio' | 'checkbox' | 'switch';
+export type PluginConfigFieldType = 'text' | 'password' | 'number' | 'range' | 'select' | 'radio' | 'checkbox' | 'switch';
 
 export interface PluginConfigOption {
   label: string;
@@ -79,10 +80,14 @@ export interface PluginConfigOption {
 export interface PluginConfigField {
   key: string;
   label: string;
+  labelEn?: string;
   type: PluginConfigFieldType;
   required?: boolean;
   placeholder?: string;
   defaultValue?: PluginConfigValue;
+  min?: number;
+  max?: number;
+  step?: number;
   options?: PluginConfigOption[];
 }
 

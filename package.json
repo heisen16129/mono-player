@@ -23,6 +23,9 @@
     "@tauri-apps/cli": "2.8.4",
     "@types/node": "^20.19.0",
     "@vitejs/plugin-vue": "^5.2.4",
+    "gsap": "^3.15.0",
+    "music-tempo": "^1.0.3",
+    "three": "^0.128.0",
     "typescript": "^5.9.3",
     "vite": "^5.4.21",
     "vue-tsc": "^3.1.8"

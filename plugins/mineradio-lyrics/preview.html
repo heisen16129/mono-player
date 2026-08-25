@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mineradio 3D 歌词插件预览</title>
+  <style>html,body,#root{width:100%;height:100%;margin:0;background:#060708;overflow:hidden}</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    import renderer from './renderer.mjs';
+
+    const texts = [
+      '风从很远的地方经过',
+      '城市的灯落进沉默',
+      '时间沿着夜色缓慢流动',
+      '我们在星光里面重逢',
+      '那些没有说完的话',
+      '正在记忆深处发芽',
+      '如果明天仍然有风',
+      '就让歌声带我们出发',
+    ];
+    const lines = texts.map((text, index) => {
+      const time = 4 + index * 6;
+      const chars = [...text];
+      return {
+        time,
+        text,
+        words: chars.map((char, wordIndex) => ({
+          time: time + wordIndex * (4.8 / chars.length),
+          duration: 4.8 / chars.length,
+          text: char,
+        })),
+      };
+    });
+    const coverCanvas = document.createElement('canvas');
+    coverCanvas.width = 640;
+    coverCanvas.height = 640;
+    const coverContext = coverCanvas.getContext('2d');
+    coverContext.fillStyle = '#0d1117';
+    coverContext.fillRect(0, 0, 640, 640);
+    coverContext.fillStyle = '#ef476f';
+    coverContext.fillRect(46, 48, 270, 270);
+    coverContext.fillStyle = '#06d6a0';
+    coverContext.fillRect(326, 48, 268, 270);
+    coverContext.fillStyle = '#ffd166';
+    coverContext.fillRect(46, 328, 548, 266);
+    coverContext.fillStyle = '#111827';
+    coverContext.font = '900 82px sans-serif';
+    coverContext.fillText('MONO', 152, 490);
+    const artworkDataUrl = coverCanvas.toDataURL('image/png');
+    const activeTrack = {
+      id: 'mineradio-preview',
+      title: '星河漫游',
+      artist: 'Mono Session',
+      album: 'Mineradio Stage',
+      artwork: artworkDataUrl,
+      artworkDataUrl,
+    };
+    const state = {
+      lines,
+      currentTime: 16,
+      isPlaying: true,
+      isFavorite: false,
+      activeLyricIndex: 2,
+      coverUrl: '',
+      isLoading: false,
+      emptyMessage: '暂无歌词',
+      loadingText: '正在载入歌词…',
+      title: activeTrack.title,
+      artist: activeTrack.artist,
+      album: activeTrack.album,
+      duration: 56,
+      volume: 72,
+      isMuted: false,
+      playbackRate: 1,
+      playbackMode: 'fixed',
+      playbackModeLabel: '列表循环',
+      activeTrack,
+      queueTracks: [
+        activeTrack,
+        { ...activeTrack, id: 'mineradio-preview-2', title: '夜色来信', artist: 'Mono Session', duration: 238 },
+        { ...activeTrack, id: 'mineradio-preview-3', title: '流光经过', artist: 'Mineradio Lab', duration: 267 },
+      ],
+      config: {},
+    };
+    const update = () => {
+      state.activeLyricIndex = lines.findLastIndex((line) => line.time <= state.currentTime);
+      renderer.update(state);
+    };
+    renderer.mount(document.querySelector('#root'), state, {
+      post(action, payload = {}) {
+        if (action === 'togglePlayback') state.isPlaying = !state.isPlaying;
+        if (action === 'toggleFavorite') state.isFavorite = !state.isFavorite;
+        if (action === 'toggleMute') state.isMuted = !state.isMuted;
+        if (action === 'seekTime') state.currentTime = Number(payload.time) || 0;
+        if (action === 'setVolume') state.volume = Number(payload.value) || 0;
+        if (action === 'togglePlaybackMode') {
+          state.playbackMode = state.playbackMode === 'fixed' ? 'shuffle' : state.playbackMode === 'shuffle' ? 'single' : 'fixed';
+          state.playbackModeLabel = state.playbackMode === 'shuffle' ? '随机播放' : state.playbackMode === 'single' ? '单曲循环' : '列表循环';
+        }
+        if (action === 'playQueueTrack' && state.queueTracks[payload.index]) state.activeTrack = state.queueTracks[payload.index];
+        if (action === 'updateConfig') state.config = payload.config || {};
+        update();
+      },
+    });
+    setInterval(() => {
+      if (!state.isPlaying) return;
+      state.currentTime = (state.currentTime + 0.1 * state.playbackRate) % state.duration;
+      const time = performance.now() / 1000;
+      renderer.updateAudioSpectrum([
+        0.22 + Math.max(0, Math.sin(time * 3.1)) * 0.62,
+        0.18 + Math.max(0, Math.sin(time * 2.4 + 0.7)) * 0.48,
+        0.14 + Math.max(0, Math.sin(time * 1.9 + 1.4)) * 0.42,
+        0.10 + Math.max(0, Math.sin(time * 4.2 + 0.2)) * 0.34,
+        0.08 + Math.max(0, Math.sin(time * 5.1 + 2.2)) * 0.30,
+      ]);
+      update();
+    }, 100);
+  </script>
+</body>
+</html>

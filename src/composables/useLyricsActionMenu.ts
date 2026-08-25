@@ -3,7 +3,7 @@ import { ref } from 'vue';
 const MIN_LYRIC_FONT_SIZE = 14;
 const MAX_LYRIC_FONT_SIZE = 34;
 const MENU_WIDTH = 204;
-const MENU_HEIGHT = 284;
+const MENU_HEIGHT = 318;
 
 export function useLyricsActionMenu(options: {
   getFontSize: () => number;

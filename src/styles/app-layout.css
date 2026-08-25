@@ -99,6 +99,10 @@
   backdrop-filter: blur(10px);
 }
 
+.mono-window.lyrics-open .app-shell-dock:has(.player-dock.lyrics-auto-hidden) {
+  pointer-events: none;
+}
+
 .mono-window.has-theme-background .main-nav a:hover,
 .mono-window.has-theme-background .playlist-nav-item:hover,
 .mono-window.has-theme-background .main-nav .is-active,

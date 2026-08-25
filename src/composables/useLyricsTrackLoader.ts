@@ -3,12 +3,6 @@ import { isTauriRuntime, resolveLyricsSource } from '../services/music';
 import type { LyricLine, Track, TrackLyrics } from '../types/music';
 import { parseRawLyrics } from '../utils/lyrics';
 
-interface LyricsCoverValue {
-  data: number[] | null;
-  mimeType: string | null;
-  url: string;
-}
-
 export function normalizeLyricLines(lines: LyricLine[]) {
   return lines.filter((line) => {
     const text = line.text.trim();
@@ -21,22 +15,13 @@ export function useLyricsTrackLoader(options: {
   activeLyrics: ComputedRef<TrackLyrics | null | undefined>;
   activeTrack: ComputedRef<Track | null>;
   activeTrackIdentityKey: ComputedRef<string>;
-  applyCover: (key: string, cover: LyricsCoverValue) => void;
   clearCoverState: () => void;
-  hasLyricsCoverCache: (key: string) => boolean;
-  isActiveCoverDisplayed: (key: string) => boolean;
   isLoadingLyrics: Ref<boolean>;
   isLyricSyncOpen: Ref<boolean>;
   lyricFormat: ComputedRef<string | null>;
   lines: Ref<LyricLine[]>;
-  loadLyricsCover: (path: string, artwork: string | null | undefined, coverVersion: number | undefined, cacheSource?: string) => Promise<{ key: string; cover: LyricsCoverValue | null }>;
-  loadLyricsCoverThumbnail: (path: string, artwork: string | null | undefined, coverVersion: number | undefined, cacheSource?: string) => Promise<{ key: string; cover: LyricsCoverValue | null }>;
   lyricTimeOffset: Ref<number>;
-  prepareTrackCover: (identityKey: string, artwork: string | null | undefined, coverVersion: number | undefined) => {
-    nextCoverCacheKey: string;
-    nextThumbCacheKey: string;
-    usableArtworkUrl: string | null;
-  };
+  prepareTrackCover: (artwork: string | null | undefined) => void;
   syncLyricsToCurrentTime: () => Promise<void>;
 }) {
   let lyricsLoadRequestId = 0;
@@ -52,7 +37,7 @@ export function useLyricsTrackLoader(options: {
       options.lyricFormat.value,
       options.activeTrack.value?.coverVersion,
     ] as const,
-    async ([identityKey, path, _title, _artist, artwork, _lyrics, lyricFormat, coverVersion], previousValue) => {
+    async ([identityKey, path, _title, _artist, artwork, _lyrics, lyricFormat, _coverVersion], previousValue) => {
       const requestId = ++lyricsLoadRequestId;
       const previousIdentityKey = previousValue?.[0] ?? null;
       if (identityKey !== previousIdentityKey) {
@@ -65,7 +50,7 @@ export function useLyricsTrackLoader(options: {
         return;
       }
 
-      const { nextCoverCacheKey, nextThumbCacheKey, usableArtworkUrl } = options.prepareTrackCover(identityKey, artwork, coverVersion);
+      options.prepareTrackCover(artwork);
 
       options.isLoadingLyrics.value = true;
       try {
@@ -81,23 +66,6 @@ export function useLyricsTrackLoader(options: {
         if (requestId !== lyricsLoadRequestId) return;
         options.lines.value = normalizeLyricLines(lyrics);
         await options.syncLyricsToCurrentTime();
-
-        if (!usableArtworkUrl && !options.hasLyricsCoverCache(nextCoverCacheKey) && !options.hasLyricsCoverCache(nextThumbCacheKey)) {
-          const { key, cover } = await options.loadLyricsCoverThumbnail(path, artwork, coverVersion, identityKey);
-          if (requestId !== lyricsLoadRequestId) return;
-          if (cover) {
-            options.applyCover(key, cover);
-          }
-        }
-
-        if (!usableArtworkUrl) {
-          const { key, cover } = await options.loadLyricsCover(path, artwork, coverVersion, identityKey);
-          if (requestId !== lyricsLoadRequestId) return;
-          if (options.isActiveCoverDisplayed(key)) return;
-          if (cover) {
-            options.applyCover(key, cover);
-          }
-        }
       } finally {
         if (requestId !== lyricsLoadRequestId) return;
         options.isLoadingLyrics.value = false;

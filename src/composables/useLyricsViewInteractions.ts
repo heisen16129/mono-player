@@ -5,10 +5,7 @@ interface LyricsViewInteractionOptions {
   closeFontMenu: () => void;
   closeFontMenuOnOutsidePointer: (event: PointerEvent) => void;
   closeFullscreenIfNeeded: () => Promise<void>;
-  isPlayerDockHidden: () => boolean;
   onClose: () => void;
-  onHidePlayerDock: () => void;
-  onShowPlayerDock: () => void;
   openFontMenu: (event: MouseEvent) => void;
   syncLyricsToCurrentTime: () => Promise<void> | void;
   toggleLyricsFullscreen: () => Promise<void> | void;
@@ -24,15 +21,6 @@ export function useLyricsViewInteractions(options: LyricsViewInteractionOptions)
   async function openActionMenu(event: MouseEvent) {
     await options.updateFullscreenState();
     options.openFontMenu(event);
-  }
-
-  function togglePlayerDock() {
-    if (options.isPlayerDockHidden()) {
-      options.onShowPlayerDock();
-    } else {
-      options.onHidePlayerDock();
-    }
-    options.closeFontMenu();
   }
 
   function toggleFullscreen() {
@@ -55,6 +43,5 @@ export function useLyricsViewInteractions(options: LyricsViewInteractionOptions)
     closeLyricsView,
     openActionMenu,
     toggleFullscreen,
-    togglePlayerDock,
   };
 }

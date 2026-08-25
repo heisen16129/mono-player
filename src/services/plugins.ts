@@ -198,6 +198,48 @@ export async function installLocalPlugin(filePath: string): Promise<PluginManife
   });
 }
 
+export async function installLocalLyricsRendererManifest(filePath: string): Promise<PluginManifest[]> {
+  if (!filePath.toLowerCase().endsWith('.json')) throw new Error('歌词渲染插件 manifest 必须是 JSON 文件。');
+  const raw = await invokeApi<string>('read_local_plugin_manifest', { filePath });
+  const value = JSON.parse(raw) as Partial<PluginManifest>;
+  if (value.runtime !== 'module' || value.kind !== 'lyrics-renderer' || !value.capabilities?.includes('lyrics-renderer')) {
+    throw new Error('manifest 必须声明 runtime=module、kind=lyrics-renderer 和 lyrics-renderer capability。');
+  }
+  if (!value.id || !value.name || !value.entry) throw new Error('manifest 缺少 id、name 或 entry。');
+  const slash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  const base = slash >= 0 ? filePath.slice(0, slash + 1) : '';
+  const entry = /^(https?:|asset:|\/|[a-zA-Z]:[\\/]|\\\\)/.test(value.entry) ? value.entry : `${base}${value.entry}`;
+  const manifest: PluginManifest = {
+    id: value.id,
+    name: value.name,
+    version: value.version ?? '0.0.0',
+    kind: 'lyrics-renderer',
+    runtime: 'module',
+    entry,
+    author: value.author ?? 'Local',
+    description: value.description ?? '',
+    icon: value.icon,
+    updatedAt: value.updatedAt ?? new Date().toISOString(),
+    capabilities: ['lyrics-renderer'],
+    tags: value.tags,
+    highlights: value.highlights,
+    screenshots: value.screenshots,
+    permissions: value.permissions ?? [],
+    sourceUrl: filePath,
+    sourceKind: 'local',
+    installedAt: new Date().toISOString(),
+    enabled: true,
+    configSchema: value.configSchema,
+  };
+  return runPluginMutation(async () => {
+    const installed = await listInstalledPlugins();
+    const nextInstalled = [manifest, ...installed.filter((plugin) => plugin.id !== manifest.id)];
+    await restoreDeletedPlugin(manifest.id);
+    await saveInstalledPlugins(nextInstalled);
+    return nextInstalled;
+  });
+}
+
 function isAbsolutePluginAsset(value: string) {
   return /^(https?:|data:|blob:|\/|[a-zA-Z]:[\\/]|\\\\)/.test(value);
 }

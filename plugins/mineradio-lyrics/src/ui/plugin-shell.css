@@ -1,0 +1,55 @@
+.mineradio-player.mono-mineradio{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;background:#050608;color:#fff}
+.mono-mineradio button,.mono-mineradio input{font:inherit}
+.mono-mineradio .mono-close{position:fixed;z-index:60;top:18px;left:18px}
+.mono-mineradio .mono-top-actions{position:fixed;z-index:60;top:18px;right:120px;display:flex;gap:8px}
+.mono-mineradio .mono-top-actions .ctrl-btn{width:38px;height:38px;border:1px solid rgba(255,255,255,.1);border-radius:50%;background:rgba(8,10,12,.42);backdrop-filter:blur(14px)}
+.mono-mineradio #thumb-wrap{display:none}
+.mono-mineradio #bottom-bar{z-index:55}
+.mono-mineradio #controls{min-width:0}
+.mono-mineradio .control-track{min-width:0}
+.mono-mineradio .control-meta{min-width:0}
+.mono-mineradio .control-title,.mono-mineradio .control-artist{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mono-mineradio .ctrl-btn[disabled]{opacity:.35;cursor:default}
+.mono-mineradio .ctrl-btn.liked{color:#ff6174}
+.mono-mineradio .lyrics-word-icon{font-size:18px;font-weight:900}
+.mono-mineradio #time-display{white-space:nowrap}
+.mono-mineradio .volume-popover{display:none}
+.mono-mineradio .volume-control.open .volume-popover{display:flex}
+.mono-mineradio .mono-queue{position:fixed;right:32px;bottom:118px;z-index:70;width:min(390px,calc(100vw - 40px));max-height:min(540px,calc(100vh - 180px));overflow:hidden;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:rgba(8,9,12,.9);box-shadow:0 28px 80px rgba(0,0,0,.48);backdrop-filter:blur(26px)}
+.mono-mineradio .mono-queue.hidden{display:none}
+.mono-mineradio .mono-queue-head{display:flex;align-items:center;justify-content:space-between;padding:15px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.mono-mineradio .mono-queue-head span{font-size:11px;color:rgba(255,255,255,.45)}
+.mono-mineradio .mono-queue-list{max-height:min(470px,calc(100vh - 250px));overflow:auto;padding:8px;scrollbar-width:thin;scrollbar-color:rgba(0,245,212,.24) transparent}
+.mono-mineradio .mono-queue-list::-webkit-scrollbar{width:3px}
+.mono-mineradio .mono-queue-list::-webkit-scrollbar-track{background:transparent}
+.mono-mineradio .mono-queue-list::-webkit-scrollbar-thumb{background:rgba(0,245,212,.24);border-radius:3px}
+.mono-mineradio .mono-queue-item{display:grid;width:100%;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px;border:0;border-radius:9px;background:transparent;color:#fff;text-align:left;cursor:pointer}
+.mono-mineradio .mono-queue-item:hover,.mono-mineradio .mono-queue-item.now{background:rgba(255,255,255,.08)}
+.mono-mineradio .mono-queue-cover{width:38px;height:38px;border-radius:7px;object-fit:cover;background:rgba(255,255,255,.08)}
+.mono-mineradio .mono-queue-cover.cover-empty{display:grid;place-items:center;color:rgba(255,255,255,.38)}
+.mono-mineradio .mono-queue-copy{min-width:0}
+.mono-mineradio .mono-queue-title,.mono-mineradio .mono-queue-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mono-mineradio .mono-queue-title{font-size:13px;font-weight:760}
+.mono-mineradio .mono-queue-sub,.mono-mineradio .mono-queue-duration{font-size:10px;color:rgba(255,255,255,.45)}
+.mono-mineradio .mono-empty{padding:28px 16px;text-align:center;color:rgba(255,255,255,.45)}
+.mono-mineradio #fx-panel{z-index:80}
+.mono-mineradio #fx-panel.show{display:block}
+.mono-mineradio .fx-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border:0;border-radius:50%;background:rgba(255,255,255,.06);color:#fff;cursor:pointer}
+.mono-mineradio .fx-slider output{font-variant-numeric:tabular-nums}
+.mono-mineradio .fx-toggle{cursor:pointer}
+.mono-mineradio .fx-section-label:first-child{margin-top:0}
+.mono-mineradio .mono-fx-note{margin:8px 0 12px;font-size:10px;line-height:1.55;color:rgba(255,255,255,.38)}
+.mono-mineradio .mono-settings-actions{display:flex;gap:8px;margin-top:14px}
+.mono-mineradio .mono-settings-actions button{flex:1}
+@media (max-width:760px){
+  .mono-mineradio .mono-top-actions{right:84px}
+  .mineradio-player.mono-mineradio.diy-mode #bottom-bar,.mineradio-player.mono-mineradio.diy-mode #bottom-bar.stage-mode{left:14px;right:14px;bottom:14px;width:auto;transform:translateY(36px) scale(.972)}
+  .mineradio-player.mono-mineradio.diy-mode #bottom-bar.visible{transform:translateY(0) scale(1)}
+  .mineradio-player.mono-mineradio.diy-mode.control-glass-svg-ok #bottom-bar.visible{backdrop-filter:blur(20px) saturate(1.35);-webkit-backdrop-filter:blur(20px) saturate(1.35)}
+  .mineradio-player.mono-mineradio.diy-mode #bottom-bar.soft-hidden{transform:translateY(88px) scale(.972)}
+  .mineradio-player.mono-mineradio.diy-mode #controls{grid-template-columns:minmax(0,1fr) auto}
+  .mono-mineradio .control-cluster.transport{grid-row:1;grid-column:2}
+  .mono-mineradio .control-cluster.modes{grid-column:1/-1;justify-content:flex-end}
+  .mono-mineradio #play-mode-btn,.mono-mineradio #prev-btn,.mono-mineradio #next-btn{display:none}
+  .mono-mineradio .mono-queue{right:14px;bottom:118px}
+}

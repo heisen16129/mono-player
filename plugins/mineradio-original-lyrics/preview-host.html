@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mineradio 原版歌词插件宿主隔离预览</title>
+  <style>html,body,iframe{width:100%;height:100%;margin:0;border:0;background:#070708;overflow:hidden}</style>
+</head>
+<body>
+  <iframe id="plugin" sandbox="allow-scripts"></iframe>
+  <script type="module">
+    const moduleSource = await fetch('./renderer.mjs?v=1.0.3', { cache: 'no-store' }).then((response) => response.text());
+    const coverCanvas = document.createElement('canvas');
+    coverCanvas.width = coverCanvas.height = 640;
+    const coverContext = coverCanvas.getContext('2d');
+    const coverGradient = coverContext.createLinearGradient(0, 0, 640, 640);
+    coverGradient.addColorStop(0, '#143b68');
+    coverGradient.addColorStop(.52, '#b94178');
+    coverGradient.addColorStop(1, '#f0b45f');
+    coverContext.fillStyle = coverGradient;
+    coverContext.fillRect(0, 0, 640, 640);
+    coverContext.strokeStyle = 'rgba(255,255,255,.65)';
+    coverContext.lineWidth = 20;
+    coverContext.beginPath();
+    coverContext.arc(320, 300, 185, 0, Math.PI * 2);
+    coverContext.stroke();
+    coverContext.fillStyle = '#fff';
+    coverContext.font = '700 72px sans-serif';
+    coverContext.textAlign = 'center';
+    coverContext.fillText('MONO', 320, 330);
+    const coverDataUrl = coverCanvas.toDataURL('image/png');
+    const context = {
+      activeTrack: {
+        id: 'host-collision-preview',
+        title: '宿主作用域测试',
+        artist: 'Mono Player',
+        album: 'Mineradio 原版歌词',
+        duration: 231,
+        artworkDataUrl: coverDataUrl,
+      },
+      queueTracks: [],
+      lines: [{ time: 0, text: '原版运行时已与宿主变量隔离' }],
+      currentTime: 8,
+      duration: 231,
+      isPlaying: true,
+      volume: 72,
+      config: {},
+    };
+    const serializedSource = JSON.stringify(moduleSource).replace(/</g, '\\u003c');
+    const serializedContext = JSON.stringify(context).replace(/</g, '\\u003c');
+    document.querySelector('#plugin').srcdoc = `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style><script>
+const entry='local-module';const source=${serializedSource};let renderer=null;let rendererReady=false;let moduleUrl=entry;let api={post:(action,payload)=>parent.postMessage({type:'preview-action',action,payload},'*')};
+(async()=>{const liveContext=${serializedContext};moduleUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const loaded=await import(moduleUrl);renderer=loaded.default||loaded;await renderer.mount(document.body,liveContext,api);rendererReady=true;setInterval(()=>{liveContext.currentTime=(liveContext.currentTime+.1)%liveContext.duration;renderer.update?.(liveContext);renderer.updateAudioSpectrum?.([.78,.54,.38,.62,.86])},100);parent.postMessage({type:'preview-ready'},'*')})().catch((error)=>parent.postMessage({type:'preview-error',message:String(error)},'*'));
+<\/script>`;
+    window.addEventListener('message', (event) => {
+      if (event.data?.type === 'preview-ready') document.body.dataset.hostPreviewReady = 'true';
+      if (event.data?.type === 'preview-error') document.body.dataset.hostPreviewError = event.data.message;
+    });
+  </script>
+</body>
+</html>

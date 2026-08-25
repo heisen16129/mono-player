@@ -1,0 +1,114 @@
+{
+  "id": "apple-music-lyrics",
+  "name": "Apple Music 歌词",
+  "version": "1.3.3",
+  "kind": "lyrics-renderer",
+  "runtime": "module",
+  "entry": "./renderer.mjs",
+  "author": "Mono Player",
+  "description": "Apple Music 风格的动态舞台、逐词歌词、播放队列与可持久化显示设置。",
+  "updatedAt": "2026-08-16",
+  "capabilities": ["lyrics-renderer"],
+  "permissions": [],
+  "configSchema": {
+    "fields": [
+      {
+        "key": "fontSize",
+        "label": "歌词字号",
+        "labelEn": "Lyric size",
+        "type": "range",
+        "defaultValue": 28,
+        "min": 24,
+        "max": 72,
+        "step": 1
+      },
+      {
+        "key": "lineHeight",
+        "label": "歌词行高",
+        "labelEn": "Line height",
+        "type": "range",
+        "defaultValue": 1.2,
+        "min": 1,
+        "max": 1.8,
+        "step": 0.05
+      },
+      {
+        "key": "lineGap",
+        "label": "歌词间距",
+        "labelEn": "Line spacing",
+        "type": "range",
+        "defaultValue": 0.5,
+        "min": 0.2,
+        "max": 1.2,
+        "step": 0.05
+      },
+      {
+        "key": "alignPosition",
+        "label": "歌词对齐位置",
+        "labelEn": "Lyric alignment",
+        "type": "range",
+        "defaultValue": 45,
+        "min": 25,
+        "max": 65,
+        "step": 1
+      },
+      {
+        "key": "backgroundMode",
+        "label": "背景效果",
+        "labelEn": "Backdrop",
+        "type": "select",
+        "defaultValue": "dynamic",
+        "options": [
+          { "label": "动态", "value": "dynamic" },
+          { "label": "静态", "value": "static" },
+          { "label": "AMLL", "value": "amll" }
+        ]
+      },
+      {
+        "key": "backgroundBlur",
+        "label": "背景模糊",
+        "labelEn": "Background blur",
+        "type": "range",
+        "defaultValue": 32,
+        "min": 0,
+        "max": 60,
+        "step": 2
+      },
+      {
+        "key": "showCover",
+        "label": "显示封面",
+        "labelEn": "Show artwork",
+        "type": "switch",
+        "defaultValue": true
+      },
+      {
+        "key": "enableBlur",
+        "label": "非当前歌词模糊",
+        "labelEn": "Inactive lyric blur",
+        "type": "switch",
+        "defaultValue": true
+      },
+      {
+        "key": "enableScale",
+        "label": "歌词缩放层次",
+        "labelEn": "Lyric scale depth",
+        "type": "switch",
+        "defaultValue": true
+      },
+      {
+        "key": "showWordProgress",
+        "label": "逐词高亮",
+        "labelEn": "Word highlighting",
+        "type": "switch",
+        "defaultValue": true
+      },
+      {
+        "key": "smoothScroll",
+        "label": "AMLL 弹簧跟随",
+        "labelEn": "AMLL spring following",
+        "type": "switch",
+        "defaultValue": true
+      }
+    ]
+  }
+}

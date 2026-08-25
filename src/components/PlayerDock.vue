@@ -13,6 +13,7 @@ import { usePlayerDockTransportRequests } from '../composables/usePlayerDockTran
 import { useQueuePopover } from '../composables/useQueuePopover';
 import { useSleepTimer } from '../composables/useSleepTimer';
 import type { PlayerDockEmits, PlayerDockProps } from '../types/playerDock';
+import type { PlayerDockController } from '../types/playerDockController';
 import NowPlayingInfo from './player-dock/NowPlayingInfo.vue';
 import PlaybackErrorToast from './player-dock/PlaybackErrorToast.vue';
 import PlaybackMetaControls from './player-dock/PlaybackMetaControls.vue';
@@ -252,6 +253,45 @@ const {
     playbackModeLabel: () => props.playbackModeLabel,
   },
 });
+
+const playerDockController: PlayerDockController = {
+  playbackMetaControlProps,
+  transportControlProps,
+  progress,
+  totalDuration,
+  togglePlayback,
+  requestNextTrack,
+  requestPreviousTrack,
+  requestFavoriteToggle,
+  requestPlaybackModeToggle,
+  previewSeekAudio,
+  commitSeekAudio,
+  changeVolume,
+  toggleMute,
+  changePlaybackRate,
+  clearSleepTimer,
+  closeSleepTimerDialog,
+  closeSleepTimerStatus,
+  downloadActiveTrack: () => emit('downloadActiveTrack'),
+  locateQueueTrack,
+  changeLyricFormat: (format) => emit('lyricFormatChange', format),
+  changeOnlineQuality: (quality) => emit('onlineQualityChange', quality),
+  openDesktopLyrics: () => emit('openDesktopLyrics'),
+  pauseSleepTimer,
+  playQueueTrack,
+  resumeSleepTimer,
+  setQueueControlElement,
+  setQueueTrackElement,
+  setSleepTimerAction: (action) => player.setSleepTimerAction(action),
+  setSleepTimerHours: (value) => { sleepTimerHours.value = value; },
+  setSleepTimerMinutes: (value) => { sleepTimerMinutes.value = value; },
+  setSleepTimerPreset,
+  startSleepTimer,
+  toggleQueuePanel,
+  toggleSleepTimer: handleSleepTimerButtonClick,
+};
+
+defineExpose({ getController: () => playerDockController });
 </script>
 
 <template>

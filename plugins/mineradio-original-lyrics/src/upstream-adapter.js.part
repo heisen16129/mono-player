@@ -1,0 +1,253 @@
+(function installMonoMineradioOriginalAdapter() {
+  var state = {
+    trackKey: '',
+    coverKey: '',
+    lyricsKey: '',
+    queueKey: '',
+    surfaceReady: false,
+    spectrum: [0, 0, 0, 0, 0],
+  };
+  var hostClock = {
+    currentTime: 0,
+    duration: 0,
+    paused: true,
+    ended: false,
+    playbackRate: 1,
+    volume: 1,
+    muted: false,
+    src: 'mono://active-track',
+    currentSrc: 'mono://active-track',
+    readyState: 4,
+    networkState: 1,
+    addEventListener: function () {},
+    removeEventListener: function () {},
+    dispatchEvent: function () { return true; },
+    play: function () { this.paused = false; return Promise.resolve(); },
+    pause: function () { this.paused = true; },
+  };
+
+  function keyOf(value) {
+    try { return JSON.stringify(value); } catch (error) { return String(value || ''); }
+  }
+
+  function setText(id, value) {
+    var element = document.getElementById(id);
+    if (element) element.textContent = value || '';
+  }
+
+  function spectrumValueAtHz(hz) {
+    var low = state.spectrum[0] || 0;
+    var middle = state.spectrum[1] || 0;
+    var high = state.spectrum[2] || 0;
+    var energy = state.spectrum[3] || ((low + middle + high) / 3);
+    var beat = state.spectrum[4] || 0;
+    if (hz < 75) return Math.max(low * 0.82, beat * 0.92, energy * 0.24);
+    if (hz < 180) return Math.max(low, beat * 0.72, energy * 0.30);
+    if (hz < 520) return low * 0.68 + middle * 0.24 + energy * 0.08;
+    if (hz < 2600) return middle * 0.82 + low * 0.08 + energy * 0.10;
+    if (hz < 6200) return middle * 0.42 + high * 0.50 + energy * 0.08;
+    if (hz < 16000) return high * 0.88 + energy * 0.12;
+    return high * 0.52 + energy * 0.08;
+  }
+
+  function installHostSpectrumAnalyser() {
+    analyser = {
+      fftSize: FFT_SIZE,
+      frequencyBinCount: FFT_SIZE / 2,
+      getByteFrequencyData: function (target) {
+        var binHz = 44100 / FFT_SIZE;
+        for (var i = 0; i < target.length; i++) {
+          var value = Math.max(0, Math.min(1, spectrumValueAtHz(i * binHz)));
+          target[i] = Math.round(value * 255);
+        }
+      },
+      getByteTimeDomainData: function (target) {
+        var amplitude = Math.max(0, Math.min(1, state.spectrum[3] || 0)) * 48;
+        var phase = performance.now() * 0.006;
+        for (var i = 0; i < target.length; i++) {
+          target[i] = Math.round(128 + Math.sin(phase + i * 0.085) * amplitude);
+        }
+      },
+    };
+  }
+
+  function revealPluginVisuals() {
+    if (!uniforms) return;
+    if (uniforms.uAlpha) uniforms.uAlpha.value = 1;
+    if (uniforms.uLoading) uniforms.uLoading.value = 0;
+  }
+
+  function syncOriginalWindowState() {
+    window.audio = hostClock;
+    window.currentIdx = currentIdx;
+    window.frequencyData = frequencyData;
+    window.fx = fx;
+    window.playing = playing;
+    window.playlist = playlist;
+    window.playQueue = playQueue;
+    window.stageLyrics = stageLyrics;
+    window.coverUrlWithSize = coverUrlWithSize;
+    window.songCoverSrc = songCoverSrc;
+    window.lyricPaletteColorToHex = lyricPaletteColorToHex;
+  }
+
+  function forcePlayerSurface() {
+    if (state.surfaceReady) return;
+    state.surfaceReady = true;
+    try { if (typeof dismissSplash === 'function') dismissSplash({ instant: true }); } catch (error) {}
+    try { if (typeof applyDiyMode === 'function') applyDiyMode(true, { save: false }); } catch (error) {}
+    var splash = document.getElementById('splash');
+    if (splash) splash.style.display = 'none';
+    document.body.classList.remove('splash-active', 'splash-revealing');
+    try { if (typeof switchPlaybackVisualToEmily === 'function') switchPlaybackVisualToEmily(); } catch (error) {}
+    var emptyHome = document.getElementById('empty-home');
+    if (emptyHome) emptyHome.style.display = 'none';
+    installHostSpectrumAnalyser();
+    revealPluginVisuals();
+    syncOriginalWindowState();
+  }
+
+  function applyTrack(payload) {
+    var song = payload.track;
+    if (!song) return;
+    var nextKey = keyOf([song.id, song.name, song.artist, song.album]);
+    if (nextKey !== state.trackKey) {
+      state.trackKey = nextKey;
+      setText('thumb-title', song.name);
+      setText('thumb-artist', song.artist);
+      if (typeof updateControlTrackInfo === 'function') updateControlTrackInfo(song);
+      var thumbWrap = document.getElementById('thumb-wrap');
+      if (thumbWrap) thumbWrap.classList.add('visible');
+      currentLocalSong = song;
+    }
+    var nextCoverKey = String(song.cover || '');
+    if (nextCoverKey !== state.coverKey) {
+      state.coverKey = nextCoverKey;
+      var coverOptions = { noCoverTransition: !state.coverKey, deferHeavy: false, coverKey: nextCoverKey };
+      if (/^data:image\//i.test(nextCoverKey)) applyCoverDataUrl(nextCoverKey, coverOptions);
+      else if (nextCoverKey) loadCoverFromUrl(nextCoverKey, coverOptions);
+      else loadCoverFromUrl('', coverOptions);
+    }
+    revealPluginVisuals();
+  }
+
+  function applyQueue(payload) {
+    var nextQueueKey = keyOf(payload.queue.map(function (song) {
+      return [song.id, song.name, song.artist, song.cover, song.duration];
+    }));
+    var indexChanged = currentIdx !== payload.activeIndex;
+    if (nextQueueKey === state.queueKey && !indexChanged) return;
+    state.queueKey = nextQueueKey;
+    playQueue = payload.queue.slice();
+    currentIdx = payload.activeIndex;
+    syncOriginalWindowState();
+    queueViewTab = 'queue';
+    try { if (typeof safeRenderQueuePanel === 'function') safeRenderQueuePanel('mono-context', { animate: false, scrollCurrent: false, deferWhenHidden: false }); } catch (error) {}
+    try { if (typeof renderMiniQueuePanel === 'function') renderMiniQueuePanel({ scrollCurrent: false }); } catch (error) {}
+  }
+
+  function applyLyrics(payload) {
+    var lyricPayload = payload.lines || { lines: [], karaoke: false, timingSource: 'none' };
+    var nextLyricsKey = keyOf(lyricPayload.lines.map(function (line) {
+      return [line.t, line.text, line.words && line.words.length];
+    }));
+    if (nextLyricsKey === state.lyricsKey) return;
+    state.lyricsKey = nextLyricsKey;
+    if (typeof setOriginalLyricsState === 'function') {
+      setOriginalLyricsState(lyricPayload.lines, lyricPayload.karaoke, lyricPayload.timingSource, [], 'none');
+    }
+    if (typeof applyLyricsState === 'function') {
+      applyLyricsState(lyricPayload.lines, lyricPayload.karaoke, lyricPayload.timingSource, [], 'none', { reason: 'mono-context' });
+    }
+  }
+
+  function applyPlayback(payload) {
+    audio = hostClock;
+    audioReady = false;
+    hostClock.currentTime = payload.currentTime;
+    hostClock.duration = payload.duration;
+    hostClock.paused = !payload.playing;
+    hostClock.ended = payload.duration > 0 && payload.currentTime >= payload.duration;
+    hostClock.playbackRate = payload.playbackRate;
+    hostClock.volume = payload.volume;
+    hostClock.muted = payload.muted;
+    playing = payload.playing;
+    playToggleBusy = false;
+    syncOriginalWindowState();
+    if (typeof setPlayIcon === 'function') setPlayIcon(payload.playing);
+    if (typeof updatePlaybackProgressUi === 'function') updatePlaybackProgressUi();
+    var slider = document.getElementById('volume-slider');
+    var value = document.getElementById('volume-value');
+    if (slider && document.activeElement !== slider) slider.value = String(payload.volume);
+    if (value) value.textContent = Math.round(payload.volume * 100) + '%';
+    var heart = document.getElementById('heart-btn');
+    if (heart) heart.classList.toggle('liked', payload.favorite);
+  }
+
+  window.__monoMineradioOriginal = {
+    invokeInlineHandler: function (expression, event, element) {
+      if (!expression) return;
+      return (function () { return eval(expression); }).call(element);
+    },
+    selectSettingsTab: function (tab) {
+      if (typeof setFxPanelTab === 'function') setFxPanelTab(tab);
+    },
+    setContext: function (payload) {
+      forcePlayerSurface();
+      applyQueue(payload);
+      applyTrack(payload);
+      applyLyrics(payload);
+      applyPlayback(payload);
+    },
+    setSpectrum: function (levels) {
+      levels = Array.isArray(levels) ? levels : [];
+      state.spectrum = [0, 1, 2, 3, 4].map(function (index) {
+        return Math.max(0, Math.min(1, Number(levels[index]) || 0));
+      });
+      bass = Number(levels[0]) || 0;
+      mid = Number(levels[1]) || 0;
+      treble = Number(levels[2]) || 0;
+      audioEnergy = Number(levels[3]) || ((bass + mid + treble) / 3);
+      smoothBass = bass;
+      smoothMid = mid;
+      smoothTreb = treble;
+      smoothEnergy = audioEnergy;
+      beatPulse = Math.max(beatPulse * 0.82, Number(levels[4]) || bass * 0.7);
+      syncOriginalWindowState();
+    },
+    getClock: function () { return hostClock; },
+    showSettings: function () { if (typeof toggleFxPanel === 'function') toggleFxPanel(true); },
+    debug: function () {
+      return {
+        preset: fx && fx.preset,
+        camera: camera ? {
+          x: camera.position.x,
+          y: camera.position.y,
+          z: camera.position.z,
+          rx: camera.rotation.x,
+          ry: camera.rotation.y,
+          rz: camera.rotation.z,
+        } : null,
+        orbit: orbit ? {
+          theta: orbit.theta,
+          phi: orbit.phi,
+          radius: orbit.radius,
+          userTheta: orbit.userTheta,
+          userPhi: orbit.userPhi,
+        } : null,
+        stageRotation: gestureRotation ? {
+          x: gestureRotation.x,
+          y: gestureRotation.y,
+        } : null,
+        hasCover: uniforms && uniforms.uHasCover ? uniforms.uHasCover.value : 0,
+        particleAlpha: uniforms && uniforms.uAlpha ? uniforms.uAlpha.value : 0,
+        particleVisible: particles ? particles.visible : false,
+        particleCount: particles && particles.geometry && particles.geometry.getAttribute('position')
+          ? particles.geometry.getAttribute('position').count
+          : 0,
+        spectrum: state.spectrum.slice(),
+      };
+    },
+  };
+  forcePlayerSurface();
+})();

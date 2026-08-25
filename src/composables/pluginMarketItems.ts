@@ -2,7 +2,7 @@ import type { PluginCatalogItem, PluginManifest } from '../types/plugin';
 import type { PluginMarketItem, PluginMarketKind, PluginMarketStatus } from './usePluginMarket';
 
 const OFFICIAL_PLUGIN_ENTRY_PREFIX = 'https://raw.githubusercontent.com/heisen16129/mono-plugin-store/';
-const MARKET_PLUGIN_KINDS = new Set<string>(['music', 'lyrics', 'metadata', 'playlist', 'theme', 'integration', 'tool']);
+const MARKET_PLUGIN_KINDS = new Set<string>(['music', 'lyrics', 'lyrics-renderer', 'metadata', 'playlist', 'theme', 'integration', 'tool']);
 
 export function isMarketPluginKind(kind: string): kind is PluginMarketKind {
   return MARKET_PLUGIN_KINDS.has(kind);

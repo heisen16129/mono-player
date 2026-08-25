@@ -52,6 +52,7 @@ interface UseAppPlayerSurfaceBindingsActions {
   hoverLyricsDock: PlayerDockListeners['onMouseenter'];
   leaveLyricsDock: PlayerDockListeners['onMouseleave'];
   openDesktopLyrics: PlayerDockListeners['onOpenDesktopLyrics'];
+  openSettingsView: () => void;
   playActiveTrack: PlayerDockListeners['onRequestInitialPlayback'];
   playNextTrack: PlayerDockListeners['onPlayNext'];
   playPreviousTrack: PlayerDockListeners['onPlayPrevious'];
@@ -61,6 +62,7 @@ interface UseAppPlayerSurfaceBindingsActions {
   showOnlineToast: LyricsViewListeners['onNotify'];
   toggleDesktopLyrics: PlayerDockListeners['onToggleDesktopLyrics'];
   toggleFavoriteTrack: PlayerDockListeners['onToggleFavorite'];
+  requestPlaybackToggle: () => void;
   toggleLyricsView: PlayerDockListeners['onOpenLyrics'];
   togglePlaybackMode: PlayerDockListeners['onTogglePlaybackMode'];
   updateActiveTrackLyrics: LyricsViewListeners['onLyricsFound'];
@@ -133,6 +135,7 @@ export function useAppPlayerSurfaceBindings({
       activeTrack: () => state.activeTrack.value,
       currentTime: () => state.playbackTime.value,
       isPlaying: () => state.isAudioPlaying.value,
+      isFavorite: () => state.isActiveTrackFavorite.value,
       isOpen: () => state.isLyricsOpen.value,
       isPlayerDockHidden: () => state.isLyricsDockManuallyHidden.value,
       lyricFormat: () => state.playbackLyricFormat.value,
@@ -148,9 +151,17 @@ export function useAppPlayerSurfaceBindings({
       onLyricsCleared: actions.clearActiveTrackLyrics,
       onLyricsFound: actions.updateActiveTrackLyrics,
       onNotify: actions.showOnlineToast,
+      onOpenSettings: () => {
+        actions.closeLyricsView();
+        actions.openSettingsView();
+      },
       onHidePlayerDock: actions.hideLyricsDock,
       onShowPlayerDock: actions.showLyricsDock,
       onSeek: actions.seekToLyric,
+      onTogglePlayback: actions.requestPlaybackToggle,
+      onPlayNext: actions.playNextTrack,
+      onPlayPrevious: actions.playPreviousTrack,
+      onToggleFavorite: actions.toggleFavoriteTrack,
     },
   });
 

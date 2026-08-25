@@ -1,0 +1,14 @@
+{
+  "id": "mineradio-original-lyrics",
+  "name": "Mineradio 原版歌词",
+  "version": "1.0.4",
+  "kind": "lyrics-renderer",
+  "runtime": "module",
+  "entry": "./renderer.mjs",
+  "author": "Mineradio contributors / Mono Player bridge",
+  "license": "GPL-3.0-only",
+  "description": "Mineradio 2.1.0 原版视觉前端与设置面板，通过轻量桥接接入 Mono 播放状态、封面、歌词和队列。",
+  "updatedAt": "2026-08-25",
+  "capabilities": ["lyrics-renderer"],
+  "permissions": []
+}

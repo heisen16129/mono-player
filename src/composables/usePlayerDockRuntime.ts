@@ -162,13 +162,7 @@ export function usePlayerDockRuntime({
   }
 
   async function togglePlayback() {
-    if (isPreparingActiveTrack.value) return;
     if (!activeTrack.value?.path) return;
-
-    if (!canControlPlayback.value || !rustBackendActive.value) {
-      onRequestInitialPlayback();
-      return;
-    }
 
     if (isPlaying.value) {
       holdRustPlaybackStoppedState();
@@ -185,6 +179,12 @@ export function usePlayerDockRuntime({
         onPlaybackError(error);
         return;
       }
+      return;
+    }
+
+    if (isPreparingActiveTrack.value) return;
+    if (!canControlPlayback.value || !rustBackendActive.value) {
+      onRequestInitialPlayback();
       return;
     }
 

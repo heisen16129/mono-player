@@ -11,11 +11,11 @@ const props = defineProps<{
   playing?: boolean;
 }>();
 
-const { coverUrl, handleImageError, setCoverRoot } = useTrackCoverThumbUrl(toRef(props, 'track'));
+const { coverUrl, handleImageError } = useTrackCoverThumbUrl(toRef(props, 'track'));
 </script>
 
 <template>
-  <span :ref="setCoverRoot" class="track-cover-thumb" :class="{ 'has-cover': coverUrl, active, loading, playing }" aria-hidden="true">
+  <span class="track-cover-thumb" :class="{ 'has-cover': coverUrl, active, loading, playing }" aria-hidden="true">
     <TrackCoverThumbContent
       :active="active"
       :cover-url="coverUrl"

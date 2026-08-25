@@ -265,6 +265,16 @@ fn download_cover_file_inner(
     player_state: State<'_, crate::player::PlayerState>,
     request: DownloadCoverRequest,
 ) -> Result<DownloadCoverResult, String> {
+    eprintln!(
+        "[download-cover] request title={:?} artist={:?} trackPath={:?} artworkUrl={:?} mimeType={:?} dataBytes={}",
+        request.title,
+        request.artist,
+        request.track_path,
+        request.artwork_url,
+        request.mime_type,
+        request.data.as_ref().map(Vec::len).unwrap_or(0)
+    );
+
     let download_dir = PathBuf::from(request.download_dir.trim());
     if download_dir.as_os_str().is_empty() {
         return Err("请先在设置中选择下载位置。".to_string());
@@ -277,6 +287,12 @@ fn download_cover_file_inner(
             .as_deref()
             .and_then(mime_type_from_content_type)
             .or_else(|| mime_type_from_bytes(&data));
+        eprintln!(
+            "[download-cover] using inline cover data bytes={} mime={:?} head={}",
+            data.len(),
+            mime_type,
+            hex_head(&data)
+        );
         (data, mime_type)
     } else {
         let artwork_url = request
@@ -308,19 +324,44 @@ fn download_cover_file_inner(
             .and_then(mime_type_from_content_type);
         let data = response.bytes().map_err(|err| err.to_string())?.to_vec();
         let mime_type = header_mime.or_else(|| mime_type_from_bytes(&data));
+        eprintln!(
+            "[download-cover] fetched cover url={:?} bytes={} mime={:?} head={}",
+            artwork_url,
+            data.len(),
+            mime_type,
+            hex_head(&data)
+        );
         (data, mime_type)
     };
 
-    let embedded_in_track = match write_cover_to_track_metadata(
-        request.track_path.as_deref(),
-        &data,
-        mime_type.clone(),
-    ) {
-        Ok(value) => value,
-        Err(error) => {
+    eprintln!(
+        "[download-cover] writing cover target trackPath={:?} bytes={} mime={:?}",
+        request.track_path,
+        data.len(),
+        mime_type
+    );
+    let write_result = catch_unwind(AssertUnwindSafe(|| {
+        write_cover_to_track_metadata(request.track_path.as_deref(), &data, mime_type.clone())
+    }));
+    let embedded_in_track = match write_result {
+        Ok(Ok(value)) => {
+            eprintln!("[download-cover] write metadata result embeddedInTrack={value}");
+            value
+        }
+        Ok(Err(error)) => {
             eprintln!(
                 "[download-cover] embed cover failed, fallback to image file: trackPath={:?}, title={:?}, artist={:?}, error={}",
                 request.track_path, request.title, request.artist, error
+            );
+            false
+        }
+        Err(error) => {
+            eprintln!(
+                "[download-cover] embed cover skipped after panic, fallback to image file: trackPath={:?}, title={:?}, artist={:?}, panic={}",
+                request.track_path,
+                request.title,
+                request.artist,
+                panic_message(error)
             );
             false
         }
@@ -1059,6 +1100,14 @@ fn cover_extension(mime_type: Option<&MimeType>, data: &[u8]) -> &'static str {
         Some(MimeType::Bmp) => "bmp",
         _ => "jpg",
     }
+}
+
+fn hex_head(data: &[u8]) -> String {
+    data.iter()
+        .take(16)
+        .map(|byte| format!("{byte:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn write_lyrics_file(

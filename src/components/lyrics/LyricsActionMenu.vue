@@ -26,6 +26,7 @@ const emit = defineEmits<{
   increaseFontSize: [];
   openLyricSearch: [];
   openLyricSync: [];
+  openSettings: [];
   toggleFullscreen: [];
   togglePlayerDock: [];
 }>();
@@ -38,11 +39,13 @@ const emit = defineEmits<{
     role="menu"
     aria-label="歌词操作"
     @contextmenu.prevent
+    @click.stop
     @pointerdown.stop
   >
     <LyricsFontSizeControl :font-size="fontSize" @decrease="emit('decreaseFontSize')" @increase="emit('increaseFontSize')" />
     <span class="lyrics-menu-separator" aria-hidden="true"></span>
     <LyricsMenuItem disabled>操作</LyricsMenuItem>
+    <LyricsMenuItem @select="emit('openSettings')">设置</LyricsMenuItem>
     <LyricsMenuItem @select="emit('toggleFullscreen')">
       {{ isFullscreen ? '退出全屏' : '全屏显示' }}
     </LyricsMenuItem>

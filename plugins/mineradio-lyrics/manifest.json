@@ -1,0 +1,105 @@
+{
+  "id": "mineradio-lyrics",
+  "name": "Mineradio 3D 歌词",
+  "version": "3.1.9",
+  "kind": "lyrics-renderer",
+  "runtime": "module",
+  "entry": "./renderer.mjs",
+  "author": "Mono Player / Mineradio contributors",
+  "license": "GPL-3.0-only",
+  "description": "完整移植 Mineradio 视觉引擎，以 Mono Track、逐字歌词和后端频谱驱动原版粒子、镜头与舞台歌词。",
+  "updatedAt": "2026-08-18",
+  "capabilities": ["lyrics-renderer"],
+  "permissions": [],
+  "configSchema": {
+    "fields": [
+      {
+        "key": "visualPreset",
+        "label": "视觉预设",
+        "labelEn": "Visual preset",
+        "type": "select",
+        "defaultValue": "cover",
+        "options": [
+          { "label": "emily专辑封面", "value": "cover" },
+          { "label": "滚筒", "value": "roller" },
+          { "label": "星球", "value": "planet" },
+          { "label": "虚空", "value": "void" },
+          { "label": "唱片", "value": "record" },
+          { "label": "星河", "value": "river" },
+          { "label": "安魂", "value": "skull" }
+        ]
+      },
+      {
+        "key": "depth",
+        "label": "封面景深",
+        "labelEn": "Cover depth",
+        "type": "range",
+        "defaultValue": 62,
+        "min": 0,
+        "max": 100,
+        "step": 1
+      },
+      {
+        "key": "glow",
+        "label": "歌词辉光",
+        "labelEn": "Lyric glow",
+        "type": "range",
+        "defaultValue": 68,
+        "min": 0,
+        "max": 100,
+        "step": 1
+      },
+      {
+        "key": "motion",
+        "label": "电影镜头",
+        "labelEn": "Cinema motion",
+        "type": "range",
+        "defaultValue": 58,
+        "min": 0,
+        "max": 100,
+        "step": 1
+      },
+      {
+        "key": "particleSize",
+        "label": "粒子大小",
+        "labelEn": "Particle size",
+        "type": "range",
+        "defaultValue": 56,
+        "min": 0,
+        "max": 100,
+        "step": 1
+      },
+      {
+        "key": "lyricScale",
+        "label": "歌词尺寸",
+        "labelEn": "Lyric scale",
+        "type": "range",
+        "defaultValue": 60,
+        "min": 0,
+        "max": 100,
+        "step": 1
+      },
+      {
+        "key": "showLyrics",
+        "label": "舞台歌词",
+        "labelEn": "Stage lyrics",
+        "type": "switch",
+        "defaultValue": true
+      },
+      {
+        "key": "autoRotate",
+        "label": "自动运镜",
+        "labelEn": "Automatic camera",
+        "type": "switch",
+        "defaultValue": true
+      },
+      {
+        "key": "reducedFx",
+        "label": "低功耗模式",
+        "labelEn": "Reduced effects",
+        "type": "switch",
+        "defaultValue": false
+      }
+    ]
+  }
+}

@@ -15,9 +15,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
-#[cfg(not(target_os = "windows"))]
-use tauri::Url;
-use tauri::State;
+use tauri::{State, Url};
 
 static FAILED_EMBEDDED_COVER_KEYS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
@@ -39,6 +37,36 @@ pub(crate) struct CropCoverImageResult {
 #[tauri::command]
 pub(crate) fn read_cover(path: String) -> ApiResponse<Option<CoverImage>> {
     ApiResponse::from_result(read_cover_backend(path))
+}
+
+#[tauri::command]
+pub(crate) fn read_artwork_file(artwork: String) -> ApiResponse<Option<CoverImage>> {
+    ApiResponse::from_result((|| {
+        let artwork = artwork.trim();
+        if artwork.is_empty() {
+            return Ok(None);
+        }
+        let artwork_path = if artwork.starts_with("file://") {
+            Url::parse(artwork)
+                .map_err(|err| err.to_string())?
+                .to_file_path()
+                .map_err(|_| "Invalid artwork file URL.".to_string())?
+        } else {
+            PathBuf::from(artwork)
+        };
+        if !artwork_path.is_file() {
+            return Ok(None);
+        }
+        let mime_type = cover_mime_type(&artwork_path)
+            .ok_or_else(|| "Unsupported artwork image format.".to_string())?
+            .to_string();
+        let metadata = fs::metadata(&artwork_path).map_err(|err| err.to_string())?;
+        if metadata.len() > 32 * 1024 * 1024 {
+            return Err("Artwork image is too large.".to_string());
+        }
+        let data = fs::read(artwork_path).map_err(|err| err.to_string())?;
+        Ok(Some(CoverImage { mime_type, data }))
+    })())
 }
 
 pub(crate) fn read_cover_backend(path: String) -> Result<Option<CoverImage>, String> {

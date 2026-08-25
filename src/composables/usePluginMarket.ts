@@ -6,7 +6,7 @@ import { usePluginMarketFilters } from './usePluginMarketFilters';
 import { usePluginMarketLabels } from './usePluginMarketLabels';
 import { usePluginMarketSelection } from './usePluginMarketSelection';
 
-export type PluginMarketCategory = 'all' | 'music' | 'lyrics' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
+export type PluginMarketCategory = 'all' | 'music' | 'lyrics' | 'lyrics-renderer' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
 export type PluginMarketKind = Exclude<PluginMarketCategory, 'all'>;
 export type PluginMarketStatus = 'available' | 'installed' | 'update';
 

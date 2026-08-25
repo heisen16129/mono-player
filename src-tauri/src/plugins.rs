@@ -479,6 +479,37 @@ pub fn remove_plugin_package(app: AppHandle, plugin_id: String) -> ApiResponse<(
     })())
 }
 
+#[tauri::command]
+pub fn read_local_plugin_manifest(file_path: String) -> ApiResponse<String> {
+    ApiResponse::from_result((|| {
+        if !file_path.to_ascii_lowercase().ends_with(".json") {
+            return Err("歌词渲染插件 manifest 必须是 JSON 文件".to_string());
+        }
+        fs::read_to_string(file_path).map_err(|err| err.to_string())
+    })())
+}
+
+#[tauri::command]
+pub fn read_local_renderer_module(manifest_path: String, module_path: String) -> ApiResponse<String> {
+    const MAX_LYRICS_RENDERER_MODULE_BYTES: u64 = 8 * 1024 * 1024;
+    ApiResponse::from_result((|| {
+        if !manifest_path.to_ascii_lowercase().ends_with(".json") || !is_module_plugin_url(&module_path) {
+            return Err("歌词渲染插件路径无效".to_string());
+        }
+        let manifest = Path::new(&manifest_path).canonicalize().map_err(|err| err.to_string())?;
+        let package_dir = manifest.parent().ok_or_else(|| "插件目录无效".to_string())?;
+        let module = Path::new(&module_path).canonicalize().map_err(|err| err.to_string())?;
+        if !module.starts_with(package_dir) {
+            return Err("歌词渲染模块必须位于 manifest 所在插件目录内".to_string());
+        }
+        let metadata = fs::metadata(&module).map_err(|err| err.to_string())?;
+        if metadata.len() > MAX_LYRICS_RENDERER_MODULE_BYTES {
+            return Err("歌词渲染模块不能超过 8 MB".to_string());
+        }
+        fs::read_to_string(module).map_err(|err| err.to_string())
+    })())
+}
+
 fn install_plugin_wasm_package(
     app: &AppHandle,
     plugin_id: &str,
@@ -1421,12 +1452,18 @@ fn json_year_value(value: &serde_json::Value) -> Option<u64> {
     }
 
     let text = value.as_str()?;
-    for index in 0..text.len().saturating_sub(3) {
-        let candidate = &text[index..index + 4];
-        if let Ok(year) = candidate.parse::<u64>() {
-            if (1900..=2099).contains(&year) {
-                return Some(year);
+    let mut digit_count = 0;
+    let mut rolling_year = 0_u64;
+    for character in text.chars() {
+        if let Some(digit) = character.to_digit(10) {
+            digit_count += 1;
+            rolling_year = ((rolling_year % 1000) * 10) + u64::from(digit);
+            if digit_count >= 4 && (1900..=2099).contains(&rolling_year) {
+                return Some(rolling_year);
             }
+        } else {
+            digit_count = 0;
+            rolling_year = 0;
         }
     }
     None
@@ -1559,7 +1596,11 @@ fn normalize_catalog_item_value(value: Value) -> Option<PluginCatalogItem> {
 
 fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
     let entry = string_field(&value, &["entry"])?;
-    if !is_direct_plugin_url(&entry) {
+    let runtime = normalize_runtime(string_field(&value, &["runtime"]))
+        .unwrap_or_else(|| "wasm".to_string());
+    if (runtime == "wasm" && !is_direct_plugin_url(&entry))
+        || (runtime == "module" && !is_module_plugin_url(&entry))
+    {
         return None;
     }
     if !entry.starts_with("http://") && !entry.starts_with("https://") && !Path::new(&entry).is_file() {
@@ -1579,8 +1620,7 @@ fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
         name,
         version: string_field(&value, &["version"])?,
         kind: normalize_kind(string_field(&value, &["kind"])?)?,
-        runtime: normalize_runtime(string_field(&value, &["runtime"]))
-            .unwrap_or_else(|| "wasm".to_string()),
+        runtime,
         entry,
         author: string_field(&value, &["author"])?,
         description: string_field(&value, &["description"])?,
@@ -1787,6 +1827,16 @@ fn normalize_config_field(value: &Value) -> Option<Value> {
     if let Some(default_value) = value.get("defaultValue").or_else(|| value.get("default_value")).and_then(normalize_config_default_value) {
         field.insert("defaultValue".to_string(), default_value);
     }
+    if let Some(label_en) = string_field(value, &["labelEn", "label_en"]) {
+        field.insert("labelEn".to_string(), Value::String(label_en));
+    }
+    for key in ["min", "max", "step"] {
+        if let Some(number) = value.get(key).and_then(Value::as_f64) {
+            if let Some(number) = serde_json::Number::from_f64(number) {
+                field.insert(key.to_string(), Value::Number(number));
+            }
+        }
+    }
     if !options.is_empty() {
         field.insert("options".to_string(), Value::Array(options));
     }
@@ -1795,7 +1845,7 @@ fn normalize_config_field(value: &Value) -> Option<Value> {
 
 fn normalize_config_field_type(field_type: String) -> Option<String> {
     match field_type.trim() {
-        "text" | "password" | "number" | "select" | "radio" | "checkbox" | "switch" => {
+        "text" | "password" | "number" | "range" | "select" | "radio" | "checkbox" | "switch" => {
             Some(field_type.trim().to_string())
         }
         _ => None,
@@ -1840,14 +1890,14 @@ fn normalize_config_default_value(value: &Value) -> Option<Value> {
 
 fn normalize_runtime(runtime: Option<String>) -> Option<String> {
     match runtime.as_deref().map(str::trim) {
-        Some("wasm") => Some("wasm".to_string()),
+        Some("wasm") | Some("module") => Some(runtime.unwrap().trim().to_string()),
         _ => None,
     }
 }
 
 fn normalize_kind(kind: String) -> Option<String> {
     match kind.trim() {
-        "music" | "lyrics" | "metadata" | "playlist" | "theme" | "integration" | "tool" => {
+        "music" | "lyrics" | "lyrics-renderer" | "metadata" | "playlist" | "theme" | "integration" | "tool" => {
             Some(kind.trim().to_string())
         }
         _ => None,
@@ -1875,7 +1925,7 @@ fn normalize_capability(capability: &str) -> Option<String> {
     match capability.trim() {
         "search" | "play" | "lyrics" | "metadata" | "cover" | "album" | "playlist-import"
         | "playlist-export" | "theme" | "scrobble" | "history-sync" | "batch-rename"
-        | "lyric-convert" | "lyric-translate" => Some(capability.trim().to_string()),
+        | "lyric-convert" | "lyric-translate" | "lyrics-renderer" => Some(capability.trim().to_string()),
         _ => None,
     }
 }
@@ -1931,6 +1981,15 @@ fn is_direct_plugin_url(value: &str) -> bool {
         .unwrap_or(value)
         .to_ascii_lowercase()
         .ends_with(".wasm")
+}
+
+fn is_module_plugin_url(value: &str) -> bool {
+    let entry = value
+        .split('?')
+        .next()
+        .unwrap_or(value)
+        .to_ascii_lowercase();
+    entry.ends_with(".js") || entry.ends_with(".mjs")
 }
 
 fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
@@ -2111,12 +2170,17 @@ fn normalize_plugin_lyrics_metadata(
 }
 
 fn normalize_plugin_cover_metadata(response: serde_json::Value) -> Result<String, String> {
-    response
+    let artwork_url = response
         .as_str()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| "Plugin cover response must be a URL string.".to_string())
+        .ok_or_else(|| "Plugin cover response must be a URL string.".to_string())?;
+    log_plugin_playback(
+        "normalize_plugin_cover_metadata response",
+        json!({ "artworkUrl": artwork_url }),
+    );
+    Ok(artwork_url)
 }
 
 fn normalize_lyrics_format(value: Option<&str>) -> Option<String> {
@@ -2612,4 +2676,23 @@ fn is_sensitive_header(name: &str) -> bool {
         || name.contains("api-key")
         || name.contains("token")
         || name.contains("secret")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn json_year_value_ignores_non_ascii_text_without_panicking() {
+        assert_eq!(
+            json_year_value(&json!("·òÆÞÄÇÐ©ÊÂ µçÊÓ¾çÔÉù´ø")),
+            None
+        );
+    }
+
+    #[test]
+    fn json_year_value_finds_year_inside_text() {
+        assert_eq!(json_year_value(&json!("发行时间：2024-05-01")), Some(2024));
+    }
 }
