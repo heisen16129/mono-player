@@ -1,5 +1,5 @@
 import { resolveLocale } from '../../i18n';
-import type { AppTheme, PlayerSettings, UserPlaylist } from '../../types/music';
+import type { AppTheme, LyricsBackgroundSettings, PlayerSettings, UserPlaylist } from '../../types/music';
 import {
   fallbackSettings,
   MAX_AUDIO_CACHE_MAX_MB,
@@ -13,6 +13,7 @@ import {
   ONLINE_PLAYBACK_FAILURE_ACTIONS,
   QUALITY_FALLBACKS,
   DEFAULT_SHORTCUT_BINDINGS,
+  DEFAULT_LYRICS_BACKGROUND,
 } from './constants';
 import { normalizeFavoriteTracks } from './favoriteNormalizers';
 import { normalizeLocalPathInput } from './pathNormalizers';
@@ -24,6 +25,43 @@ function normalizeShortcutBindings(value: unknown) {
     action,
     typeof source[action] === 'string' ? source[action].trim() : fallback,
   ])) as typeof DEFAULT_SHORTCUT_BINDINGS;
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? Math.min(max, Math.max(min, numberValue)) : fallback;
+}
+
+export function normalizeLyricsBackground(value: unknown): LyricsBackgroundSettings {
+  const source = value && typeof value === 'object' ? value as Partial<LyricsBackgroundSettings> : {};
+  return {
+    source: source.source === 'color' || source.source === 'media' || source.source === 'wallpaper'
+      ? source.source
+      : 'cover',
+    color: typeof source.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(source.color)
+      ? source.color
+      : DEFAULT_LYRICS_BACKGROUND.color,
+    colorMode: source.colorMode === 'cover' ? 'cover' : 'custom',
+    coverColor: typeof source.coverColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(source.coverColor)
+      ? source.coverColor
+      : '',
+    mediaPath: typeof source.mediaPath === 'string' ? source.mediaPath.trim() : '',
+    mediaKind: source.mediaKind === 'video' ? 'video' : 'image',
+    wallpaperRoot: typeof source.wallpaperRoot === 'string' ? source.wallpaperRoot.trim() : '',
+    wallpaperProjectId: typeof source.wallpaperProjectId === 'string' ? source.wallpaperProjectId.trim() : '',
+    wallpaperTitle: typeof source.wallpaperTitle === 'string' ? source.wallpaperTitle.trim() : '',
+    wallpaperProjectType: ['image', 'video', 'scene', 'web', 'application'].includes(String(source.wallpaperProjectType))
+      ? source.wallpaperProjectType as LyricsBackgroundSettings['wallpaperProjectType']
+      : 'unknown',
+    wallpaperMediaPath: typeof source.wallpaperMediaPath === 'string' ? source.wallpaperMediaPath.trim() : '',
+    wallpaperPreviewPath: typeof source.wallpaperPreviewPath === 'string' ? source.wallpaperPreviewPath.trim() : '',
+    opacity: clampNumber(source.opacity, 0, 1, DEFAULT_LYRICS_BACKGROUND.opacity),
+    blur: clampNumber(source.blur, 0, 60, DEFAULT_LYRICS_BACKGROUND.blur),
+    windowOpacity: clampNumber(source.windowOpacity, 0, 1, DEFAULT_LYRICS_BACKGROUND.windowOpacity),
+    positionX: clampNumber(source.positionX, 0, 100, DEFAULT_LYRICS_BACKGROUND.positionX),
+    positionY: clampNumber(source.positionY, 0, 100, DEFAULT_LYRICS_BACKGROUND.positionY),
+    scale: clampNumber(source.scale, 1, 2.8, DEFAULT_LYRICS_BACKGROUND.scale),
+  };
 }
 
 export function normalizeSettings(value: unknown): PlayerSettings {
@@ -73,6 +111,7 @@ export function normalizeSettings(value: unknown): PlayerSettings {
     const lyricFontColor = typeof parsed.lyricFontColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(parsed.lyricFontColor)
       ? parsed.lyricFontColor
       : fallbackSettings.lyricFontColor;
+    const lyricsBackground = normalizeLyricsBackground(parsed.lyricsBackground);
     const downloadDir = typeof parsed.downloadDir === 'string' ? parsed.downloadDir : fallbackSettings.downloadDir;
     const audioCacheDir = typeof parsed.audioCacheDir === 'string' ? normalizeLocalPathInput(parsed.audioCacheDir) : fallbackSettings.audioCacheDir;
     const rawAudioCacheMaxMb = Number((parsed as { audioCacheMaxMb?: unknown }).audioCacheMaxMb);
@@ -110,7 +149,7 @@ export function normalizeSettings(value: unknown): PlayerSettings {
     const mcpAutoStart = parsed.mcpAutoStart !== false;
     const enableAppShortcuts = parsed.enableAppShortcuts !== false;
     const appShortcuts = normalizeShortcutBindings(parsed.appShortcuts);
-    return { ...parsed, musicDirs: dirs, lastAddedTrackIds, recentPlayedTrackIds, playlists, closeAction, locale, sleepTimerAction, sleepTimerMinutes, theme, autoHideLyricsDock, lyricFontSize, useThemeLyricColor, lyricFontColor, downloadDir, audioCacheDir, audioCacheMaxMb, audioOutputDeviceId, searchHistoryLimit, showTrackNumbers, showTrackCovers, enableLocalMetadataEditing, enableTrackMetadataEdit, enableTrackCoverEdit, enableTrackDurationRefresh, enablePlugins, qualityFallback, onlinePlaybackFailureAction, seamlessPlayback, fadePlayback, crossfadePlayback, mcpAutoStart, enableAppShortcuts, appShortcuts };
+    return { ...parsed, musicDirs: dirs, lastAddedTrackIds, recentPlayedTrackIds, playlists, closeAction, locale, sleepTimerAction, sleepTimerMinutes, theme, autoHideLyricsDock, lyricFontSize, useThemeLyricColor, lyricFontColor, lyricsBackground, downloadDir, audioCacheDir, audioCacheMaxMb, audioOutputDeviceId, searchHistoryLimit, showTrackNumbers, showTrackCovers, enableLocalMetadataEditing, enableTrackMetadataEdit, enableTrackCoverEdit, enableTrackDurationRefresh, enablePlugins, qualityFallback, onlinePlaybackFailureAction, seamlessPlayback, fadePlayback, crossfadePlayback, mcpAutoStart, enableAppShortcuts, appShortcuts };
   } catch {
     return fallbackSettings;
   }

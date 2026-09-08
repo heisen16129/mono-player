@@ -5,7 +5,26 @@ import type {
   PluginSearchProvider,
   PluginSearchTrack,
 } from './plugin';
-import type { LyricLine } from './music';
+import type {
+  LyricLine,
+  LyricsBackgroundMediaKind,
+  LyricsBackgroundSource,
+} from './music';
+
+export interface LyricsRendererBackgroundContext {
+  source: LyricsBackgroundSource;
+  color: string;
+  mediaUrl: string | null;
+  mediaKind: LyricsBackgroundMediaKind;
+  wallpaperProjectType: string;
+  wallpaperFrameUrl?: string;
+  opacity: number;
+  blur: number;
+  windowOpacity: number;
+  positionX: number;
+  positionY: number;
+  scale: number;
+}
 
 export interface LyricsRendererActionMenuContext {
   downloadableLyricFormats: string[];
@@ -67,6 +86,7 @@ export interface LyricsRendererContext {
   lyricColor: string | null;
   useThemeLyricColor: boolean;
   coverUrl: string | null;
+  background: LyricsRendererBackgroundContext;
   isLoading: boolean;
   emptyMessage: string;
   loadingText: string;

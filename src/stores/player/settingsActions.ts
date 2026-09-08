@@ -1,5 +1,5 @@
 import type { Ref } from 'vue';
-import type { Locale, PlayerSettings, ShortcutAction } from '../../types/music';
+import type { Locale, LyricsBackgroundSettings, PlayerSettings, ShortcutAction } from '../../types/music';
 import {
   MAX_AUDIO_CACHE_MAX_MB,
   MAX_LYRIC_FONT_SIZE,
@@ -13,6 +13,7 @@ import {
   QUALITY_FALLBACKS,
 } from './constants';
 import { normalizeLocalPathInput } from './normalizers';
+import { normalizeLyricsBackground } from './settingsNormalizers';
 
 interface PlayerSettingsActionsOptions {
   persistSettings: () => void;
@@ -20,6 +21,13 @@ interface PlayerSettingsActionsOptions {
 }
 
 export function createPlayerSettingsActions({ persistSettings, settings }: PlayerSettingsActionsOptions) {
+  function applyLyricsBackgroundPatch(patch: Partial<LyricsBackgroundSettings>) {
+    settings.value.lyricsBackground = normalizeLyricsBackground({
+      ...settings.value.lyricsBackground,
+      ...patch,
+    });
+  }
+
   function setCloseAction(action: PlayerSettings['closeAction']) {
     settings.value.closeAction = action;
     persistSettings();
@@ -59,6 +67,15 @@ export function createPlayerSettingsActions({ persistSettings, settings }: Playe
     if (!/^#[0-9a-fA-F]{6}$/.test(color)) return;
     settings.value.lyricFontColor = color;
     persistSettings();
+  }
+
+  function setLyricsBackground(patch: Partial<LyricsBackgroundSettings>) {
+    applyLyricsBackgroundPatch(patch);
+    persistSettings();
+  }
+
+  function previewLyricsBackground(patch: Partial<LyricsBackgroundSettings>) {
+    applyLyricsBackgroundPatch(patch);
   }
 
   function setDownloadDir(path: string) {
@@ -182,6 +199,8 @@ export function createPlayerSettingsActions({ persistSettings, settings }: Playe
     setLocale,
     setLyricFontColor,
     setLyricFontSize,
+    setLyricsBackground,
+    previewLyricsBackground,
     setMcpAutoStart,
     setOnlinePlaybackFailureAction,
     setQualityFallback,

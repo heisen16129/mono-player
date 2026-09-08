@@ -125,10 +125,14 @@ function updateCamera() {
 
   var cy = Math.cos(orbit.phi), sy = Math.sin(orbit.phi);
   var ct = Math.cos(orbit.theta), st = Math.sin(orbit.theta);
+  var framedRadius = orbit.radius;
+  if (fx && Number(fx.preset) === BLACK_HOLE_PRESET_INDEX) {
+    framedRadius *= Math.max(1, 1.48 / Math.max(0.1, camera.aspect));
+  }
   camera.position.set(
-    orbit.lookAt.x + orbit.radius * cy * st,
-    orbit.lookAt.y + orbit.radius * sy,
-    orbit.lookAt.z + orbit.radius * cy * ct
+    orbit.lookAt.x + framedRadius * cy * st,
+    orbit.lookAt.y + framedRadius * sy,
+    orbit.lookAt.z + framedRadius * cy * ct
   );
   camera.lookAt(orbit.lookAt);
   var cameraShake = clampRange(Number(fx.cinemaShake) || 0, 0, 1.8);

@@ -28,7 +28,6 @@ export function usePlayerDockProgress({
   onTimeChange,
 }: PlayerDockProgressOptions) {
   const currentTime = ref(0);
-  const runtimeDuration = ref(0);
   const isScrubbingProgress = ref(false);
   let smoothProgressFrame = 0;
   let smoothProgressBaseTime = 0;
@@ -37,7 +36,7 @@ export function usePlayerDockProgress({
   let pendingSeekTarget: number | null = null;
   let pendingSeekStartedAt = 0;
 
-  const totalDuration = computed(() => activeTrack.value?.duration || runtimeDuration.value || 0);
+  const totalDuration = computed(() => activeTrack.value?.duration || 0);
   const hasTotalDuration = computed(() => totalDuration.value > 0);
   const totalDurationLabel = computed(() => (hasTotalDuration.value ? formatDuration(totalDuration.value) : '00:00'));
   const progress = computed(() => {
@@ -204,7 +203,6 @@ export function usePlayerDockProgress({
   return {
     currentTime,
     progress,
-    runtimeDuration,
     totalDuration,
     totalDurationLabel,
     commitSeekAudio,

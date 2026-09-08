@@ -20,6 +20,7 @@ const emit = defineEmits<{
 <style scoped>
 .workspace-toolbar {
   min-height: 40px;
+  padding-inline: 24px;
 }
 
 @media (max-height: 760px) and (min-width: 821px) {

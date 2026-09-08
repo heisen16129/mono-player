@@ -19,6 +19,7 @@ mod state;
 mod store;
 mod themes;
 mod tray;
+mod wallpaper_engine;
 mod workers;
 
 use database::{
@@ -52,6 +53,9 @@ fn mcp_auto_start_enabled(app: &tauri::AppHandle) -> bool {
 
 pub fn run() {
     tauri::Builder::default()
+        .register_uri_scheme_protocol("wallpaper-frame", |context, request| {
+            wallpaper_engine::frame_response(context.app_handle(), request)
+        })
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
@@ -118,6 +122,7 @@ pub fn run() {
             app.manage(workers::plugin::PluginWorkerState::start(audio_cache_dir.clone())?);
             app.manage(workers::scanner::ScanWorkerState::default());
             app.manage(sleep_timer::SleepTimerState::default());
+            app.manage(wallpaper_engine::WallpaperEngineState::default());
             themes::start_system_theme_watcher(app.handle().clone());
 
             if let Some(icon) = app.default_window_icon().cloned() {
@@ -234,8 +239,18 @@ pub fn run() {
             store::store_set,
             store::store_delete,
             tray::tray_popup_action,
+            wallpaper_engine::wallpaper_engine_list_projects,
+            wallpaper_engine::wallpaper_engine_start_scene,
+            wallpaper_engine::wallpaper_engine_update_scene_surface,
+            wallpaper_engine::wallpaper_engine_scene_status,
+            wallpaper_engine::wallpaper_engine_stop_scene,
             tray::exit_app
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                wallpaper_engine::shutdown(app);
+            }
+        });
 }

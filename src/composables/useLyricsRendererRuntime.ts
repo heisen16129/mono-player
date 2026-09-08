@@ -6,11 +6,9 @@ import {
   lyricsRendererRegistryVersion,
 } from '../lyrics-renderers/registry';
 import { ensureBuiltinLyricsRenderers } from '../lyrics-renderers/builtins';
-import { loadExternalLyricsRenderers } from '../lyrics-renderers/external';
 
 export function useLyricsRendererRuntime(selectedPluginId?: Ref<string>) {
   ensureBuiltinLyricsRenderers();
-  void loadExternalLyricsRenderers();
   const activePluginId = selectedPluginId ?? ref(DEFAULT_LYRICS_RENDERER_ID);
   const rendererPlugins = computed(() => {
     lyricsRendererRegistryVersion.value;

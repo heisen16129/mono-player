@@ -28,7 +28,6 @@ function normalizeConfig(config: PluginConfig | undefined) {
 
 export function useLyricsRendererSettings() {
   ensureBuiltinLyricsRenderers();
-  void loadExternalLyricsRenderers();
 
   const rendererPlugins = computed(() => {
     lyricsRendererRegistryVersion.value;

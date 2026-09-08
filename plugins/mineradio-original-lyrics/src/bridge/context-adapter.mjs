@@ -71,9 +71,22 @@ export function toRuntimeContext(context) {
     playing: Boolean(context?.isPlaying),
     favorite: Boolean(context?.isFavorite),
     muted: Boolean(context?.isMuted),
-    volume: Math.min(1, Math.max(0, (Number(context?.volume) || 0) > 1 ? Number(context.volume) / 100 : Number(context?.volume) || 0)),
+    volume: Math.min(1, Math.max(0, (Number(context?.volume) || 0) / 100)),
     playbackRate: Math.max(0.25, Number(context?.playbackRate) || 1),
     playbackMode: text(context?.playbackMode, 'fixed'),
+    background: {
+      source: text(context?.background?.source, 'cover'),
+      color: text(context?.background?.color, '#000000'),
+      mediaUrl: text(context?.background?.mediaUrl),
+      mediaKind: text(context?.background?.mediaKind, 'image'),
+      wallpaperProjectType: text(context?.background?.wallpaperProjectType, 'unknown'),
+      opacity: Math.min(1, Math.max(0, Number(context?.background?.opacity ?? .72))),
+      windowOpacity: Math.min(1, Math.max(0, Number(context?.background?.windowOpacity ?? 1))),
+      blur: Math.min(60, Math.max(0, Number(context?.background?.blur ?? 0))),
+      positionX: Math.min(100, Math.max(0, Number(context?.background?.positionX ?? 50))),
+      positionY: Math.min(100, Math.max(0, Number(context?.background?.positionY ?? 50))),
+      scale: Math.min(2, Math.max(.5, Number(context?.background?.scale ?? 1))),
+    },
     lines: toLyrics(context?.lines),
   };
 }

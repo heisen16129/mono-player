@@ -15,11 +15,8 @@ import {
 import { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
-import { queueSourceKey } from '../utils/queueSource';
-import { resolveRustQueueSnapshotTrack } from '../utils/rustQueueSnapshot';
 
 interface PlayerDockProgressRuntime {
-  runtimeDuration: Ref<number>;
   setPlaybackTime: (value: number) => void;
   startSmoothProgress: () => void;
   stopSmoothProgress: (syncExternal?: boolean) => void;
@@ -86,11 +83,6 @@ export function usePlayerDockRuntime({
     return (path ?? '').replace(/\\/g, '/').toLocaleLowerCase();
   }
 
-  function currentQueueTrack() {
-    const snapshot = rustQueueSnapshot.value;
-    return snapshot ? resolveRustQueueSnapshotTrack(snapshot, snapshot.tracks) : null;
-  }
-
   function playbackTrackIdentity(track: Track | null | undefined) {
     if (!track) return '';
     const providerId = track.sourceProviderId?.trim();
@@ -104,19 +96,6 @@ export function usePlayerDockRuntime({
     return normalizedPath === normalizedBackendPath(activeTrack.value?.path)
       || normalizedPath === normalizedBackendPath(rustQueueSnapshot.value?.currentSource)
       || normalizedPath === normalizedBackendPath(seamlessQueuedSource);
-  }
-
-  function findQueueTrackBySource(source: string) {
-    const normalizedSource = normalizedBackendPath(source);
-    const track = queue.value.find((track) => (
-      normalizedBackendPath(track.path) === normalizedSource
-      || normalizedBackendPath(queueSourceKey(track)) === normalizedSource
-    ));
-    if (track) return track;
-    if (normalizedSource === normalizedBackendPath(rustQueueSnapshot.value?.currentSource)) {
-      return currentQueueTrack();
-    }
-    return null;
   }
 
   function holdRustPlaybackStoppedState() {
@@ -245,15 +224,11 @@ export function usePlayerDockRuntime({
         progress.stopSmoothProgress();
         onPlaybackStateChange(false);
       }
-      progress.runtimeDuration.value = 0;
       return;
     }
 
     rustBackendActive.value = true;
     const isHoldingStoppedState = !isPlaying.value && state.isPlaying && Date.now() < rustPlaybackStateHoldUntil;
-    if (!activeTrack.value?.duration && state.duration && state.duration > 0) {
-      progress.runtimeDuration.value = state.duration;
-    }
     if (isHoldingStoppedState) {
       progress.stopSmoothProgress();
       return;
@@ -283,7 +258,6 @@ export function usePlayerDockRuntime({
   watch(
     () => playbackTrackIdentity(activeTrack.value),
     () => {
-      progress.runtimeDuration.value = 0;
       progress.setPlaybackTime(0);
     },
   );
@@ -342,12 +316,11 @@ export function usePlayerDockRuntime({
   );
 
   useRustPlaybackListeners({
-    onAdvanced: (source) => {
-      const queuedTrack = findQueueTrackBySource(source);
-      if (!queuedTrack) return;
-
-      progress.setPlaybackTime(0);
-      onSeamlessAdvance(queuedTrack);
+    onAdvanced: ({ source, track, position }) => {
+      progress.setPlaybackTime(position);
+      if (track) {
+        onSeamlessAdvance(track);
+      }
       seamlessQueuedSource = source;
     },
     onState: handleRustPlaybackState,
@@ -391,7 +364,6 @@ export function usePlayerDockRuntime({
     playbackRates,
     queueTracks,
     rustBackendActive,
-    rustQueueSnapshot,
     stopPlayback,
     toggleMute,
     togglePlayback,

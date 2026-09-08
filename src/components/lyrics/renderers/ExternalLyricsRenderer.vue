@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue';
 import { useWindowDrag } from '../../../composables/useWindowDrag';
 import { invokeApi } from '../../../services/api';
 import { readArtworkFile } from '../../../services/music';
-import { listenRustBackendState } from '../../../services/playerBackend';
+import { listenRustBackendAudioFrame, type RustAudioFrame } from '../../../services/playerBackend';
 import type { LyricsRendererContext } from '../../../types/lyricsRenderer';
 import type { Track } from '../../../types/music';
 import type { PlayerDockController } from '../../../types/playerDockController';
@@ -23,9 +23,9 @@ const sandboxEntry = ref('');
 const sandboxModuleSource = ref<string | null>(null);
 const loadError = ref('');
 let loadGeneration = 0;
-let unlistenSpectrum: (() => void) | null = null;
-let latestSpectrum: number[] = [];
-let spectrumDisposed = false;
+let unlistenAudioFrame: (() => void) | null = null;
+let latestAudioFrame: RustAudioFrame | null = null;
+let audioFrameDisposed = false;
 const serializableTrackCache = new WeakMap<object, Track>();
 const artworkDataUrlCache = new Map<string, Promise<string>>();
 const activeArtworkDataUrl = ref('');
@@ -126,11 +126,11 @@ async function loadSandboxEntry() {
 function createSandboxDocument(entry: string) {
   const serializedEntry = JSON.stringify(entry).replace(/</g, '\\u003c');
   const serializedSource = JSON.stringify(sandboxModuleSource.value).replace(/</g, '\\u003c');
-  return `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style><script>
-const entry=${serializedEntry};const source=${serializedSource};let renderer=null;let rendererReady=false;let moduleUrl=entry;let latestSpectrum=[];let pendingContext=null;let api={post:(action,payload,requestId)=>parent.postMessage({type:'lyrics-renderer-action',action,payload,requestId},'*')};
+  return `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent!important;color-scheme:normal!important}</style><script>
+const entry=${serializedEntry};const source=${serializedSource};let renderer=null;let rendererReady=false;let moduleUrl=entry;let latestAudioFrame=null;let pendingContext=null;let api={post:(action,payload,requestId)=>parent.postMessage({type:'lyrics-renderer-action',action,payload,requestId},'*')};
 function mergePendingContext(current,next){if(!current)return next||{};if(!next)return current;const previousTrack=current.activeTrack;const nextTrack=next.activeTrack;const hasNextTrack=Object.prototype.hasOwnProperty.call(next,'activeTrack');const sameTrack=previousTrack&&nextTrack&&String(previousTrack.id??previousTrack.path??'')===String(nextTrack.id??nextTrack.path??'');return {...current,...next,activeTrack:hasNextTrack?(nextTrack?{...(sameTrack?previousTrack:{}),...nextTrack}:null):previousTrack}}
 async function applyPendingContext(){if(!rendererReady||!pendingContext||!renderer?.update)return;const next=pendingContext;pendingContext=null;await renderer.update(next)}
-window.addEventListener('message',async(event)=>{if(event.source!==parent)return;const message=event.data||{};try{if(message.type==='init'){rendererReady=false;const initialContext=mergePendingContext(message.context,pendingContext);pendingContext=null;if(source!==null)moduleUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const loaded=await import(moduleUrl);renderer=loaded.default||loaded;if(typeof renderer.mount!=='function')throw new Error('Renderer must export mount(root, context, api)');await renderer.mount(document.body,initialContext,api);rendererReady=true;await applyPendingContext();if(renderer.updateAudioSpectrum)renderer.updateAudioSpectrum(latestSpectrum)}else if(message.type==='update'){if(rendererReady&&renderer?.update)await renderer.update(message.context);else pendingContext=mergePendingContext(pendingContext,message.context)}else if(message.type==='audio-spectrum'){latestSpectrum=Array.isArray(message.levels)?message.levels:[];if(rendererReady&&renderer?.updateAudioSpectrum)renderer.updateAudioSpectrum(latestSpectrum)}else if(message.type==='lyrics-renderer-action-result'&&String(message.requestId||'').includes('playback-')){console.log('[歌词插件通信桥][播放控制] 执行结果',{请求编号:message.requestId,是否成功:message.ok,错误信息:message.message||''})}}catch(error){parent.postMessage({type:'lyrics-renderer-error',message:String(error)},'*') }});
+  window.addEventListener('message',async(event)=>{if(event.source!==parent)return;const message=event.data||{};try{if(message.type==='init'){rendererReady=false;const initialContext=mergePendingContext(message.context,pendingContext);pendingContext=null;if(source!==null)moduleUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const loaded=await import(moduleUrl);renderer=loaded.default||loaded;if(typeof renderer.mount!=='function')throw new Error('Renderer must export mount(root, context, api)');await renderer.mount(document.body,initialContext,api);rendererReady=true;if(typeof renderer.updateAudioFrame==='function')parent.postMessage({type:'lyrics-renderer-audio-frame-subscribe'},'*');await applyPendingContext();if(latestAudioFrame&&renderer.updateAudioFrame)renderer.updateAudioFrame(latestAudioFrame)}else if(message.type==='update'){if(rendererReady&&renderer?.update)await renderer.update(message.context);else pendingContext=mergePendingContext(pendingContext,message.context)}else if(message.type==='audio-frame'){latestAudioFrame=message.frame||null;if(rendererReady&&renderer?.updateAudioFrame)renderer.updateAudioFrame(latestAudioFrame)}else if(message.type==='lyrics-renderer-action-result'&&String(message.requestId||'').includes('playback-')){console.log('[歌词插件通信桥][播放控制] 执行结果',{请求编号:message.requestId,是否成功:message.ok,错误信息:message.message||''})}}catch(error){parent.postMessage({type:'lyrics-renderer-error',message:String(error)},'*') }});
 <\/script>`;
 }
 
@@ -172,6 +172,7 @@ function contextPayload(context: LyricsRendererContext, includeArtworkData = fal
     lyricColor: context.lyricColor,
     useThemeLyricColor: context.useThemeLyricColor,
     coverUrl: context.coverUrl,
+    background: context.background,
     isLoading: context.isLoading,
     emptyMessage: context.emptyMessage,
     loadingText: context.loadingText,
@@ -217,20 +218,42 @@ function postContext(includeArtworkData = false) {
   }
 }
 
-function postSpectrum(levels: number[]) {
-  latestSpectrum = levels.slice(0, 5).map((level) => Math.max(0, Math.min(1, Number(level) || 0)));
-  frame.value?.contentWindow?.postMessage({ type: 'audio-spectrum', levels: latestSpectrum }, '*');
+function postPlaybackModeContext() {
+  const transport = props.playerDockController?.transportControlProps.value;
+  try {
+    frame.value?.contentWindow?.postMessage({
+      type: 'update',
+      context: {
+        playbackMode: transport?.playbackMode ?? 'fixed',
+        playbackModeLabel: transport?.playbackModeLabel ?? '',
+      },
+    }, '*');
+  } catch (error) {
+    loadError.value = `歌词插件通信失败：${error instanceof Error ? error.message : String(error)}`;
+  }
 }
 
-async function startSpectrumBridge() {
-  const unlisten = await listenRustBackendState((state) => {
-    postSpectrum(state.isPlaying ? (state.spectrumLevels ?? []) : []);
-  });
-  if (spectrumDisposed) {
+function postAudioFrame(audioFrame: RustAudioFrame) {
+  latestAudioFrame = audioFrame;
+  const samples = Float32Array.from(audioFrame.samples);
+  frame.value?.contentWindow?.postMessage({
+    type: 'audio-frame',
+    frame: {
+      sequence: audioFrame.sequence,
+      sampleRate: audioFrame.sampleRate,
+      channels: audioFrame.channels,
+      samples,
+    },
+  }, '*', [samples.buffer]);
+}
+
+async function startAudioFrameBridge() {
+  const unlisten = await listenRustBackendAudioFrame(postAudioFrame);
+  if (audioFrameDisposed) {
     unlisten();
     return;
   }
-  unlistenSpectrum = unlisten;
+  unlistenAudioFrame = unlisten;
 }
 
 function postActionResult(requestId: unknown, ok: boolean, error?: unknown) {
@@ -248,6 +271,10 @@ async function handleMessage(event: MessageEvent) {
   const message = event.data || {};
   if (message.type === 'lyrics-renderer-error') {
     loadError.value = `歌词插件运行失败：${String(message.message || '未知错误')}`;
+    return;
+  }
+  if (message.type === 'lyrics-renderer-audio-frame-subscribe') {
+    void startAudioFrameBridge();
     return;
   }
   if (message.type !== 'lyrics-renderer-action') return;
@@ -328,31 +355,36 @@ function handleLoad() {
       type: 'init',
       context: contextPayload(props.context, Boolean(activeArtworkDataUrl.value)),
     }, '*');
-    postSpectrum(latestSpectrum);
+    if (latestAudioFrame) postAudioFrame(latestAudioFrame);
   } catch (error) {
     loadError.value = `歌词插件通信失败：${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
 onMounted(() => {
-  spectrumDisposed = false;
+  audioFrameDisposed = false;
   window.addEventListener('message', handleMessage);
-  void startSpectrumBridge();
 });
 onBeforeUnmount(() => {
-  spectrumDisposed = true;
+  audioFrameDisposed = true;
   window.removeEventListener('message', handleMessage);
-  unlistenSpectrum?.();
-  unlistenSpectrum = null;
+  unlistenAudioFrame?.();
+  unlistenAudioFrame = null;
 });
 watch(
   () => [
     props.context,
     props.playerDockController?.playbackMetaControlProps.value,
-    props.playerDockController?.transportControlProps.value,
   ],
   () => postContext(),
   { deep: true },
+);
+watch(
+  () => [
+    props.playerDockController?.transportControlProps.value.playbackMode,
+    props.playerDockController?.transportControlProps.value.playbackModeLabel,
+  ],
+  () => postPlaybackModeContext(),
 );
 watch(
   () => [
@@ -379,6 +411,7 @@ watch(() => [props.entry, props.manifestPath], () => void loadSandboxEntry(), { 
     <iframe
       v-if="sandboxEntry"
       ref="frame"
+      allowtransparency="true"
       sandbox="allow-scripts"
       :srcdoc="createSandboxDocument(sandboxEntry)"
       @load="handleLoad"
@@ -410,6 +443,7 @@ watch(() => [props.entry, props.manifestPath], () => void loadSandboxEntry(), { 
   height: 100%;
   border: 0;
   background: transparent;
+  color-scheme: normal;
   pointer-events: auto;
 }
 

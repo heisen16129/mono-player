@@ -16,14 +16,18 @@ import { useLyricsViewInteractions } from '../composables/useLyricsViewInteracti
 import { useLyricsViewStyle } from '../composables/useLyricsViewStyle';
 import { useLyricsRendererRuntime } from '../composables/useLyricsRendererRuntime';
 import { useLyricsRendererSettings } from '../composables/useLyricsRendererSettings';
+import { useWallpaperEngineBackground, retryWallpaperEngineBackground } from '../composables/useWallpaperEngineBackground';
 import type { LyricsViewEmits, LyricsViewProps } from '../types/lyricsView';
 import type { LyricLine } from '../types/music';
 import type { LyricsRendererContext } from '../types/lyricsRenderer';
 import { usePlayerStore } from '../stores/player';
 import { setRustBackendVolume } from '../services/playerBackend';
+import LyricsCollapseButton from './lyrics/LyricsCollapseButton.vue';
 import LyricsHeaderBar from './lyrics/LyricsHeaderBar.vue';
 import LyricsRendererHost from './lyrics/LyricsRendererHost.vue';
 import { trackIdentityKey } from '../utils/trackKey';
+import { artworkDisplaySrc, filePathToArtworkUrl } from '../utils/artwork';
+import { useArtworkDominantColor } from '../composables/useArtworkDominantColor';
 
 const props = defineProps<LyricsViewProps>();
 
@@ -46,6 +50,48 @@ const {
   handleRendererError,
 } = useLyricsRendererRuntime(activeRendererId);
 const rendererOwnsSurface = computed(() => Boolean(activeLyricsRenderer.value?.ownsSurface));
+const lyricsBackgroundSettings = computed(() => player.settings.lyricsBackground);
+const wallpaperEngine = useWallpaperEngineBackground(lyricsBackgroundSettings, computed(() => props.isOpen));
+const coverColorSource = computed(() => artworkDisplaySrc(
+  props.activeTrack?.associatedArtwork || props.activeTrack?.artwork,
+));
+const coverDominantColor = useArtworkDominantColor(
+  coverColorSource,
+  computed(() => player.settings.lyricsBackground.source === 'color'
+    && player.settings.lyricsBackground.colorMode === 'cover'
+    && !player.settings.lyricsBackground.coverColor),
+);
+const rendererBackground = computed(() => {
+  const background = player.settings.lyricsBackground;
+  const waitingForScene = background.source === 'wallpaper' && background.wallpaperProjectType === 'scene'
+    && !wallpaperEngine.sceneActive.value;
+  const selectedMediaPath = background.source === 'wallpaper'
+    ? (background.wallpaperProjectType === 'scene'
+      ? (waitingForScene ? background.wallpaperPreviewPath : '')
+      : (background.wallpaperMediaPath || background.wallpaperPreviewPath))
+    : (background.source === 'media' ? background.mediaPath : '');
+  const mediaUrl = selectedMediaPath
+    ? artworkDisplaySrc(filePathToArtworkUrl(selectedMediaPath))
+    : null;
+  return {
+    source: background.source,
+    color: background.colorMode === 'cover'
+      ? (background.coverColor || coverDominantColor.value || background.color)
+      : background.color,
+    mediaUrl: mediaUrl || null,
+    mediaKind: background.source === 'wallpaper'
+      ? (background.wallpaperProjectType === 'video' ? 'video' : 'image')
+      : background.mediaKind,
+    wallpaperProjectType: waitingForScene ? 'preview' : background.wallpaperProjectType,
+    wallpaperFrameUrl: wallpaperEngine.frameUrl.value,
+    opacity: background.opacity,
+    blur: background.blur,
+    windowOpacity: background.windowOpacity,
+    positionX: background.positionX,
+    positionY: background.positionY,
+    scale: background.scale,
+  };
+});
 void hydrateLyricsRendererSettings();
 const {
   closeFullscreenIfNeeded,
@@ -281,6 +327,7 @@ const lyricsRendererContext = computed<LyricsRendererContext>(() => ({
   lyricColor: player.settings.lyricFontColor,
   useThemeLyricColor: player.settings.useThemeLyricColor,
   coverUrl: displayCoverUrl.value,
+  background: rendererBackground.value,
   isLoading: isLyricsPending.value,
   emptyMessage: emptyLyricsMessage.value,
   loadingText: lyricsLoadingLabel.value,
@@ -365,16 +412,23 @@ const {
     :class="{
       'has-cover-background': backgroundCoverUrl,
       'renderer-owns-surface': rendererOwnsSurface,
+      'native-wallpaper-scene': rendererBackground.source === 'wallpaper' && rendererBackground.wallpaperProjectType === 'scene',
     }"
     :style="lyricsViewStyle"
   >
+    <div class="lyrics-collapse-slot">
+      <LyricsCollapseButton :label="closeLabel" @close="closeLyricsView" />
+    </div>
+    <div v-if="wallpaperEngine.error.value" class="wallpaper-error" role="alert">
+      <span>{{ wallpaperEngine.error.value }}</span>
+      <button type="button" @click="retryWallpaperEngineBackground">重试</button>
+    </div>
+
     <div v-if="!rendererOwnsSurface" class="lyrics-header-slot">
       <LyricsHeaderBar
         :album="albumLabel"
         :artist="artistLabel"
-        :close-label="closeLabel"
         :title="titleLabel"
-        @close="closeLyricsView"
       />
     </div>
 
@@ -391,6 +445,24 @@ const {
 </template>
 
 <style scoped>
+.wallpaper-error {
+  position: absolute;
+  z-index: 100;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 48px);
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--smw-bg-panel);
+  color: var(--smw-text-body);
+  font-size: 13px;
+}
+.wallpaper-error button { flex-shrink: 0; cursor: pointer; }
+.wallpaper-error span { min-width: 0; overflow-wrap: anywhere; }
 .lyrics-view {
   position: relative;
   grid-row: 1;
@@ -456,14 +528,26 @@ const {
   background: transparent;
 }
 
+.lyrics-view.native-wallpaper-scene {
+  background: transparent;
+}
+
 .lyrics-view.renderer-owns-surface::before,
 .lyrics-view.renderer-owns-surface::after {
   display: none;
 }
 
-.lyrics-view > *:not(.lyrics-header-slot) {
+.lyrics-view > *:not(.lyrics-header-slot):not(.lyrics-collapse-slot):not(.wallpaper-error) {
   position: relative;
   z-index: 1;
+}
+
+.lyrics-collapse-slot {
+  position: absolute;
+  inset: 16px 0 auto;
+  z-index: 30;
+  width: 100%;
+  pointer-events: none;
 }
 
 .lyrics-header-slot {

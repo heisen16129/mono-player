@@ -21,6 +21,8 @@
     'js/modules/01-scene/03-focus-cinema-camera.js',
     'js/modules/01-scene/04-bottom-controls-cursor.js',
     'js/modules/02-visual/00-pointer-cover-particles.js',
+    'js/modules/02-visual/00a-black-hole-shader.js',
+    'js/modules/02-visual/00a-black-hole.js',
     'js/modules/02-visual/01-float-skull-backcover.js',
     'js/modules/02-visual/02-lyrics-state-layout.js',
     'js/modules/02-visual/03-lyrics-star-river.js',

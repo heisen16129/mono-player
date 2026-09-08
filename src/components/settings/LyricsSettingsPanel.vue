@@ -4,10 +4,15 @@ import { t } from '../../i18n';
 import { usePlayerStore } from '../../stores/player';
 import LyricsFontColorSetting from './LyricsFontColorSetting.vue';
 import LyricsFontSizeSetting from './LyricsFontSizeSetting.vue';
+import LyricsBackgroundSetting from './LyricsBackgroundSetting.vue';
 import LyricsRendererSetting from './LyricsRendererSetting.vue';
+import { artworkDisplaySrc } from '../../utils/artwork';
 
 const player = usePlayerStore();
 const locale = computed(() => player.settings.locale);
+const currentCoverUrl = computed(() => artworkDisplaySrc(
+  player.currentTrack?.associatedArtwork || player.currentTrack?.artwork,
+));
 const lyricFontSizeOptions = Array.from({ length: 21 }, (_, index) => String(index + 14));
 
 </script>
@@ -36,6 +41,13 @@ const lyricFontSizeOptions = Array.from({ length: 21 }, (_, index) => String(ind
       :use-theme-color-label="t(locale, 'useThemeColor')"
       @set-color="player.setLyricFontColor"
       @set-use-theme-color="player.setUseThemeLyricColor"
+    />
+    <LyricsBackgroundSetting
+      :cover-url="currentCoverUrl"
+      :locale="locale"
+      :preview="player.previewLyricsBackground"
+      :update="player.setLyricsBackground"
+      :value="player.settings.lyricsBackground"
     />
     <LyricsRendererSetting />
   </section>

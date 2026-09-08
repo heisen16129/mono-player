@@ -14,7 +14,6 @@ const DEFAULT_CONFIG = {
 
 const ICONS = {
   close: '<path d="m18 6-12 12M6 6l12 12"/>',
-  chevronDown: '<path d="m6 9 6 6 6-6"/>',
   heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.7-7.5a5.5 5.5 0 0 0 1.1-8.9Z"/>',
   settings: '<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.2a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.8v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.2a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.2a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.2a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z"/><circle cx="12" cy="12" r="3"/>',
   previous: '<path d="m19 20-9-8 9-8v16Z"/><path d="M5 19V5"/>',
@@ -27,7 +26,6 @@ const ICONS = {
   repeat: '<path d="m17 1 4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
   repeatOne: '<path d="m17 1 4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><path d="M11 10h1v5"/>',
   lyrics: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
-  comments: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z"/>',
   queue: '<path d="M3 6h14M3 12h14M3 18h9"/><path d="m18 15 4 3-4 3v-6Z"/>',
   locate: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
   external: '<path d="M15 3h6v6M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
@@ -37,18 +35,23 @@ const svg = (name, size = 20, filled = false) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
 const CSS = `
-:root,:host { color-scheme:dark; --accent:#fa2d48; --fg:#fff; --muted:rgba(255,255,255,.58); --line:rgba(255,255,255,.13); }
+:root,:host { --accent:#fa2d48; --fg:#fff; --muted:rgba(255,255,255,.58); --line:rgba(255,255,255,.13); }
+html,body { background:transparent!important; }
 * { box-sizing:border-box; }
 button,input,select { font:inherit; }
 button { color:inherit; }
-.app { position:relative; width:100%; height:100%; min-height:520px; overflow:clip; color:var(--fg); background:#09090a; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif; }
+.app { position:relative; width:100%; height:100%; min-height:520px; overflow:clip; color-scheme:dark; color:var(--fg); background:transparent; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif; }
+.app.native-wallpaper-scene { background:transparent; }
+.app.native-wallpaper-scene .backdrop { background-image:none!important; opacity:0; }
+.backdrop-color { position:absolute; inset:0; pointer-events:none; background:#09090a; }
 .backdrop,.backdrop::before,.backdrop::after { position:absolute; inset:-10%; content:""; pointer-events:none; }
-.backdrop { background-position:center; background-size:cover; transform:scale(1.12); filter:blur(var(--bg-blur,32px)) saturate(1.12); opacity:.52; transition:filter .3s ease,opacity .3s ease; }
+.backdrop { background-position:center; background-size:cover; transform:scale(1.12); filter:blur(calc(var(--bg-blur,32px) + var(--shared-bg-blur,0px))) saturate(1.12); opacity:.52; transition:filter .3s ease,opacity .3s ease; }
+.backdrop-video { position:absolute; inset:-10%; width:120%; height:120%; object-fit:cover; pointer-events:none; opacity:0; transform:scale(1.12); filter:blur(calc(var(--bg-blur,32px) + var(--shared-bg-blur,0px))) saturate(1.12); transition:filter .3s ease,opacity .3s ease; }
 .backdrop::before { background:linear-gradient(105deg,rgba(5,5,7,.58),rgba(8,8,10,.36) 45%,rgba(3,3,5,.68)); }
 .backdrop::after { background:linear-gradient(to bottom,rgba(0,0,0,.08),rgba(0,0,0,.42) 76%,rgba(0,0,0,.64)); }
-.app[data-background="static"] .backdrop { filter:blur(var(--bg-blur,32px)) saturate(.72); opacity:.34; transform:scale(1.08); }
-.app[data-background="amll"] .backdrop { filter:blur(calc(var(--bg-blur,32px) + 12px)) saturate(1.45); opacity:.65; animation:drift 16s ease-in-out infinite alternate; }
-.grain { position:absolute; inset:0; opacity:.055; pointer-events:none; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E"); }
+.app[data-background="static"] .backdrop { filter:blur(calc(var(--bg-blur,32px) + var(--shared-bg-blur,0px))) saturate(.72); opacity:.34; transform:scale(1.08); }
+.app[data-background="amll"] .backdrop { filter:blur(calc(var(--bg-blur,32px) + var(--shared-bg-blur,0px) + 12px)) saturate(1.45); opacity:.65; animation:drift 16s ease-in-out infinite alternate; }
+.grain { position:absolute; inset:0; opacity:var(--grain-opacity,.055); pointer-events:none; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E"); }
 @keyframes drift { from { transform:scale(1.13) translate3d(-1.5%,-1%,0); } to { transform:scale(1.2) translate3d(1.5%,1%,0); } }
 .chrome { position:absolute; inset:0; display:flex; flex-direction:column; padding:54px 24px 22px; z-index:1; }
 .topbar { position:relative; height:42px; display:flex; align-items:center; flex:0 0 auto; }
@@ -59,12 +62,12 @@ button { color:inherit; }
 .icon-btn:active { transform:scale(.92); }
 .icon-btn:focus-visible,.transport button:focus-visible,.segment button:focus-visible,.queue-row:focus-visible { outline:2px solid rgba(255,255,255,.9); outline-offset:2px; }
 .main { min-height:0; flex:1; display:grid; grid-template-columns:360px minmax(0,1fr); gap:clamp(72px,12.86vw,247px); align-items:center; max-width:1506px; width:100%; margin:0 auto; }
-.player { min-width:0; display:flex; flex-direction:column; align-items:center; transform:translateY(22px); }
-.cover-wrap { width:min(100%,320px); aspect-ratio:1; margin-bottom:58px; }
+.player { --player-cover-width:min(100%,320px); min-width:0; display:flex; flex-direction:column; align-items:center; transform:translateY(22px); }
+.cover-wrap { width:var(--player-cover-width); aspect-ratio:1; margin-bottom:58px; }
 .cover { width:100%; height:100%; object-fit:cover; border-radius:10px; box-shadow:0 28px 80px rgba(0,0,0,.45),0 3px 14px rgba(0,0,0,.35); transform:scale(.88); transition:transform .65s cubic-bezier(.22,.8,.2,1),opacity .25s ease; }
 .app.is-playing .cover { transform:scale(1); }
 .cover-placeholder { width:100%; height:100%; border-radius:10px; display:grid; place-items:center; color:rgba(255,255,255,.25); background:linear-gradient(145deg,#38383b,#171719); }
-.meta { width:min(100%,360px); display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:14px; }
+.meta { width:var(--player-cover-width); display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:14px; }
 .marquee { overflow:hidden; white-space:nowrap; }
 .marquee-track { display:inline-flex; min-width:100%; gap:48px; }
 .marquee.is-overflowing .marquee-track { animation:marquee 12s linear infinite; }
@@ -77,7 +80,7 @@ button { color:inherit; }
 .meta-actions .icon-btn { background:transparent; width:32px; height:32px; }
 .meta-actions .favorite { color:#fff; }
 .meta-actions .favorite.active { color:var(--accent); }
-.seek { width:min(100%,360px); margin-top:33px; }
+.seek { width:var(--player-cover-width); margin-top:33px; }
 .range { --value:0%; appearance:none; width:100%; height:4px; border-radius:99px; outline:none; background:linear-gradient(to right,#fff var(--value),rgba(255,255,255,.23) var(--value)); cursor:pointer; }
 .range::-webkit-slider-thumb { appearance:none; width:12px; height:12px; border-radius:50%; background:#fff; opacity:0; transition:opacity .15s ease,transform .15s ease; }
 .range:hover::-webkit-slider-thumb,.range:focus-visible::-webkit-slider-thumb { opacity:1; }
@@ -92,15 +95,15 @@ button { color:inherit; }
 .lower-controls .icon-btn { background:transparent; width:34px; height:34px; }
 .volume-value { color:rgba(255,255,255,.54); font-size:11px; font-variant-numeric:tabular-nums; text-align:right; }
 .volume { height:3px; }
-.content { min-width:0; align-self:stretch; display:flex; flex-direction:column; overflow:hidden; padding:7vh 0 3vh; transform:translateY(-46px); }
-.segment { width:302px; display:grid; grid-template-columns:42px repeat(3,minmax(0,1fr)); gap:2px; padding:3px; margin-top:12px; border-radius:8px; background:rgba(255,255,255,.09); backdrop-filter:blur(18px); }
+.content { min-width:0; align-self:stretch; display:flex; flex-direction:column; overflow:hidden; margin:-46px 0 -22px; padding:7vh 0 0; }
+.segment { width:302px; display:grid; grid-template-columns:42px repeat(2,minmax(0,1fr)); gap:2px; padding:3px; margin-top:12px; border-radius:8px; background:rgba(255,255,255,.09); backdrop-filter:blur(18px); }
 .segment button { height:30px; min-width:0; padding:0 8px; border:0; border-radius:6px; display:flex; align-items:center; justify-content:center; gap:6px; background:transparent; color:rgba(255,255,255,.58); font-size:12px; font-weight:650; cursor:pointer; }
 .segment .mode-button { padding:0; }
 .segment .mode-button.active { color:var(--accent); }
 .segment button.active { color:#fff; background:rgba(255,255,255,.15); box-shadow:0 1px 5px rgba(0,0,0,.18); }
 .view { min-height:0; flex:1; position:relative; }
-.lyrics,.comments,.queue { position:absolute; inset:0; overflow:auto; scrollbar-width:none; overscroll-behavior:contain; -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 11%,#000 83%,transparent 100%); mask-image:linear-gradient(to bottom,transparent 0,#000 11%,#000 83%,transparent 100%); }
-.lyrics::-webkit-scrollbar,.comments::-webkit-scrollbar,.queue::-webkit-scrollbar { display:none; }
+.lyrics,.queue { position:absolute; inset:0; overflow:auto; scrollbar-width:none; overscroll-behavior:contain; -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 11%,#000 100%); mask-image:linear-gradient(to bottom,transparent 0,#000 11%,#000 100%); }
+.lyrics::-webkit-scrollbar,.queue::-webkit-scrollbar { display:none; }
 .lyrics { padding:var(--align-pad-start,45vh) 5% var(--align-pad-end,55vh) 0; }
 .lyric-line { width:100%; margin:0 0 calc(var(--line-gap,.5) * 1em); padding:0; border:0; background:transparent; color:rgba(255,255,255,.29); text-align:left; font-size:var(--lyric-size,40px); font-weight:750; line-height:var(--line-height,1.2); letter-spacing:0; cursor:pointer; transform-origin:left center; transition:color .28s ease,filter .35s ease,transform .35s cubic-bezier(.22,.75,.2,1),opacity .28s ease; }
 .lyric-line:hover { color:rgba(255,255,255,.52); }
@@ -112,12 +115,10 @@ button { color:inherit; }
 .queue::-webkit-scrollbar { display:block; width:5px; }
 .queue::-webkit-scrollbar-track { background:transparent; }
 .queue::-webkit-scrollbar-thumb { border-radius:99px; background:rgba(255,255,255,.5); }
-.queue-head { position:sticky; top:0; z-index:2; min-height:76px; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 5px 12px; background:linear-gradient(to bottom,rgba(21,21,23,.96) 0%,rgba(21,21,23,.82) 68%,transparent 100%); backdrop-filter:blur(14px); }
-.queue-heading { min-width:0; display:grid; grid-template-columns:20px minmax(0,1fr); align-items:center; gap:9px; }
-.queue-heading-icon { grid-row:1 / span 2; color:rgba(255,255,255,.72); }
+.queue-head { min-height:48px; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:8px 9px; border-bottom:1px solid rgba(255,255,255,.08); }
+.queue-heading { min-width:0; display:flex; align-items:baseline; gap:4px; }
 .queue-head strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:16px; line-height:1.2; }
 .queue-count { margin-left:3px; color:rgba(255,255,255,.42); font-size:12px; font-weight:600; }
-.queue-source { margin-top:4px; color:rgba(255,255,255,.43); font-size:11px; }
 .queue-head .icon-btn { flex:0 0 auto; width:32px; height:32px; background:transparent; color:rgba(255,255,255,.58); }
 .queue-list { display:flex; flex-direction:column; gap:2px; }
 .queue-row { width:100%; min-height:58px; display:grid; grid-template-columns:24px 42px minmax(0,1fr) auto; align-items:center; gap:10px; padding:6px 9px; border:1px solid transparent; border-radius:8px; background:transparent; text-align:left; cursor:pointer; transition:background .16s ease,border-color .16s ease; }
@@ -159,13 +160,13 @@ button { color:inherit; }
   .app { min-height:600px; overflow-x:hidden; overflow-y:auto; }
   .chrome { position:relative; min-height:100%; padding:12px 14px 18px; }
   .main { grid-template-columns:1fr; gap:18px; align-items:start; }
-  .player { padding-top:2px; transform:none; }
-  .cover-wrap { width:min(48vw,210px); margin-bottom:14px; }
-  .meta,.seek,.lower-controls { width:min(100%,480px); }
+  .player { --player-cover-width:min(48vw,210px); padding-top:2px; transform:none; }
+  .cover-wrap { margin-bottom:14px; }
+  .lower-controls { width:min(100%,480px); }
   .seek { margin-top:18px; }
   .transport { height:56px; }
   .transport .play { width:56px; height:56px; }
-  .content { height:55vh; min-height:340px; padding:0; transform:none; }
+  .content { height:55vh; min-height:340px; margin:0; padding:0; }
   .segment { margin-top:12px; }
   .lyrics { padding-left:4%; padding-right:4%; }
   .lyric-line { font-size:min(var(--lyric-size,40px),30px); }
@@ -173,8 +174,8 @@ button { color:inherit; }
   .settings-panel { position:fixed; top:auto; right:10px; bottom:10px; left:10px; width:auto; max-height:78vh; }
 }
 @media (max-height:820px) and (min-width:761px) {
-  .player { transform:none; }
-  .cover-wrap { width:min(43vh,310px); margin-bottom:34px; }
+  .player { --player-cover-width:min(43vh,310px); transform:none; }
+  .cover-wrap { margin-bottom:34px; }
   .seek { margin-top:22px; }
   .transport { height:58px; }
   .segment { margin-top:8px; }
@@ -183,10 +184,10 @@ button { color:inherit; }
   .chrome { padding-top:10px; padding-bottom:12px; }
   .topbar { height:34px; }
   .main { align-items:start; }
-  .player { transform:none; }
-  .cover-wrap { width:min(46vh,300px); margin-bottom:14px; }
+  .player { --player-cover-width:min(46vh,300px); transform:none; }
+  .cover-wrap { margin-bottom:14px; }
   .seek { margin-top:10px; }
-  .content { padding-top:2vh; padding-bottom:1vh; transform:none; }
+  .content { margin:0; padding-top:2vh; padding-bottom:1vh; }
   .transport { height:54px; }
 }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; scroll-behavior:auto!important; transition-duration:.01ms!important; } }
@@ -257,9 +258,9 @@ function button(label, iconName, className = 'icon-btn') {
 
 function createLayout() {
   root.innerHTML = `<style>${CSS}</style><div class="app">
-    <div class="backdrop"></div><div class="grain"></div>
+    <div class="backdrop-color"></div><video class="backdrop-video" muted loop playsinline></video><div class="backdrop"></div><div class="grain"></div>
     <div class="chrome">
-      <header class="topbar"><div data-slot="close"></div><div class="topbar-title">正在播放</div></header>
+      <header class="topbar"><div class="topbar-title">正在播放</div></header>
       <main class="main">
         <section class="player">
           <div class="cover-wrap"><img class="cover" alt="专辑封面"><div class="cover-placeholder">${svg('lyrics', 38)}</div></div>
@@ -267,10 +268,10 @@ function createLayout() {
           <div class="seek"><input class="range seek-range" type="range" min="0" step="0.01"><div class="times"><span class="elapsed">0:00</span><span class="remaining">0:00</span></div></div>
           <div class="transport"><div data-slot="previous"></div><div data-slot="play"></div><div data-slot="next"></div></div>
           <div class="lower-controls"><div data-slot="mute"></div><input class="range volume" type="range" min="0" max="100" step="1"><span class="volume-value">0%</span></div>
-          <div class="segment" role="tablist"><div data-slot="mode"></div><button type="button" data-view="lyrics" class="active">${svg('lyrics', 14)}歌词</button><button type="button" data-view="comments">${svg('comments', 14)}评论</button><button type="button" data-view="queue">${svg('queue', 14)}队列</button></div>
+          <div class="segment" role="tablist"><div data-slot="mode"></div><button type="button" data-view="lyrics" class="active">${svg('lyrics', 14)}歌词</button><button type="button" data-view="queue">${svg('queue', 14)}队列</button></div>
         </section>
         <section class="content">
-          <div class="view"><div class="lyrics"></div><div class="comments hidden"><div class="empty">当前歌曲暂无评论</div></div><div class="queue hidden"></div></div>
+          <div class="view"><div class="lyrics"></div><div class="queue hidden"></div></div>
         </section>
       </main>
     </div><div class="settings-panel hidden"></div>
@@ -279,14 +280,13 @@ function createLayout() {
   const app = root.querySelector('.app');
   elements = {
     app,
-    backdrop: app.querySelector('.backdrop'), cover: app.querySelector('.cover'), coverPlaceholder: app.querySelector('.cover-placeholder'), coverWrap: app.querySelector('.cover-wrap'),
+    backdropColor: app.querySelector('.backdrop-color'), backdrop: app.querySelector('.backdrop'), backdropVideo: app.querySelector('.backdrop-video'), cover: app.querySelector('.cover'), coverPlaceholder: app.querySelector('.cover-placeholder'), coverWrap: app.querySelector('.cover-wrap'),
     marquee: app.querySelector('.marquee'), titleA: app.querySelector('.title-a'), titleB: app.querySelector('.title-b'), subtitle: app.querySelector('.subtitle'),
     seek: app.querySelector('.seek-range'), elapsed: app.querySelector('.elapsed'), remaining: app.querySelector('.remaining'), volume: app.querySelector('.volume'), volumeValue: app.querySelector('.volume-value'),
-    lyrics: app.querySelector('.lyrics'), comments: app.querySelector('.comments'), queue: app.querySelector('.queue'), settingsPanel: app.querySelector('.settings-panel'),
+    lyrics: app.querySelector('.lyrics'), queue: app.querySelector('.queue'), settingsPanel: app.querySelector('.settings-panel'),
     viewButtons: [...app.querySelectorAll('[data-view]')],
   };
 
-  const close = button('关闭全屏歌词', 'chevronDown'); close.addEventListener('click', () => post('close'));
   const settings = button('歌词设置', 'settings'); settings.addEventListener('click', () => { settingsOpen = !settingsOpen; renderSettings(); });
   const favorite = button('收藏', 'heart', 'icon-btn favorite'); favorite.addEventListener('click', () => post('toggleFavorite'));
   const previous = button('上一首', 'previous', ''); previous.addEventListener('click', () => post('playPrevious'));
@@ -310,14 +310,13 @@ function createLayout() {
   const next = button('下一首', 'next', ''); next.addEventListener('click', () => post('playNext'));
   const mute = button('静音', 'volume'); mute.addEventListener('click', () => post('toggleMute'));
   const mode = button('播放模式', 'repeat', 'mode-button'); mode.addEventListener('click', () => post('togglePlaybackMode'));
-  for (const [slot, node] of Object.entries({ close, settings, favorite, previous, play, next, mute, mode })) app.querySelector(`[data-slot="${slot}"]`).replaceWith(node);
-  Object.assign(elements, { close, settings, favorite, previous, play, next, mute, mode });
+  for (const [slot, node] of Object.entries({ settings, favorite, previous, play, next, mute, mode })) app.querySelector(`[data-slot="${slot}"]`).replaceWith(node);
+  Object.assign(elements, { settings, favorite, previous, play, next, mute, mode });
 
   elements.cover.addEventListener('error', () => {
     elements.cover.removeAttribute('src');
     elements.cover.classList.add('hidden');
     elements.coverPlaceholder.classList.remove('hidden');
-    elements.backdrop.style.backgroundImage = '';
     post('coverError');
   });
 
@@ -348,7 +347,6 @@ function setView(view) {
   if (view !== 'lyrics') stopLyricSpring();
   activeView = view;
   elements.lyrics.classList.toggle('hidden', view !== 'lyrics');
-  elements.comments.classList.toggle('hidden', view !== 'comments');
   elements.queue.classList.toggle('hidden', view !== 'queue');
   for (const tab of elements.viewButtons) tab.classList.toggle('active', tab.dataset.view === view);
   if (view === 'lyrics') requestAnimationFrame(() => scrollToActive(true));
@@ -596,7 +594,7 @@ function renderQueue() {
   if (nextKey === queueKey) return;
   queueKey = nextKey;
   elements.queue.replaceChildren();
-  const head = document.createElement('div'); head.className = 'queue-head'; head.innerHTML = `<div class="queue-heading"><span class="queue-heading-icon">${svg('queue', 18)}</span><strong>播放队列 <span class="queue-count">(${queue.length})</span></strong><span class="queue-source">按当前播放顺序排列</span></div><button type="button" class="icon-btn" aria-label="定位当前歌曲" title="定位当前歌曲">${svg('locate', 17)}</button>`;
+  const head = document.createElement('div'); head.className = 'queue-head'; head.innerHTML = `<div class="queue-heading"><strong>播放队列</strong><span class="queue-count">${queue.length}</span></div><button type="button" class="icon-btn" aria-label="定位当前歌曲" title="定位当前歌曲">${svg('locate', 17)}</button>`;
   head.querySelector('button').addEventListener('click', () => locateCurrentQueueRow('smooth')); elements.queue.append(head);
   if (!queue.length) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = '播放队列为空'; elements.queue.append(empty); return; }
   const list = document.createElement('div'); list.className = 'queue-list'; elements.queue.append(list);
@@ -642,7 +640,7 @@ function updateTransport() {
   elements.app.classList.toggle('is-playing', Boolean(context.isPlaying));
   elements.favorite.classList.toggle('active', Boolean(context.isFavorite)); elements.favorite.innerHTML = svg('heart', 20, Boolean(context.isFavorite));
   const volume = Math.max(0, Math.min(100, Number(context.volume) || 0)); elements.volume.value = String(volume); elements.volume.style.setProperty('--value', `${volume}%`); elements.volumeValue.textContent = `${Math.round(volume)}%`; const muted = Boolean(context.isMuted) || volume === 0; elements.mute.innerHTML = svg(muted ? 'muted' : 'volume'); elements.mute.setAttribute('aria-label', muted ? '取消静音' : '静音');
-  const mode = context.playbackMode || 'repeat'; const iconName = mode === 'shuffle' ? 'shuffle' : mode === 'fixed' ? 'repeatOne' : 'repeat'; elements.mode.innerHTML = svg(iconName); elements.mode.classList.toggle('active', mode !== 'repeat'); elements.mode.title = context.playbackModeLabel || '播放模式'; elements.mode.setAttribute('aria-label', elements.mode.title);
+  const mode = context.playbackMode || 'repeat'; const iconName = mode === 'shuffle' ? 'shuffle' : mode === 'fixed' ? 'repeatOne' : 'repeat'; if (elements.mode.dataset.icon !== iconName) { elements.mode.innerHTML = svg(iconName); elements.mode.dataset.icon = iconName; } elements.mode.classList.toggle('active', mode !== 'repeat'); elements.mode.title = context.playbackModeLabel || '播放模式'; elements.mode.setAttribute('aria-label', elements.mode.title);
 }
 
 function renderMeta() {
@@ -663,15 +661,49 @@ function renderMeta() {
       elements.cover.src = cover;
       elements.cover.classList.remove('hidden');
       elements.coverPlaceholder.classList.add('hidden');
-      elements.backdrop.style.backgroundImage = `url(${JSON.stringify(cover)})`;
     } else {
       elements.cover.removeAttribute('src');
       elements.cover.classList.add('hidden');
       elements.coverPlaceholder.classList.remove('hidden');
-      elements.backdrop.style.backgroundImage = '';
     }
   }
+  renderBackground(cover);
   requestAnimationFrame(() => elements.marquee.classList.toggle('is-overflowing', elements.titleA.scrollWidth > elements.marquee.clientWidth));
+}
+
+function renderBackground(cover) {
+  const background = context.background || {};
+  const source = background.source || 'cover';
+  const sharedMedia = source === 'media' || source === 'wallpaper';
+  const mediaUrl = source === 'cover' ? cover : (sharedMedia ? background.mediaUrl : '');
+  const isVideo = sharedMedia && background.mediaKind === 'video' && Boolean(mediaUrl);
+  const isNativeScene = source === 'wallpaper' && background.wallpaperProjectType === 'scene';
+  const opacity = Math.min(1, Math.max(0, Number(background.opacity ?? .72)));
+  const windowOpacity = Math.min(1, Math.max(0, Number(background.windowOpacity ?? 1)));
+  const blur = Math.min(60, Math.max(0, Number(background.blur ?? 0)));
+  const position = `${Number(background.positionX ?? 50)}% ${Number(background.positionY ?? 50)}%`;
+  const scale = Math.min(2, Math.max(.5, Number(background.scale ?? 1)));
+  elements.app.classList.toggle('native-wallpaper-scene', isNativeScene);
+  const baseColor = source === 'color' ? String(background.color || '#000000') : '#09090a';
+  const baseOpacity = source === 'color' ? opacity : 1;
+  elements.backdropColor.style.backgroundColor = baseColor;
+  elements.backdropColor.style.opacity = isNativeScene ? '0' : String(baseOpacity * windowOpacity);
+  elements.app.style.setProperty('--grain-opacity', String(.055 * baseOpacity * windowOpacity));
+  elements.app.style.setProperty('--shared-bg-blur', `${blur}px`);
+  elements.backdrop.style.backgroundPosition = position;
+  elements.backdrop.style.transform = `scale(${scale * 1.12})`;
+  elements.backdrop.style.opacity = isVideo ? '0' : (!isVideo && mediaUrl ? String(opacity * windowOpacity) : '0');
+  elements.backdrop.style.backgroundImage = !isVideo && mediaUrl ? `url(${JSON.stringify(mediaUrl)})` : '';
+  elements.backdropVideo.style.objectPosition = position;
+  elements.backdropVideo.style.transform = `scale(${scale * 1.12})`;
+  elements.backdropVideo.style.opacity = isVideo ? String(opacity * windowOpacity) : '0';
+  if (isVideo) {
+    if (elements.backdropVideo.src !== mediaUrl) elements.backdropVideo.src = mediaUrl;
+    void elements.backdropVideo.play().catch(() => {});
+  } else {
+    elements.backdropVideo.pause();
+    elements.backdropVideo.removeAttribute('src');
+  }
 }
 
 function render(nextContext = {}) {

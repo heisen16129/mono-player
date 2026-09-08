@@ -10,6 +10,7 @@ import upstreamAdapterSource from './upstream-adapter.js.part';
 import pluginOverrides from './plugin-overrides.css';
 import skullAssetUrl from '../upstream/public/assets/skull-decimation-points.bin';
 import { mergeContext, toRuntimeContext } from './bridge/context-adapter.mjs';
+import { createWallpaperSampler } from './bridge/wallpaper-sampler.mjs';
 
 let target = null;
 let rendererApi = null;
@@ -22,6 +23,7 @@ let previousHostAction = null;
 let previousInlineHandlers = null;
 let previousWorkshopSrcdoc = null;
 let storagePersistTimer = 0;
+let wallpaperSampler = null;
 
 const PRIVATE_STORAGE_KEY = 'mineradioOriginalStorage';
 const excludedStorageKey = (key) => /(login|cookie|last-playback|listen-stats|local-beat|library|cache)/i.test(key);
@@ -153,7 +155,8 @@ function bindHostActions() {
     dispatch('seekTime', { time: ratio * (Number(context.duration) || 0) });
   }, { signal: abort.signal });
   document.getElementById('volume-slider')?.addEventListener('input', (event) => {
-    dispatch('setVolume', { value: Number(event.currentTarget.value) });
+    const originalVolume = Math.min(1, Math.max(0, Number(event.currentTarget.value) || 0));
+    dispatch('setVolume', { value: originalVolume * 100 });
   }, { signal: abort.signal });
   return () => abort.abort();
 }
@@ -178,7 +181,17 @@ function runOriginalRuntime() {
 
 function applyContext(nextContext) {
   context = mergeContext(context, nextContext);
-  runtimeApi?.setContext(toRuntimeContext(context));
+  const runtimeContext = toRuntimeContext(context);
+  const isNativeScene = runtimeContext.background?.source === 'wallpaper'
+    && runtimeContext.background?.wallpaperProjectType === 'scene';
+  const windowOpacity = Math.min(1, Math.max(0, Number(runtimeContext.background?.windowOpacity ?? 1)));
+  document.documentElement.style.setProperty('--mono-window-opacity', String(windowOpacity));
+  document.body.style.setProperty('--mono-window-opacity', String(windowOpacity));
+  target?.style.setProperty('--mono-window-opacity', String(windowOpacity));
+  target?.classList.toggle('native-wallpaper-scene', isNativeScene);
+  document.body.classList.toggle('native-wallpaper-scene', isNativeScene);
+  runtimeApi?.setContext(runtimeContext);
+  wallpaperSampler?.update(context.background);
   if (target && runtimeApi?.debug) {
     target.dataset.mineradioOriginalDebug = JSON.stringify(runtimeApi.debug());
   }
@@ -197,11 +210,14 @@ async function mount(nextTarget, initialContext, api) {
   installEnvironment();
   cleanupActions = bindHostActions();
   runOriginalRuntime();
+  wallpaperSampler = createWallpaperSampler(target);
   applyContext(context);
   target.dataset.mineradioOriginalModules = String(UPSTREAM_MODULE_COUNT);
 }
 
 function destroy() {
+  wallpaperSampler?.destroy();
+  wallpaperSampler = null;
   clearTimeout(storagePersistTimer);
   cleanupActions?.();
   if (previousFetch) window.fetch = previousFetch;
@@ -214,6 +230,7 @@ function destroy() {
     else window[name] = previous;
   }
   delete window.__monoMineradioOriginal;
+  document.body.classList.remove('native-wallpaper-scene');
   styleElement?.remove();
   if (target) {
     target.innerHTML = '';
@@ -236,6 +253,6 @@ function destroy() {
 export default {
   mount,
   update(nextContext) { applyContext(nextContext || {}); },
-  updateAudioSpectrum(levels) { runtimeApi?.setSpectrum(Array.isArray(levels) ? levels : []); },
+  updateAudioFrame(frame) { runtimeApi?.setAudioFrame(frame || null); },
   destroy,
 };

@@ -2,29 +2,18 @@
 import { computed, onMounted } from 'vue';
 import { useLyricsRendererSettings } from '../../composables/useLyricsRendererSettings';
 import { usePlayerStore } from '../../stores/player';
-import type { PluginConfig } from '../../types/plugin';
-import PluginConfigFields from './PluginConfigFields.vue';
 
 const player = usePlayerStore();
 const locale = computed(() => player.settings.locale);
 const {
-  activeRenderer,
-  activeRendererConfig,
   activeRendererId,
   hydrateLyricsRendererSettings,
   rendererPlugins,
-  saveLyricsRendererConfig,
   selectLyricsRenderer,
 } = useLyricsRendererSettings();
-const activeFields = computed(() => activeRenderer.value?.configSchema?.fields ?? []);
 
 function selectRenderer(event: Event) {
   selectLyricsRenderer((event.target as HTMLSelectElement).value);
-}
-
-function updateRendererConfig(config: PluginConfig) {
-  const plugin = activeRenderer.value;
-  if (plugin) saveLyricsRendererConfig(plugin.id, config);
 }
 
 onMounted(() => {
@@ -37,21 +26,12 @@ onMounted(() => {
     <p>{{ locale === 'en-US' ? 'Lyrics page' : '歌词页面' }}</p>
     <label class="field-row">
       <span>{{ locale === 'en-US' ? 'Renderer' : '页面样式' }}</span>
-    <select v-model="activeRendererId" @change="selectRenderer">
+      <select v-model="activeRendererId" @change="selectRenderer">
         <option v-for="plugin in rendererPlugins" :key="plugin.id" :value="plugin.id">
           {{ locale === 'en-US' ? (plugin.nameEn ?? plugin.name) : plugin.name }}
         </option>
       </select>
     </label>
-
-    <PluginConfigFields
-      v-if="activeRenderer && activeFields.length"
-      :config="activeRendererConfig"
-      :fields="activeFields"
-      :locale="locale"
-      :scope-id="activeRenderer.id"
-      @update="updateRendererConfig"
-    />
   </div>
 </template>
 

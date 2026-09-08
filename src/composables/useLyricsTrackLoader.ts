@@ -1,4 +1,4 @@
-import { watch, type ComputedRef, type Ref } from 'vue';
+import { nextTick, watch, type ComputedRef, type Ref } from 'vue';
 import { isTauriRuntime, resolveLyricsSource } from '../services/music';
 import type { LyricLine, Track, TrackLyrics } from '../types/music';
 import { parseRawLyrics } from '../utils/lyrics';
@@ -42,6 +42,9 @@ export function useLyricsTrackLoader(options: {
       const previousIdentityKey = previousValue?.[0] ?? null;
       if (identityKey !== previousIdentityKey) {
         options.lines.value = [];
+        options.clearCoverState();
+        await nextTick();
+        if (requestId !== lyricsLoadRequestId) return;
       }
       options.lyricTimeOffset.value = 0;
       options.isLyricSyncOpen.value = false;

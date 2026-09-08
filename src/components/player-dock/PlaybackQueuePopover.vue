@@ -82,4 +82,20 @@ const emit = defineEmits<{
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
 }
 
+:global(.mono-window.lyrics-open .queue-popover) {
+  --smw-text-primary: rgba(255, 255, 255, 0.96);
+  --smw-text-body: rgba(255, 255, 255, 0.9);
+  --smw-text-secondary: rgba(255, 255, 255, 0.68);
+  --smw-icon-muted: rgba(255, 255, 255, 0.66);
+  --smw-border-soft: rgba(255, 255, 255, 0.18);
+  --smw-bg-hover: rgba(255, 255, 255, 0.08);
+  --smw-bg-selected: rgba(255, 255, 255, 0.16);
+  --smw-scrollbar-thumb: rgba(255, 255, 255, 0.34);
+  --smw-scrollbar-thumb-hover: rgba(255, 255, 255, 0.52);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(22, 22, 24, 0.28);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(30px) saturate(1.08);
+}
+
 </style>

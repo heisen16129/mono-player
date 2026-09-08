@@ -625,6 +625,7 @@
     props.__mineradioColorHex = colorHex;
     props.__mineradioPaletteHexes = paletteHexes.join(',');
     props.__mineradioNearestTheme = fx.sonicWorkshopColorMode === 'custom' ? customTheme : workshopThemeForColor(colorHex);
+    props.__mineradioWindowOpacity = clamp(Number(fx.windowBackgroundOpacity == null ? 1 : fx.windowBackgroundOpacity), 0, 1);
     return props;
   }
 

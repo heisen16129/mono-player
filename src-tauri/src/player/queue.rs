@@ -350,7 +350,11 @@ pub(super) fn queue_track_plugin_source_key(track: &QueueTrack) -> Option<String
         (Some(provider_id), Some(source_id))
             if !provider_id.trim().is_empty() && !source_id.trim().is_empty() =>
         {
-            Some(format!("plugin://{}/{}", provider_id.trim(), source_id.trim()))
+            Some(format!(
+                "plugin://{}/{}",
+                provider_id.trim(),
+                source_id.trim()
+            ))
         }
         _ => None,
     }
@@ -456,10 +460,7 @@ pub(super) fn ensure_plugin_queue_track_for_backend(
 
     backend.queue_tracks.push(track);
     backend.queue_sources.push(plugin_source.clone());
-    Some((
-        plugin_source,
-        backend.queue_sources.len().checked_sub(1),
-    ))
+    Some((plugin_source, backend.queue_sources.len().checked_sub(1)))
 }
 
 pub(super) fn current_plugin_queue_source_for_backend(

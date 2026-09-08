@@ -180,13 +180,13 @@ pub(crate) fn update_track_metadata(
             return Err("没有找到要更新的歌曲。".to_string());
         }
 
-          Ok(UpdateTrackMetadataResult {
-              id: request.id,
-              title,
-              artist: artist.as_deref().map(artist_names).unwrap_or_default(),
-              album,
-              year,
-              genre,
+        Ok(UpdateTrackMetadataResult {
+            id: request.id,
+            title,
+            artist: artist.as_deref().map(artist_names).unwrap_or_default(),
+            album,
+            year,
+            genre,
             track_number,
         })
     })())
@@ -212,8 +212,7 @@ pub(crate) fn update_track_cover(
                 Ok(Err(error)) => {
                     eprintln!(
                         "[cover] embed cover failed, fallback to sidecar image: path={} error={}",
-                        request.path,
-                        error
+                        request.path, error
                     );
                     crate::covers::write_sidecar_cover_file_url(track_path, cover_path)?
                 }
@@ -289,20 +288,62 @@ fn read_track_audio_info_inner(
     })
 }
 
-fn audio_format_labels(file_type: Option<FileType>) -> (Option<String>, Option<String>, Option<bool>) {
+fn audio_format_labels(
+    file_type: Option<FileType>,
+) -> (Option<String>, Option<String>, Option<bool>) {
     match file_type {
-        Some(FileType::Aac) => (Some("AAC".to_string()), Some("AAC".to_string()), Some(false)),
-        Some(FileType::Aiff) => (Some("AIFF".to_string()), Some("PCM".to_string()), Some(true)),
-        Some(FileType::Ape) => (Some("APE".to_string()), Some("Monkey's Audio".to_string()), Some(true)),
-        Some(FileType::Flac) => (Some("FLAC".to_string()), Some("FLAC".to_string()), Some(true)),
-        Some(FileType::Mpeg) => (Some("MP3".to_string()), Some("MPEG Audio".to_string()), Some(false)),
+        Some(FileType::Aac) => (
+            Some("AAC".to_string()),
+            Some("AAC".to_string()),
+            Some(false),
+        ),
+        Some(FileType::Aiff) => (
+            Some("AIFF".to_string()),
+            Some("PCM".to_string()),
+            Some(true),
+        ),
+        Some(FileType::Ape) => (
+            Some("APE".to_string()),
+            Some("Monkey's Audio".to_string()),
+            Some(true),
+        ),
+        Some(FileType::Flac) => (
+            Some("FLAC".to_string()),
+            Some("FLAC".to_string()),
+            Some(true),
+        ),
+        Some(FileType::Mpeg) => (
+            Some("MP3".to_string()),
+            Some("MPEG Audio".to_string()),
+            Some(false),
+        ),
         Some(FileType::Mp4) => (Some("MP4/M4A".to_string()), None, None),
-        Some(FileType::Mpc) => (Some("MPC".to_string()), Some("Musepack".to_string()), Some(false)),
-        Some(FileType::Opus) => (Some("Opus".to_string()), Some("Opus".to_string()), Some(false)),
-        Some(FileType::Vorbis) => (Some("Ogg Vorbis".to_string()), Some("Vorbis".to_string()), Some(false)),
-        Some(FileType::Speex) => (Some("Speex".to_string()), Some("Speex".to_string()), Some(false)),
+        Some(FileType::Mpc) => (
+            Some("MPC".to_string()),
+            Some("Musepack".to_string()),
+            Some(false),
+        ),
+        Some(FileType::Opus) => (
+            Some("Opus".to_string()),
+            Some("Opus".to_string()),
+            Some(false),
+        ),
+        Some(FileType::Vorbis) => (
+            Some("Ogg Vorbis".to_string()),
+            Some("Vorbis".to_string()),
+            Some(false),
+        ),
+        Some(FileType::Speex) => (
+            Some("Speex".to_string()),
+            Some("Speex".to_string()),
+            Some(false),
+        ),
         Some(FileType::Wav) => (Some("WAV".to_string()), Some("PCM".to_string()), Some(true)),
-        Some(FileType::WavPack) => (Some("WavPack".to_string()), Some("WavPack".to_string()), Some(true)),
+        Some(FileType::WavPack) => (
+            Some("WavPack".to_string()),
+            Some("WavPack".to_string()),
+            Some(true),
+        ),
         Some(FileType::Custom(name)) => (Some(name.to_string()), None, None),
         Some(_) | None => (None, None, None),
     }
@@ -370,9 +411,9 @@ pub(crate) fn read_track_duration_seconds(path: &Path) -> Result<u64, String> {
             None
         }
     }
-        .map(|duration| duration.as_secs())
-        .filter(|duration| *duration > 0)
-        .ok_or_else(|| "没有读取到有效的歌曲时长。".to_string())
+    .map(|duration| duration.as_secs())
+    .filter(|duration| *duration > 0)
+    .ok_or_else(|| "没有读取到有效的歌曲时长。".to_string())
 }
 
 /**

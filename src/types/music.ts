@@ -107,6 +107,31 @@ export interface CustomTheme {
   backgroundOpacity?: number | null;
 }
 
+export type LyricsBackgroundSource = 'cover' | 'color' | 'media' | 'wallpaper';
+export type LyricsBackgroundMediaKind = 'image' | 'video';
+export type LyricsWallpaperProjectType = 'image' | 'video' | 'scene' | 'web' | 'application' | 'unknown';
+
+export interface LyricsBackgroundSettings {
+  source: LyricsBackgroundSource;
+  color: string;
+  colorMode: 'custom' | 'cover';
+  coverColor: string;
+  mediaPath: string;
+  mediaKind: LyricsBackgroundMediaKind;
+  wallpaperRoot: string;
+  wallpaperProjectId: string;
+  wallpaperTitle: string;
+  wallpaperProjectType: LyricsWallpaperProjectType;
+  wallpaperMediaPath: string;
+  wallpaperPreviewPath: string;
+  opacity: number;
+  blur: number;
+  windowOpacity: number;
+  positionX: number;
+  positionY: number;
+  scale: number;
+}
+
 export interface PlayerSettings {
   musicDir: string;
   musicDirs: string[];
@@ -123,6 +148,7 @@ export interface PlayerSettings {
   lyricFontSize: number;
   useThemeLyricColor: boolean;
   lyricFontColor: string;
+  lyricsBackground: LyricsBackgroundSettings;
   downloadDir: string;
   audioCacheDir: string;
   audioCacheMaxMb: number;

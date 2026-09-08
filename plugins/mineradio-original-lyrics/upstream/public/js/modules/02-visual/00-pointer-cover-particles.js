@@ -646,7 +646,7 @@ if (coverMask > 0.02) {
   }
 
   // ====================================================
-  //  Preset 5: WALLPAPER PULSE
+  //  Preset 5+: WALLPAPER PULSE
   //  Layered music-particle wallpaper: aurora ribbons, depth sparks,
   //  and cover-colored audio flow.
   // ====================================================

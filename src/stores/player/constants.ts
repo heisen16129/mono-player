@@ -1,4 +1,4 @@
-import type { PlayerSettings, ShortcutBindings } from '../../types/music';
+import type { LyricsBackgroundSettings, PlayerSettings, ShortcutBindings } from '../../types/music';
 
 export const SETTINGS_KEY = 'mono-player-settings';
 export const FAVORITES_KEY = 'mono-player-favorites';
@@ -30,6 +30,27 @@ export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
   togglePlaybackMode: 'Ctrl+M',
 };
 
+export const DEFAULT_LYRICS_BACKGROUND: LyricsBackgroundSettings = {
+  source: 'cover',
+  color: '#000000',
+  colorMode: 'custom',
+  coverColor: '',
+  mediaPath: '',
+  mediaKind: 'image',
+  wallpaperRoot: '',
+  wallpaperProjectId: '',
+  wallpaperTitle: '',
+  wallpaperProjectType: 'unknown',
+  wallpaperMediaPath: '',
+  wallpaperPreviewPath: '',
+  opacity: 0.72,
+  blur: 0,
+  windowOpacity: 1,
+  positionX: 50,
+  positionY: 50,
+  scale: 1,
+};
+
 export const fallbackSettings: PlayerSettings = {
   musicDir: '',
   musicDirs: [],
@@ -46,6 +67,7 @@ export const fallbackSettings: PlayerSettings = {
   lyricFontSize: 17,
   useThemeLyricColor: true,
   lyricFontColor: '#e31a1a',
+  lyricsBackground: DEFAULT_LYRICS_BACKGROUND,
   downloadDir: '',
   audioCacheDir: '',
   audioCacheMaxMb: 1024,

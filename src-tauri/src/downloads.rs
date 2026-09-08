@@ -955,11 +955,9 @@ fn write_audio_metadata(
 }
 
 fn write_downloaded_track_sidecar_cover(path: &Path, artwork: &CoverArtwork) {
-    if let Err(error) = write_track_sidecar_cover_file_url(
-        path,
-        &artwork.data,
-        Some(&artwork.mime_type),
-    ) {
+    if let Err(error) =
+        write_track_sidecar_cover_file_url(path, &artwork.data, Some(&artwork.mime_type))
+    {
         eprintln!(
             "[download] write sidecar cover failed path={} error={}",
             path.to_string_lossy(),
@@ -999,7 +997,9 @@ fn local_file_url(path: &Path) -> Option<String> {
 
 #[cfg(not(target_os = "windows"))]
 fn local_file_url(path: &Path) -> Option<String> {
-    tauri::Url::from_file_path(path).ok().map(|url| url.to_string())
+    tauri::Url::from_file_path(path)
+        .ok()
+        .map(|url| url.to_string())
 }
 
 fn write_cover_to_track_metadata(

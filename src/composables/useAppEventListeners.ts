@@ -7,7 +7,10 @@ import {
 } from '../services/desktopLyrics';
 import type { DownloadQueueEvent } from '../services/downloads';
 import { isTauriRuntime } from '../services/music';
-import { listenRustBackendQueue, type RustQueueSnapshot } from '../services/playerBackend';
+import {
+  listenRustBackendQueue,
+  type RustQueueSnapshot,
+} from '../services/playerBackend';
 
 interface UseAppEventListenersOptions {
   onDesktopLyricsAction: (action: DesktopLyricsAction) => Promise<void> | void;

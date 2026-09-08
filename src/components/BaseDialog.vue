@@ -210,4 +210,24 @@ function canScrollWheelTarget(target: HTMLElement, deltaY: number) {
   background: var(--smw-bg-hover);
   outline: none;
 }
+
+:global(body:has(.mono-window.lyrics-open) .base-dialog-overlay) {
+  --smw-text-primary: rgba(255, 255, 255, 0.96);
+  --smw-text-body: rgba(255, 255, 255, 0.9);
+  --smw-text-secondary: rgba(255, 255, 255, 0.68);
+  --smw-icon-muted: rgba(255, 255, 255, 0.66);
+  --smw-border: rgba(255, 255, 255, 0.18);
+  --smw-border-soft: rgba(255, 255, 255, 0.18);
+  --smw-bg-elevated: rgba(255, 255, 255, 0.08);
+  --smw-bg-hover: rgba(255, 255, 255, 0.1);
+  --smw-bg-selected: rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+:global(body:has(.mono-window.lyrics-open) .base-dialog) {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(22, 22, 24, 0.28);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(30px) saturate(1.08);
+}
 </style>

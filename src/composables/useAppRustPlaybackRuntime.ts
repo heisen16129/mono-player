@@ -17,13 +17,10 @@ interface UseAppRustPlaybackRuntimeOptions {
   onlineActiveTrackKey: Ref<string | null>;
   onlinePlaybackSource: Ref<string>;
   playbackTime: Ref<number>;
-  queueSwitchingTrackKey: Ref<string | null>;
-  restorePlaybackTime: Ref<number>;
   rustPlaybackQueue: Ref<Track[]>;
   selectedTrack: Ref<Track | null>;
   player: ReturnType<typeof usePlayerStore>;
   clearPreparingPlaybackState: () => void;
-  clearQueueSwitchingForTrack: (track: Track | null) => void;
   dedupePlaybackQueue: (tracks: Track[]) => Track[];
   findPluginTrackForQueueTrack: (track: Track) => PluginSearchTrack | null;
   getOnlineTrackKey: (track: PluginSearchTrack) => string;
@@ -42,13 +39,10 @@ export function useAppRustPlaybackRuntime({
   onlineActiveTrackKey,
   onlinePlaybackSource,
   playbackTime,
-  queueSwitchingTrackKey,
-  restorePlaybackTime,
   rustPlaybackQueue,
   selectedTrack,
   player,
   clearPreparingPlaybackState,
-  clearQueueSwitchingForTrack,
   dedupePlaybackQueue,
   findPluginTrackForQueueTrack,
   getOnlineTrackKey,
@@ -60,8 +54,8 @@ export function useAppRustPlaybackRuntime({
 }: UseAppRustPlaybackRuntimeOptions) {
   let rustPlaybackQueueBridge: ReturnType<typeof useRustPlaybackQueueBridge>;
 
-  function handleRustQueueSnapshot(snapshot: RustQueueSnapshot, markPreparing = true) {
-    rustPlaybackQueueBridge.handleRustQueueSnapshot(snapshot, markPreparing);
+  function handleRustQueueSnapshot(snapshot: RustQueueSnapshot) {
+    rustPlaybackQueueBridge.handleRustQueueSnapshot(snapshot);
   }
 
   async function startRustPlaybackQueue(tracks: Track[], requestedTrack: Track | null, startPosition = 0) {
@@ -80,11 +74,9 @@ export function useAppRustPlaybackRuntime({
     onlineActiveTrackKey,
     onlinePlaybackSource,
     playbackTime,
-    queueSwitchingTrackKey,
     rustPlaybackQueue,
     selectedTrack,
     player,
-    clearQueueSwitchingForTrack,
     dedupePlaybackQueue,
     findPluginTrackForQueueTrack,
     getOnlineTrackKey,
@@ -104,16 +96,19 @@ export function useAppRustPlaybackRuntime({
   });
 
   const {
-    getIsRestoringPlaybackQueue,
     restoreRustPlaybackQueue: restoreRustPlaybackQueueInRust,
     startRustPlaybackQueue: startRustPlaybackQueueInRust,
   } = useRustPlaybackLifecycle({
     playbackTime,
-    restorePlaybackTime,
     rustPlaybackQueue,
     player,
     crossfadeDurationMs,
     dedupePlaybackQueue,
+    handleRustPlaybackAdvanced: ({ position, track }) => {
+      if (!track) return;
+      rustQueueSnapshotController.handleSeamlessAdvance(track);
+      playbackTime.value = Math.max(0, position);
+    },
     handleRustQueueSnapshot,
   });
 
@@ -129,7 +124,6 @@ export function useAppRustPlaybackRuntime({
     playPreviousTrack,
   } = useRustPlaybackTransport({
     isAudioPlaying,
-    queueSwitchingTrackKey,
     player,
     clearPreparingPlaybackState,
     handleRustQueueSnapshot,
@@ -137,7 +131,6 @@ export function useAppRustPlaybackRuntime({
   });
 
   return {
-    getIsRestoringPlaybackQueue,
     handlePlaybackFailure,
     handleRustQueueSnapshot,
     playNextTrack,

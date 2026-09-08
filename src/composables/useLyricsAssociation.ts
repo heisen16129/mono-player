@@ -42,8 +42,7 @@ export function useLyricsAssociation(options: {
       }
 
       const artwork = artworkDisplaySrc(track.artwork) || null;
-      const currentArtwork = artworkDisplaySrc(options.activeTrack.value?.artwork) || null;
-      if (artwork && !currentArtwork) {
+      if (artwork) {
         options.setArtworkCover(artwork);
       }
       options.onLyricsFound(

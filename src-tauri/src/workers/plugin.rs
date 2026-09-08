@@ -352,10 +352,7 @@ impl PluginWorkerState {
     }
 
     fn download_request(&self, request: &WorkerRequest) -> Result<WorkerMessage, String> {
-        let mut worker = self
-            .download_worker
-            .lock()
-            .map_err(|err| err.to_string())?;
+        let mut worker = self.download_worker.lock().map_err(|err| err.to_string())?;
         self.request_with_locked_worker(&mut worker, request)
     }
 
@@ -994,6 +991,10 @@ fn write_message<W: Write>(stdout: &mut W, message: &WorkerMessage) -> Result<()
 mod tests {
     use super::*;
 
+    fn test_cache_dir() -> PathBuf {
+        std::env::temp_dir().join("mono-player-plugin-worker-tests")
+    }
+
     #[test]
     fn handles_ping_request() {
         let response = handle_request(
@@ -1003,6 +1004,7 @@ mod tests {
                 payload: json!({}),
             },
             1,
+            &test_cache_dir(),
         );
 
         assert_eq!(
@@ -1032,6 +1034,7 @@ mod tests {
                 }),
             },
             1,
+            &test_cache_dir(),
         );
 
         assert_eq!(
@@ -1066,6 +1069,7 @@ mod tests {
                 }),
             },
             1,
+            &test_cache_dir(),
         );
 
         assert_eq!(
@@ -1105,6 +1109,7 @@ mod tests {
                 payload: json!({ "entry": "D:\\plugins\\demo.txt" }),
             },
             1,
+            &test_cache_dir(),
         );
 
         assert_eq!(

@@ -1,34 +1,34 @@
 import type { Ref } from 'vue';
-import { restoreRustBackendQueue, startRustBackendQueue, type RustQueueSnapshot } from '../services/playerBackend';
+import {
+  listenRustBackendAdvanced,
+  restoreRustBackendQueue,
+  startRustBackendQueue,
+  type RustPlaybackAdvancedEvent,
+  type RustQueueSnapshot,
+} from '../services/playerBackend';
 import type { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 import { isPlaybackRequestReplacedError } from '../utils/playback';
 
 interface UseRustPlaybackLifecycleOptions {
   playbackTime: Ref<number>;
-  restorePlaybackTime: Ref<number>;
   rustPlaybackQueue: Ref<Track[]>;
   player: ReturnType<typeof usePlayerStore>;
   crossfadeDurationMs: number;
   dedupePlaybackQueue: (tracks: Track[]) => Track[];
-  handleRustQueueSnapshot: (snapshot: RustQueueSnapshot, markPreparing?: boolean) => void;
+  handleRustPlaybackAdvanced: (event: RustPlaybackAdvancedEvent) => void;
+  handleRustQueueSnapshot: (snapshot: RustQueueSnapshot) => void;
 }
 
 export function useRustPlaybackLifecycle({
   playbackTime,
-  restorePlaybackTime,
   rustPlaybackQueue,
   player,
   crossfadeDurationMs,
   dedupePlaybackQueue,
+  handleRustPlaybackAdvanced,
   handleRustQueueSnapshot,
 }: UseRustPlaybackLifecycleOptions) {
-  let isRestoringPlaybackQueue = false;
-
-  function getIsRestoringPlaybackQueue() {
-    return isRestoringPlaybackQueue;
-  }
-
   async function startRustPlaybackQueue(tracks: Track[], requestedTrack: Track | null, startPosition = 0) {
     playbackTime.value = startPosition;
     const playbackTracks = dedupePlaybackQueue(tracks);
@@ -54,30 +54,30 @@ export function useRustPlaybackLifecycle({
     const playbackTracks = dedupePlaybackQueue(player.queue.filter((item) => item.path));
     if (playbackTracks.length === 0) return;
 
-    isRestoringPlaybackQueue = true;
+    let stopAdvancedListener: (() => void) | null = null;
     try {
-      const snapshot = await restoreRustBackendQueue(
+      stopAdvancedListener = await listenRustBackendAdvanced((event) => {
+        handleRustPlaybackAdvanced(event);
+        stopAdvancedListener?.();
+        stopAdvancedListener = null;
+      });
+      await restoreRustBackendQueue(
         playbackTracks,
         track.path || null,
+        currentTime,
         player.playbackMode,
         player.settings.seamlessPlayback,
         player.settings.crossfadePlayback,
         crossfadeDurationMs,
       );
-      handleRustQueueSnapshot(snapshot, false);
       playbackTime.value = currentTime;
-      restorePlaybackTime.value = currentTime;
     } catch {
+      stopAdvancedListener?.();
       rustPlaybackQueue.value = playbackTracks;
-    } finally {
-      window.setTimeout(() => {
-        isRestoringPlaybackQueue = false;
-      }, 0);
     }
   }
 
   return {
-    getIsRestoringPlaybackQueue,
     restoreRustPlaybackQueue,
     startRustPlaybackQueue,
   };

@@ -15,6 +15,13 @@ export interface RustPlayerState {
   spectrumLevels?: number[];
 }
 
+export interface RustAudioFrame {
+  sequence: number;
+  sampleRate: number;
+  channels: number;
+  samples: number[];
+}
+
 export interface RustCacheDirState {
   cacheDir: string;
 }
@@ -31,6 +38,12 @@ export interface RustQueueSnapshot {
   currentSource: string | null;
   currentIndex: number | null;
   playbackMode: string;
+}
+
+export interface RustPlaybackAdvancedEvent {
+  source: string;
+  track: Track | null;
+  position: number;
 }
 
 function emptyQueueSnapshot(playbackMode = 'repeat'): RustQueueSnapshot {
@@ -169,6 +182,7 @@ export function startRustBackendQueue(
 export function restoreRustBackendQueue(
   tracks: Track[],
   currentSource: string | null,
+  currentTime: number,
   playbackMode: string,
   seamlessPlayback: boolean,
   crossfadePlayback: boolean,
@@ -191,6 +205,7 @@ export function restoreRustBackendQueue(
   return invokeApi<RustQueueSnapshot>('player_restore_queue', {
     tracks,
     currentSource,
+    currentTime,
     playbackMode,
     seamlessPlayback,
     crossfadePlayback,
@@ -198,12 +213,12 @@ export function restoreRustBackendQueue(
   });
 }
 
-export function setRustBackendPlaybackMode(playbackMode: string): Promise<RustQueueSnapshot> {
+export function setRustBackendPlaybackMode(playbackMode: string): Promise<void> {
   if (!isTauriRuntime()) {
-    return Promise.resolve(emptyQueueSnapshot(playbackMode));
+    return Promise.resolve();
   }
 
-  return invokeApi<RustQueueSnapshot>('player_set_playback_mode', { playbackMode });
+  return invokeApi<void>('player_set_playback_mode', { playbackMode });
 }
 
 export function playRustBackendNext(): Promise<RustQueueSnapshot> {
@@ -300,12 +315,23 @@ export function listenRustBackendState(callback: (state: RustPlayerState) => voi
   return listen<RustPlayerState>('player://state', (event) => callback(event.payload));
 }
 
-export function listenRustBackendAdvanced(callback: (source: string) => void): Promise<() => void> {
+export function listenRustBackendAudioFrame(callback: (frame: RustAudioFrame) => void): Promise<() => void> {
   if (!isTauriRuntime()) {
     return Promise.resolve(() => {});
   }
 
-  return listen<string>('player://advanced', (event) => callback(event.payload));
+  return listen<RustAudioFrame>('player://audio-frame', (event) => callback(event.payload));
+}
+
+export function listenRustBackendAdvanced(callback: (event: RustPlaybackAdvancedEvent) => void): Promise<() => void> {
+  if (!isTauriRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<RustPlaybackAdvancedEvent>('player://advanced', (event) => {
+    console.log('[player://advanced]', event.payload);
+    callback(event.payload);
+  });
 }
 
 export function listenRustBackendQueue(callback: (snapshot: RustQueueSnapshot) => void): Promise<() => void> {

@@ -79,7 +79,6 @@ const {
 const {
   currentTime,
   progress,
-  runtimeDuration,
   totalDuration,
   totalDurationLabel,
   commitSeekAudio,
@@ -116,7 +115,6 @@ const {
   isPreparingActiveTrack: computed(() => props.isPreparingActiveTrack),
   playbackRate,
   progress: {
-    runtimeDuration,
     setPlaybackTime,
     startSmoothProgress,
     stopSmoothProgress,

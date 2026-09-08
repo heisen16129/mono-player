@@ -1,23 +1,12 @@
 <script setup lang="ts">
-import { ChevronDown } from '@lucide/vue';
-
 defineProps<{
   album: string;
   artist: string;
-  closeLabel: string;
   title: string;
-}>();
-
-defineEmits<{
-  close: [];
 }>();
 </script>
 
 <template>
-  <button class="lyrics-close icon-button" type="button" :aria-label="closeLabel" @click="$emit('close')">
-    <ChevronDown :size="22" />
-  </button>
-
   <header class="lyrics-heading">
     <h1>{{ title }}</h1>
     <p>
@@ -29,19 +18,6 @@ defineEmits<{
 </template>
 
 <style scoped>
-.lyrics-close {
-  position: absolute;
-  top: 0;
-  left: calc(var(--lyrics-control-center-x) - 17px);
-  z-index: 20;
-  color: var(--smw-text-secondary);
-}
-
-.lyrics-close:hover {
-  color: var(--smw-text-primary);
-  background: transparent;
-}
-
 .lyrics-heading {
   display: grid;
   justify-items: center;

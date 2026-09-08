@@ -7,7 +7,8 @@
     <link rel="icon" href="data:,">
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #000; }
+      html, body, #root { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+      html[data-mineradio-transparent-window] #root > div { background-color: transparent !important; }
     </style>
     <script>
       (function () {
@@ -312,6 +313,10 @@
 
         window.__mineradioApplyProperties = function (patch) {
           patch = patch || {};
+          if (Object.prototype.hasOwnProperty.call(patch, '__mineradioWindowOpacity')) {
+            var windowOpacity = Math.max(0, Math.min(1, Number(patch.__mineradioWindowOpacity) || 0));
+            document.documentElement.toggleAttribute('data-mineradio-transparent-window', windowOpacity <= 0.001);
+          }
           var hasThemePatch = Object.prototype.hasOwnProperty.call(patch, 'mineradioCustomTheme');
           Object.keys(patch).forEach(function (key) {
             if (key === 'mineradioCustomTheme') return;

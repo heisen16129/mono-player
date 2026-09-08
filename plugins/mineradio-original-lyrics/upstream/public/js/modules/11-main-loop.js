@@ -616,10 +616,11 @@ function animate() {
   var workshopPresetActive = window.MineradioSonicWorkshop && MineradioSonicWorkshop.isActive(fx);
   var presetUsesStarRiverParticles = fx && (Number(fx.preset) === 5 || (typeof SONIC_PRESET_INDEX !== 'undefined' && Number(fx.preset) === SONIC_PRESET_INDEX));
   var presetStarRiverMuted = presetUsesStarRiverParticles && fx.backgroundStarRiver === false;
-  particles.visible = !skullPresetActive && !workshopPresetActive && !presetStarRiverMuted;
-  if (bloomParticles) bloomParticles.visible = !skullPresetActive && !workshopPresetActive && !presetStarRiverMuted && fx.bloom && fx.bloomStrength > 0.01;
-  if (floatGroup) floatGroup.visible = !skullPresetActive && !workshopPresetActive;
-  if (backCoverGroup) backCoverGroup.visible = !skullPresetActive && !workshopPresetActive;
+  var blackHolePresetActive = fx && Number(fx.preset) === BLACK_HOLE_PRESET_INDEX;
+  particles.visible = !skullPresetActive && !workshopPresetActive && !presetStarRiverMuted && !blackHolePresetActive;
+  if (bloomParticles) bloomParticles.visible = !skullPresetActive && !workshopPresetActive && !presetStarRiverMuted && !blackHolePresetActive && fx.bloom && fx.bloomStrength > 0.01;
+  if (floatGroup) floatGroup.visible = !skullPresetActive && !workshopPresetActive && !blackHolePresetActive;
+  if (backCoverGroup) backCoverGroup.visible = !skullPresetActive && !workshopPresetActive && !blackHolePresetActive;
   var targetRotY = orbit.centerLocked ? 0 : (headParallax.active ? headParallax.x * 0.5 : 0) + gestureRotation.y;
   var targetRotX = orbit.centerLocked ? 0 : (headParallax.active ? -headParallax.y * 0.35 : 0) + gestureRotation.x;
   particles.rotation.y += (targetRotY - particles.rotation.y) * 0.055;
@@ -634,6 +635,7 @@ function animate() {
   if (backCoverGroup) {
     backCoverGroup.rotation.copy(particles.rotation);
   }
+  if (typeof updateBlackHoleVisual === 'function') updateBlackHoleVisual(dt);
   var skullPerfStart = performance.now();
   var skullStepDt = consumeFrameGate(mainFrameGates.skullParticles, now, dt, targetMainSkullParticleFps(now), false, 'skull-particles');
   if (skullStepDt > 0) updateSkullParticleLayer(skullStepDt);

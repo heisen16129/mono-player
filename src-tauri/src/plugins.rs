@@ -60,7 +60,11 @@ fn attach_plugin_configs(plugins: &mut [PluginPlaybackPlanPlugin], configs: &Val
         let mut config = default_config_from_schema(plugin.config_schema.as_ref());
         merge_config_value(&mut config, plugin.config.as_ref());
         merge_config_value(&mut config, configs.get(&plugin.id));
-        plugin.config = if config.as_object().map(|object| object.is_empty()).unwrap_or(true) {
+        plugin.config = if config
+            .as_object()
+            .map(|object| object.is_empty())
+            .unwrap_or(true)
+        {
             None
         } else {
             Some(config)
@@ -76,10 +80,18 @@ fn default_config_from_schema(schema: Option<&Value>) -> Value {
         .into_iter()
         .flatten()
     {
-        let Some(key) = field.get("key").and_then(Value::as_str).map(str::trim).filter(|key| !key.is_empty()) else {
+        let Some(key) = field
+            .get("key")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+        else {
             continue;
         };
-        if let Some(value) = field.get("defaultValue").and_then(normalize_config_default_value) {
+        if let Some(value) = field
+            .get("defaultValue")
+            .and_then(normalize_config_default_value)
+        {
             config.insert(key.to_string(), value);
         }
     }
@@ -490,15 +502,26 @@ pub fn read_local_plugin_manifest(file_path: String) -> ApiResponse<String> {
 }
 
 #[tauri::command]
-pub fn read_local_renderer_module(manifest_path: String, module_path: String) -> ApiResponse<String> {
+pub fn read_local_renderer_module(
+    manifest_path: String,
+    module_path: String,
+) -> ApiResponse<String> {
     const MAX_LYRICS_RENDERER_MODULE_BYTES: u64 = 8 * 1024 * 1024;
     ApiResponse::from_result((|| {
-        if !manifest_path.to_ascii_lowercase().ends_with(".json") || !is_module_plugin_url(&module_path) {
+        if !manifest_path.to_ascii_lowercase().ends_with(".json")
+            || !is_module_plugin_url(&module_path)
+        {
             return Err("歌词渲染插件路径无效".to_string());
         }
-        let manifest = Path::new(&manifest_path).canonicalize().map_err(|err| err.to_string())?;
-        let package_dir = manifest.parent().ok_or_else(|| "插件目录无效".to_string())?;
-        let module = Path::new(&module_path).canonicalize().map_err(|err| err.to_string())?;
+        let manifest = Path::new(&manifest_path)
+            .canonicalize()
+            .map_err(|err| err.to_string())?;
+        let package_dir = manifest
+            .parent()
+            .ok_or_else(|| "插件目录无效".to_string())?;
+        let module = Path::new(&module_path)
+            .canonicalize()
+            .map_err(|err| err.to_string())?;
         if !module.starts_with(package_dir) {
             return Err("歌词渲染模块必须位于 manifest 所在插件目录内".to_string());
         }
@@ -590,12 +613,15 @@ fn search_plugin_backend(
 
     let response = worker.invoke_plugin(
         entry,
-        plugin_request(&plugin, json!({
-            "action": "search",
-            "keyword": query,
-            "page": page.max(1),
-            "pageSize": page_size.clamp(1, 100),
-        })),
+        plugin_request(
+            &plugin,
+            json!({
+                "action": "search",
+                "keyword": query,
+                "page": page.max(1),
+                "pageSize": page_size.clamp(1, 100),
+            }),
+        ),
         Some(plugin.id.clone()),
         plugin.permissions.clone(),
     )?;
@@ -712,10 +738,13 @@ where
         .clone()
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
     let plugin_track = track;
-    let request = plugin_request(&plugin, json!({
-        "action": "qualities",
-        "track": plugin_track,
-    }));
+    let request = plugin_request(
+        &plugin,
+        json!({
+            "action": "qualities",
+            "track": plugin_track,
+        }),
+    );
 
     let response = invoke_playback_plugin(
         worker,
@@ -843,12 +872,15 @@ where
     )?;
 
     for quality in qualities {
-        let request = plugin_request(&plugin, json!({
-            "action": "play",
-            "track": plugin_track.clone(),
-            "quality": quality,
-            "includeMetadata": include_metadata,
-        }));
+        let request = plugin_request(
+            &plugin,
+            json!({
+                "action": "play",
+                "track": plugin_track.clone(),
+                "quality": quality,
+                "includeMetadata": include_metadata,
+            }),
+        );
         log_plugin_playback(
             "resolve_plugin_playback_source request",
             json!({
@@ -964,7 +996,9 @@ pub async fn resolve_plugin_lyrics_metadata(
             .unwrap_or("")
             .trim()
             .to_string();
-        if let Some(cached) = crate::player::read_cached_plugin_lyrics_metadata(&app, &provider_id, &track_id) {
+        if let Some(cached) =
+            crate::player::read_cached_plugin_lyrics_metadata(&app, &provider_id, &track_id)
+        {
             return Ok(cached);
         }
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
@@ -1041,10 +1075,13 @@ pub(crate) fn resolve_plugin_cover_metadata_backend(
         .clone()
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
     let plugin_track = track;
-    let request = plugin_request(&plugin, json!({
-        "action": "cover",
-        "track": plugin_track,
-    }));
+    let request = plugin_request(
+        &plugin,
+        json!({
+            "action": "cover",
+            "track": plugin_track,
+        }),
+    );
     let response = worker.invoke_plugin(
         entry,
         request,
@@ -1088,10 +1125,13 @@ where
         .clone()
         .ok_or_else(|| "Plugin for selected track is missing an entry.".to_string())?;
     let plugin_track = track;
-    let request = plugin_request(&plugin, json!({
-        "action": "lyrics",
-        "track": plugin_track,
-    }));
+    let request = plugin_request(
+        &plugin,
+        json!({
+            "action": "lyrics",
+            "track": plugin_track,
+        }),
+    );
 
     should_continue()?;
     let response = invoke_plugin_on_worker(
@@ -1203,10 +1243,13 @@ fn resolve_playback_lyrics_metadata(
         return Err("Plugin does not support lyrics.".to_string());
     }
 
-    let request = plugin_request(plugin, json!({
-        "action": "lyrics",
-        "track": track,
-    }));
+    let request = plugin_request(
+        plugin,
+        json!({
+            "action": "lyrics",
+            "track": track,
+        }),
+    );
     let response = invoke_plugin_on_worker(
         worker,
         entry.to_string(),
@@ -1590,20 +1633,28 @@ fn normalize_catalog_item_value(value: Value) -> Option<PluginCatalogItem> {
         .ok()?,
         source_url,
         source_kind,
-        config_schema: normalize_config_schema(value.get("configSchema").or_else(|| value.get("config_schema")).cloned()),
+        config_schema: normalize_config_schema(
+            value
+                .get("configSchema")
+                .or_else(|| value.get("config_schema"))
+                .cloned(),
+        ),
     })
 }
 
 fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
     let entry = string_field(&value, &["entry"])?;
-    let runtime = normalize_runtime(string_field(&value, &["runtime"]))
-        .unwrap_or_else(|| "wasm".to_string());
+    let runtime =
+        normalize_runtime(string_field(&value, &["runtime"])).unwrap_or_else(|| "wasm".to_string());
     if (runtime == "wasm" && !is_direct_plugin_url(&entry))
         || (runtime == "module" && !is_module_plugin_url(&entry))
     {
         return None;
     }
-    if !entry.starts_with("http://") && !entry.starts_with("https://") && !Path::new(&entry).is_file() {
+    if !entry.starts_with("http://")
+        && !entry.starts_with("https://")
+        && !Path::new(&entry).is_file()
+    {
         return None;
     }
     let name = string_field(&value, &["name"])?;
@@ -1645,7 +1696,12 @@ fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        config_schema: normalize_config_schema(value.get("configSchema").or_else(|| value.get("config_schema")).cloned()),
+        config_schema: normalize_config_schema(
+            value
+                .get("configSchema")
+                .or_else(|| value.get("config_schema"))
+                .cloned(),
+        ),
     })
 }
 
@@ -1824,7 +1880,11 @@ fn normalize_config_field(value: &Value) -> Option<Value> {
     if let Some(required) = value.get("required").and_then(Value::as_bool) {
         field.insert("required".to_string(), Value::Bool(required));
     }
-    if let Some(default_value) = value.get("defaultValue").or_else(|| value.get("default_value")).and_then(normalize_config_default_value) {
+    if let Some(default_value) = value
+        .get("defaultValue")
+        .or_else(|| value.get("default_value"))
+        .and_then(normalize_config_default_value)
+    {
         field.insert("defaultValue".to_string(), default_value);
     }
     if let Some(label_en) = string_field(value, &["labelEn", "label_en"]) {
@@ -1864,7 +1924,10 @@ fn normalize_config_options(value: Option<&Value>) -> Vec<Value> {
         })
         .fold(Vec::<Value>::new(), |mut items, option| {
             let value = option.get("value").and_then(Value::as_str).unwrap_or("");
-            if !items.iter().any(|item| item.get("value").and_then(Value::as_str) == Some(value)) {
+            if !items
+                .iter()
+                .any(|item| item.get("value").and_then(Value::as_str) == Some(value))
+            {
                 items.push(option);
             }
             items
@@ -1873,7 +1936,9 @@ fn normalize_config_options(value: Option<&Value>) -> Vec<Value> {
 
 fn normalize_config_default_value(value: &Value) -> Option<Value> {
     match value {
-        Value::String(text) if !text.trim().is_empty() => Some(Value::String(text.trim().to_string())),
+        Value::String(text) if !text.trim().is_empty() => {
+            Some(Value::String(text.trim().to_string()))
+        }
         Value::Number(number) => Some(Value::Number(number.clone())),
         Value::Bool(value) => Some(Value::Bool(*value)),
         Value::Array(values) => {
@@ -1897,9 +1962,8 @@ fn normalize_runtime(runtime: Option<String>) -> Option<String> {
 
 fn normalize_kind(kind: String) -> Option<String> {
     match kind.trim() {
-        "music" | "lyrics" | "lyrics-renderer" | "metadata" | "playlist" | "theme" | "integration" | "tool" => {
-            Some(kind.trim().to_string())
-        }
+        "music" | "lyrics" | "lyrics-renderer" | "metadata" | "playlist" | "theme"
+        | "integration" | "tool" => Some(kind.trim().to_string()),
         _ => None,
     }
 }
@@ -1925,7 +1989,9 @@ fn normalize_capability(capability: &str) -> Option<String> {
     match capability.trim() {
         "search" | "play" | "lyrics" | "metadata" | "cover" | "album" | "playlist-import"
         | "playlist-export" | "theme" | "scrobble" | "history-sync" | "batch-rename"
-        | "lyric-convert" | "lyric-translate" | "lyrics-renderer" => Some(capability.trim().to_string()),
+        | "lyric-convert" | "lyric-translate" | "lyrics-renderer" => {
+            Some(capability.trim().to_string())
+        }
         _ => None,
     }
 }
@@ -2343,10 +2409,13 @@ fn resolve_playback_quality_attempts<F>(
 where
     F: FnMut() -> Result<(), String>,
 {
-    let request = plugin_request(plugin, json!({
-        "action": "qualities",
-        "track": track,
-    }));
+    let request = plugin_request(
+        plugin,
+        json!({
+            "action": "qualities",
+            "track": track,
+        }),
+    );
     let response = invoke_playback_plugin(
         worker,
         entry.to_string(),
@@ -2685,10 +2754,7 @@ mod tests {
 
     #[test]
     fn json_year_value_ignores_non_ascii_text_without_panicking() {
-        assert_eq!(
-            json_year_value(&json!("·òÆÞÄÇÐ©ÊÂ µçÊÓ¾çÔÉù´ø")),
-            None
-        );
+        assert_eq!(json_year_value(&json!("·òÆÞÄÇÐ©ÊÂ µçÊÓ¾çÔÉù´ø")), None);
     }
 
     #[test]

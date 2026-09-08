@@ -276,20 +276,20 @@ fn read_embedded_cover_image(audio_path: &Path) -> Result<Option<CoverImage>, St
 
     match crate::metadata::read_tagged_file(audio_path, "cover") {
         Ok(tagged_file) => {
-        let tag = tagged_file
-            .primary_tag()
-            .or_else(|| tagged_file.first_tag());
-        if let Some(picture) = tag.and_then(|tag| tag.pictures().first()) {
-            let mime_type = picture
-                .mime_type()
-                .map(|mime_type| mime_type.as_str().to_string())
-                .unwrap_or_else(|| "image/jpeg".to_string());
+            let tag = tagged_file
+                .primary_tag()
+                .or_else(|| tagged_file.first_tag());
+            if let Some(picture) = tag.and_then(|tag| tag.pictures().first()) {
+                let mime_type = picture
+                    .mime_type()
+                    .map(|mime_type| mime_type.as_str().to_string())
+                    .unwrap_or_else(|| "image/jpeg".to_string());
 
-            return Ok(Some(CoverImage {
-                mime_type,
-                data: picture.data().to_vec(),
-            }));
-        }
+                return Ok(Some(CoverImage {
+                    mime_type,
+                    data: picture.data().to_vec(),
+                }));
+            }
         }
         Err(_) => remember_failed_embedded_cover(cache_key),
     }

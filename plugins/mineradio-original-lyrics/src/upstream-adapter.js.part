@@ -2,11 +2,24 @@
   var state = {
     trackKey: '',
     coverKey: '',
+    backgroundKey: '',
     lyricsKey: '',
     queueKey: '',
     surfaceReady: false,
-    spectrum: [0, 0, 0, 0, 0],
+    audioFrameSequence: 0,
+    audioFrameAt: 0,
+    audioFrameDurationMs: 1000 / 30,
+    sharedColorBackCover: false,
+    sampleRate: 44100,
+    mainFrequencyPrevious: new Uint8Array(FFT_SIZE / 2),
+    mainFrequencyCurrent: new Uint8Array(FFT_SIZE / 2),
+    beatFrequencyPrevious: new Uint8Array(BEAT_FFT_SIZE / 2),
+    beatFrequencyCurrent: new Uint8Array(BEAT_FFT_SIZE / 2),
+    timePrevious: new Uint8Array(FFT_SIZE),
+    timeCurrent: new Uint8Array(FFT_SIZE),
   };
+  state.timePrevious.fill(128);
+  state.timeCurrent.fill(128);
   var hostClock = {
     currentTime: 0,
     duration: 0,
@@ -35,40 +48,158 @@
     if (element) element.textContent = value || '';
   }
 
-  function spectrumValueAtHz(hz) {
-    var low = state.spectrum[0] || 0;
-    var middle = state.spectrum[1] || 0;
-    var high = state.spectrum[2] || 0;
-    var energy = state.spectrum[3] || ((low + middle + high) / 3);
-    var beat = state.spectrum[4] || 0;
-    if (hz < 75) return Math.max(low * 0.82, beat * 0.92, energy * 0.24);
-    if (hz < 180) return Math.max(low, beat * 0.72, energy * 0.30);
-    if (hz < 520) return low * 0.68 + middle * 0.24 + energy * 0.08;
-    if (hz < 2600) return middle * 0.82 + low * 0.08 + energy * 0.10;
-    if (hz < 6200) return middle * 0.42 + high * 0.50 + energy * 0.08;
-    if (hz < 16000) return high * 0.88 + energy * 0.12;
-    return high * 0.52 + energy * 0.08;
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
   }
 
-  function installHostSpectrumAnalyser() {
-    analyser = {
+  function normalizedPcmSamples(input, size) {
+    var sourceSamples = input instanceof Float32Array ? input : new Float32Array(input || []);
+    var result = new Float32Array(size);
+    if (!sourceSamples.length) return result;
+    if (sourceSamples.length === size) {
+      result.set(sourceSamples);
+      return result;
+    }
+    if (size === 1 || sourceSamples.length === 1) {
+      result.fill(Number(sourceSamples[0]) || 0);
+      return result;
+    }
+    var sourceScale = (sourceSamples.length - 1) / (size - 1);
+    for (var i = 0; i < size; i++) {
+      var sourcePosition = i * sourceScale;
+      var left = Math.floor(sourcePosition);
+      var right = Math.min(sourceSamples.length - 1, left + 1);
+      var mix = sourcePosition - left;
+      result[i] = sourceSamples[left] * (1 - mix) + sourceSamples[right] * mix;
+    }
+    return result;
+  }
+
+  function fftFrequencyBytes(samples) {
+    var size = samples.length;
+    var real = new Float32Array(size);
+    var imaginary = new Float32Array(size);
+    for (var i = 0; i < size; i++) {
+      var windowValue = 0.5 * (1 - Math.cos((2 * Math.PI * i) / Math.max(1, size - 1)));
+      real[i] = clamp(Number(samples[i]) || 0, -1, 1) * windowValue;
+    }
+    for (var index = 1, reversed = 0; index < size; index++) {
+      var bit = size >> 1;
+      while (reversed & bit) {
+        reversed ^= bit;
+        bit >>= 1;
+      }
+      reversed ^= bit;
+      if (index < reversed) {
+        var swap = real[index];
+        real[index] = real[reversed];
+        real[reversed] = swap;
+      }
+    }
+    for (var length = 2; length <= size; length <<= 1) {
+      var angle = (-2 * Math.PI) / length;
+      var stepReal = Math.cos(angle);
+      var stepImaginary = Math.sin(angle);
+      for (var start = 0; start < size; start += length) {
+        var rotationReal = 1;
+        var rotationImaginary = 0;
+        for (var offset = 0; offset < length / 2; offset++) {
+          var even = start + offset;
+          var odd = even + length / 2;
+          var oddReal = real[odd] * rotationReal - imaginary[odd] * rotationImaginary;
+          var oddImaginary = real[odd] * rotationImaginary + imaginary[odd] * rotationReal;
+          real[odd] = real[even] - oddReal;
+          imaginary[odd] = imaginary[even] - oddImaginary;
+          real[even] += oddReal;
+          imaginary[even] += oddImaginary;
+          var nextRotationReal = rotationReal * stepReal - rotationImaginary * stepImaginary;
+          rotationImaginary = rotationReal * stepImaginary + rotationImaginary * stepReal;
+          rotationReal = nextRotationReal;
+        }
+      }
+    }
+    var result = new Uint8Array(size / 2);
+    for (var bin = 0; bin < result.length; bin++) {
+      var magnitude = Math.max(1e-8, (2 * Math.hypot(real[bin], imaginary[bin])) / size);
+      var decibels = 20 * Math.log10(magnitude);
+      result[bin] = Math.round(clamp(((decibels + 100) / 70) * 255, 0, 255));
+    }
+    return result;
+  }
+
+  function smoothFrequency(raw, current, smoothing) {
+    var result = new Uint8Array(current.length);
+    for (var i = 0; i < result.length; i++) {
+      result[i] = Math.round(current[i] * smoothing + raw[i] * (1 - smoothing));
+    }
+    return result;
+  }
+
+  function timeDomainBytes(samples) {
+    var result = new Uint8Array(samples.length);
+    for (var i = 0; i < result.length; i++) {
+      result[i] = Math.round(128 + clamp(samples[i], -1, 1) * 127);
+    }
+    return result;
+  }
+
+  function copyInterpolated(previous, current, target) {
+    var elapsed = performance.now() - state.audioFrameAt;
+    var ratio = clamp(elapsed / Math.max(1, state.audioFrameDurationMs), 0, 1);
+    ratio = ratio * ratio * (3 - 2 * ratio);
+    var count = Math.min(target.length, previous.length, current.length);
+    for (var i = 0; i < count; i++) {
+      target[i] = Math.round(previous[i] + (current[i] - previous[i]) * ratio);
+    }
+    if (count < target.length) target.fill(0, count);
+  }
+
+  function createPcmAnalyser(frequencyPrevious, frequencyCurrent, smoothing) {
+    return {
       fftSize: FFT_SIZE,
       frequencyBinCount: FFT_SIZE / 2,
+      smoothingTimeConstant: smoothing,
+      minDecibels: -100,
+      maxDecibels: -30,
       getByteFrequencyData: function (target) {
-        var binHz = 44100 / FFT_SIZE;
-        for (var i = 0; i < target.length; i++) {
-          var value = Math.max(0, Math.min(1, spectrumValueAtHz(i * binHz)));
-          target[i] = Math.round(value * 255);
-        }
+        copyInterpolated(frequencyPrevious(), frequencyCurrent(), target);
       },
       getByteTimeDomainData: function (target) {
-        var amplitude = Math.max(0, Math.min(1, state.spectrum[3] || 0)) * 48;
-        var phase = performance.now() * 0.006;
-        for (var i = 0; i < target.length; i++) {
-          target[i] = Math.round(128 + Math.sin(phase + i * 0.085) * amplitude);
-        }
+        copyInterpolated(state.timePrevious, state.timeCurrent, target);
       },
+      connect: function () { return this; },
+      disconnect: function () {},
     };
+  }
+
+  function installHostPcmAnalyser() {
+    audioCtx = {
+      sampleRate: state.sampleRate,
+      state: 'running',
+      currentTime: 0,
+      destination: {},
+      resume: function () { this.state = 'running'; return Promise.resolve(); },
+      close: function () { this.state = 'closed'; return Promise.resolve(); },
+    };
+    analyser = createPcmAnalyser(
+      function () { return state.mainFrequencyPrevious; },
+      function () { return state.mainFrequencyCurrent; },
+      0.58
+    );
+    beatAnalyser = createPcmAnalyser(
+      function () { return state.beatFrequencyPrevious; },
+      function () { return state.beatFrequencyCurrent; },
+      0.10
+    );
+    source = {
+      context: audioCtx,
+      connect: function () { return this; },
+      disconnect: function () {},
+    };
+    audioSourceMedia = hostClock;
+    gainNode = null;
+    analysisSinkNode = { disconnect: function () {} };
+    audioReady = true;
   }
 
   function revealPluginVisuals() {
@@ -102,7 +233,7 @@
     try { if (typeof switchPlaybackVisualToEmily === 'function') switchPlaybackVisualToEmily(); } catch (error) {}
     var emptyHome = document.getElementById('empty-home');
     if (emptyHome) emptyHome.style.display = 'none';
-    installHostSpectrumAnalyser();
+    installHostPcmAnalyser();
     revealPluginVisuals();
     syncOriginalWindowState();
   }
@@ -163,7 +294,7 @@
 
   function applyPlayback(payload) {
     audio = hostClock;
-    audioReady = false;
+    audioReady = true;
     hostClock.currentTime = payload.currentTime;
     hostClock.duration = payload.duration;
     hostClock.paused = !payload.playing;
@@ -184,6 +315,97 @@
     if (heart) heart.classList.toggle('liked', payload.favorite);
   }
 
+  function applySharedBackground(payload) {
+    var background = payload.background || {};
+    var source = background.source || 'cover';
+    var sharedMedia = source === 'media' || source === 'wallpaper';
+    var mediaUrl = source === 'cover'
+      ? String(payload.track && payload.track.cover || '')
+      : (sharedMedia ? String(background.mediaUrl || '') : '');
+    var isVideo = sharedMedia && background.mediaKind === 'video' && Boolean(mediaUrl);
+    var nativeScene = source === 'wallpaper' && background.wallpaperProjectType === 'scene';
+    var opacity = Math.min(1, Math.max(0, Number(background.opacity == null ? .72 : background.opacity)));
+    var blur = Math.min(60, Math.max(0, Number(background.blur == null ? 0 : background.blur)));
+    var windowOpacity = Math.min(1, Math.max(0, Number(background.windowOpacity == null ? 1 : background.windowOpacity)));
+    var shell = document.getElementById('desktop-window-shell');
+    var layer = document.getElementById('custom-bg');
+    if (!shell || !layer) return;
+    var baseColor = source === 'color' ? String(background.color || '#000000') : '#000000';
+    var colorMatch = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(baseColor);
+    baseColor = colorMatch ? baseColor : '#000000';
+    shell.setAttribute('data-mono-shared-background', source);
+    document.body.setAttribute('data-mono-shared-background', source);
+    shell.classList.toggle('native-wallpaper-scene', nativeScene);
+    document.body.classList.toggle('native-wallpaper-scene', nativeScene);
+    shell.style.setProperty('--mono-shared-bg-position', Number(background.positionX == null ? 50 : background.positionX) + '% ' + Number(background.positionY == null ? 50 : background.positionY) + '%');
+    shell.style.setProperty('--mono-shared-bg-scale', String(Math.min(2, Math.max(.5, Number(background.scale) || 1))));
+    shell.style.setProperty('--mono-shared-bg-blur', blur + 'px');
+    shell.style.setProperty('--mono-shared-bg-blur-scale', String(blur / 500));
+    var nextBackgroundKey = keyOf([
+      source, baseColor, mediaUrl, isVideo, nativeScene, opacity, blur, windowOpacity,
+      background.positionX, background.positionY, background.scale,
+    ]);
+    var currentMedia = fx && fx.backgroundMedia;
+    var expectedColorRgb = colorMatch
+      ? [parseInt(colorMatch[1], 16), parseInt(colorMatch[2], 16), parseInt(colorMatch[3], 16)].join(',')
+      : '0,0,0';
+    var appliedColorRgb = getComputedStyle(document.documentElement)
+      .getPropertyValue('--custom-bg-color-rgb')
+      .replace(/\s+/g, '');
+    var originalBackgroundApplied = source !== 'color' || (
+      appliedColorRgb === expectedColorRgb
+      && document.body.classList.contains('custom-background-override')
+      && document.body.classList.contains('custom-background-flat')
+      && Boolean(backCoverGroup)
+    );
+    var originalBackgroundMatches = Boolean(fx)
+      && String(fx.backgroundColor || '').toLowerCase() === baseColor.toLowerCase()
+      && Boolean(fx.backgroundColorMode === 'custom' || fx.backgroundColorCustom) === (source === 'color')
+      && Boolean(fx.backgroundAlbumCover) === (source === 'cover')
+      && Number(fx.windowBackgroundOpacity == null ? 1 : fx.windowBackgroundOpacity) === windowOpacity
+      && (source !== 'color' || !currentMedia)
+      && (!sharedMedia || !mediaUrl || Boolean(
+        currentMedia
+        && currentMedia.type === (isVideo ? 'video' : 'image')
+        && String(currentMedia.src || '') === mediaUrl
+      ))
+      && originalBackgroundApplied;
+    if (nextBackgroundKey === state.backgroundKey && originalBackgroundMatches) return;
+    state.backgroundKey = nextBackgroundKey;
+    fx.backgroundColor = baseColor;
+    fx.backgroundColorMode = source === 'color' ? 'custom' : 'cover';
+    fx.backgroundColorCustom = source === 'color';
+    fx.backgroundAlbumCover = source === 'cover';
+    fx.backgroundImage = '';
+    fx.backgroundMedia = sharedMedia && mediaUrl
+      ? { type: isVideo ? 'video' : 'image', src: mediaUrl }
+      : null;
+    fx.backgroundOpacity = opacity;
+    fx.windowBackgroundOpacity = windowOpacity;
+    fx.backgroundMediaCropX = Math.min(100, Math.max(0, Number(background.positionX == null ? 50 : background.positionX)));
+    fx.backgroundMediaCropY = Math.min(100, Math.max(0, Number(background.positionY == null ? 50 : background.positionY)));
+    fx.backgroundMediaZoom = Math.min(2.8, Math.max(1, Number(background.scale) || 1));
+    if (typeof applyCustomBackground === 'function') applyCustomBackground();
+    if (source === 'color') {
+      if (!backCoverGroup && typeof createBackCoverLayer === 'function') {
+        createBackCoverLayer();
+        state.sharedColorBackCover = true;
+      }
+      var activeCoverCanvas = typeof coverTex !== 'undefined'
+        && coverTex
+        && coverTex.image
+        && typeof coverTex.image.getContext === 'function'
+        ? coverTex.image
+        : null;
+      if (state.sharedColorBackCover && activeCoverCanvas && typeof refreshBackCoverColorsFromCanvas === 'function') {
+        refreshBackCoverColorsFromCanvas(activeCoverCanvas);
+      }
+    } else if (state.sharedColorBackCover) {
+      state.sharedColorBackCover = false;
+      if (!fx.backCover && typeof destroyBackCoverLayer === 'function') destroyBackCoverLayer();
+    }
+  }
+
   window.__monoMineradioOriginal = {
     invokeInlineHandler: function (expression, event, element) {
       if (!expression) return;
@@ -198,21 +420,30 @@
       applyTrack(payload);
       applyLyrics(payload);
       applyPlayback(payload);
+      applySharedBackground(payload);
     },
-    setSpectrum: function (levels) {
-      levels = Array.isArray(levels) ? levels : [];
-      state.spectrum = [0, 1, 2, 3, 4].map(function (index) {
-        return Math.max(0, Math.min(1, Number(levels[index]) || 0));
-      });
-      bass = Number(levels[0]) || 0;
-      mid = Number(levels[1]) || 0;
-      treble = Number(levels[2]) || 0;
-      audioEnergy = Number(levels[3]) || ((bass + mid + treble) / 3);
-      smoothBass = bass;
-      smoothMid = mid;
-      smoothTreb = treble;
-      smoothEnergy = audioEnergy;
-      beatPulse = Math.max(beatPulse * 0.82, Number(levels[4]) || bass * 0.7);
+    setAudioFrame: function (frame) {
+      if (!frame || !frame.samples) return;
+      var sequence = Number(frame.sequence) || 0;
+      if (sequence && sequence === state.audioFrameSequence) return;
+      var sourceSamples = frame.samples instanceof Float32Array
+        ? frame.samples
+        : new Float32Array(frame.samples);
+      if (!sourceSamples.length) return;
+      var sampleRate = Math.max(8000, Number(frame.sampleRate) || 44100);
+      var pcm = normalizedPcmSamples(sourceSamples, FFT_SIZE);
+      var rawFrequency = fftFrequencyBytes(pcm);
+      state.audioFrameSequence = sequence || state.audioFrameSequence + 1;
+      state.sampleRate = sampleRate;
+      state.audioFrameDurationMs = (sourceSamples.length / sampleRate) * 1000;
+      state.mainFrequencyPrevious.set(state.mainFrequencyCurrent);
+      state.beatFrequencyPrevious.set(state.beatFrequencyCurrent);
+      state.timePrevious.set(state.timeCurrent);
+      state.mainFrequencyCurrent = smoothFrequency(rawFrequency, state.mainFrequencyCurrent, 0.58);
+      state.beatFrequencyCurrent = smoothFrequency(rawFrequency, state.beatFrequencyCurrent, 0.10);
+      state.timeCurrent = timeDomainBytes(pcm);
+      state.audioFrameAt = performance.now();
+      if (audioCtx) audioCtx.sampleRate = sampleRate;
       syncOriginalWindowState();
     },
     getClock: function () { return hostClock; },
@@ -245,7 +476,8 @@
         particleCount: particles && particles.geometry && particles.geometry.getAttribute('position')
           ? particles.geometry.getAttribute('position').count
           : 0,
-        spectrum: state.spectrum.slice(),
+        audioFrameSequence: state.audioFrameSequence,
+        sampleRate: state.sampleRate,
       };
     },
   };

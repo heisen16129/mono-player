@@ -5,21 +5,23 @@ import LyricsActionMenuOverlay from './LyricsActionMenuOverlay.vue';
 import LyricsRendererPlayerBar from './LyricsRendererPlayerBar.vue';
 import LyricsRendererSearchOverlay from './LyricsRendererSearchOverlay.vue';
 import PlaybackProgressBar from '../player-dock/PlaybackProgressBar.vue';
+import LyricsBackgroundLayer from './LyricsBackgroundLayer.vue';
 import type { LyricsRendererContext } from '../../types/lyricsRenderer';
 import type { PlayerDockController } from '../../types/playerDockController';
 
 const props = defineProps<{
   context: LyricsRendererContext;
   playerDockController?: PlayerDockController | null;
-}>();
-
-const emit = defineEmits<{
-  close: [];
+  windowBackgroundOpacity?: number;
 }>();
 
 const isPlayerBarHidden = ref(false);
 const dockProgress = computed(() => props.playerDockController?.progress.value ?? 0);
 const dockDuration = computed(() => props.playerDockController?.totalDuration.value ?? 0);
+const surfaceStyle = computed(() => ({
+  ...(props.windowBackgroundOpacity === undefined ? {} : { background: 'transparent' }),
+  '--lyrics-player-bar-cover-height': isPlayerBarHidden.value ? '0px' : 'var(--player-height)',
+}));
 const actionMenu = computed(() => ({
   ...props.context.actionMenu,
   isPlayerDockHidden: isPlayerBarHidden.value,
@@ -37,16 +39,20 @@ function updateCollapsedTime(event: Event) {
 <template>
   <div
     class="lyrics-renderer-surface"
-    :class="{ 'has-cover-background': props.context.coverUrl }"
+    :class="{ 'native-wallpaper-scene': props.context.background.source === 'wallpaper' && props.context.background.wallpaperProjectType === 'scene' }"
+    :style="surfaceStyle"
     @contextmenu.prevent="props.context.openActionMenu"
   >
+    <LyricsBackgroundLayer
+      :background="props.context.background"
+      :cover-url="props.context.coverUrl"
+      :window-opacity="props.windowBackgroundOpacity"
+    />
     <div class="lyrics-renderer-header">
       <LyricsHeaderBar
         :album="props.context.album"
         :artist="props.context.artist"
-        :close-label="props.context.label"
         :title="props.context.title"
-        @close="emit('close')"
       />
     </div>
 
@@ -114,52 +120,17 @@ function updateCollapsedTime(event: Event) {
   background: var(--smw-lyrics-bg, var(--smw-bg-canvas));
 }
 
-.lyrics-renderer-surface::before,
-.lyrics-renderer-surface::after {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  content: "";
-  pointer-events: none;
-}
-
-.lyrics-renderer-surface::before {
-  inset: -18px;
-  background-image: var(--lyrics-cover-bg);
-  background-position: center;
-  background-size: cover;
-  filter: blur(16px) saturate(0.82) brightness(1.02);
-  opacity: 0;
-  transform: scale(1.02);
-}
-
-.lyrics-renderer-surface.has-cover-background::before {
-  opacity: 1;
-}
-
-.lyrics-renderer-surface::after {
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--smw-lyrics-bg) 82%, transparent) 0%,
-      color-mix(in srgb, var(--smw-lyrics-bg) 68%, transparent) 48%,
-      color-mix(in srgb, var(--smw-lyrics-bg) 88%, transparent) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.54) 0%,
-      color-mix(in srgb, var(--smw-lyrics-bg) 24%, transparent) 56%,
-      color-mix(in srgb, var(--smw-lyrics-bg) 42%, transparent) 100%
-    );
-  opacity: 0;
-}
-
-.lyrics-renderer-surface.has-cover-background::after {
-  opacity: 0.82;
+.lyrics-renderer-surface.native-wallpaper-scene {
+  background: transparent;
 }
 
 .lyrics-renderer-surface > * {
   z-index: 1;
+}
+
+.lyrics-renderer-surface > .lyrics-background-layer {
+  position: absolute;
+  z-index: 0;
 }
 
 .lyrics-player-bar-enter-active,

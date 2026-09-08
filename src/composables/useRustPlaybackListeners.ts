@@ -7,12 +7,13 @@ import {
   listenRustBackendQueue,
   listenRustBackendState,
   type RustOutputDeviceFallbackEvent,
+  type RustPlaybackAdvancedEvent,
   type RustPlayerState,
   type RustQueueSnapshot,
 } from '../services/playerBackend';
 
 interface RustPlaybackListenersOptions {
-  onAdvanced: (source: string) => void;
+  onAdvanced: (event: RustPlaybackAdvancedEvent) => void;
   onEnded: () => void;
   onError: (message: string) => void;
   onOutputDeviceFallback: (event: RustOutputDeviceFallbackEvent) => void;

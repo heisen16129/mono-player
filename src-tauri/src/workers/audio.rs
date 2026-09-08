@@ -36,6 +36,7 @@ const MIN_CROSSFADE_DURATION_MS: u64 = 300;
 const MAX_CROSSFADE_DURATION_MS: u64 = 30_000;
 const SPECTRUM_BANDS: usize = 5;
 const SPECTRUM_WINDOW_SAMPLES: usize = 1024;
+const AUDIO_FRAME_SAMPLES: usize = 2048;
 const SPECTRUM_FREQUENCIES: [f32; SPECTRUM_BANDS] = [80.0, 250.0, 700.0, 1800.0, 5000.0];
 const SPECTRUM_GAIN: f32 = 2.8;
 const HTTP_STREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
@@ -550,6 +551,7 @@ struct AudioBackend {
     current_stream_state: Option<Arc<(Mutex<StreamingHttpState>, Condvar)>>,
     is_crossfading: Arc<AtomicBool>,
     spectrum_levels: Arc<[AtomicU32; SPECTRUM_BANDS]>,
+    audio_frame: Arc<Mutex<crate::player::AudioFrameSnapshot>>,
     last_error: Option<String>,
     volume: f32,
     speed: f32,
@@ -568,6 +570,7 @@ impl Default for AudioBackend {
             current_stream_state: None,
             is_crossfading: Arc::new(AtomicBool::new(false)),
             spectrum_levels: Arc::new(std::array::from_fn(|_| AtomicU32::new(0.0f32.to_bits()))),
+            audio_frame: Arc::new(Mutex::new(crate::player::AudioFrameSnapshot::default())),
             last_error: None,
             volume: 0.72,
             speed: 1.0,
@@ -614,7 +617,11 @@ impl AudioBackend {
             }
         };
         let duration = source_total_duration(&decoder, "local-file");
-        let source = SpectrumSource::new(decoder, Arc::clone(&self.spectrum_levels));
+        let source = SpectrumSource::new(
+            decoder,
+            Arc::clone(&self.spectrum_levels),
+            Arc::clone(&self.audio_frame),
+        );
         let stream = match self.ensure_output_stream() {
             Ok(stream) => stream,
             Err(error) => {
@@ -653,10 +660,7 @@ impl AudioBackend {
         cache_dir: PathBuf,
     ) -> Result<(), String> {
         let url = url.trim().to_string();
-        eprintln!(
-            "[audio] play_start kind=online  url={}",
-            url
-        );
+        eprintln!("[audio] play_start kind=online  url={}", url);
         if !url.starts_with("http://") && !url.starts_with("https://") {
             return self.fail("Only HTTP and HTTPS audio URLs are supported.");
         }
@@ -696,7 +700,11 @@ impl AudioBackend {
             }
         };
         let duration = source_total_duration(&decoder, "http-stream");
-        let source = SpectrumSource::new(decoder, Arc::clone(&self.spectrum_levels));
+        let source = SpectrumSource::new(
+            decoder,
+            Arc::clone(&self.spectrum_levels),
+            Arc::clone(&self.audio_frame),
+        );
         let stream = match self.ensure_output_stream() {
             Ok(stream) => stream,
             Err(error) => {
@@ -870,6 +878,14 @@ impl AudioBackend {
             } else {
                 vec![0.0; SPECTRUM_BANDS]
             },
+            audio_frame: if is_playing {
+                self.audio_frame
+                    .lock()
+                    .ok()
+                    .and_then(|frame| (!frame.samples.is_empty()).then(|| frame.clone()))
+            } else {
+                None
+            },
             source_type,
             active_cache_path: self
                 .current_cache_path
@@ -910,7 +926,7 @@ fn audio_url_label(url: &str) -> String {
                 .query_pairs()
                 .map(|(name, _)| name.into_owned())
                 .collect::<Vec<_>>()
-            .join(",");
+                .join(",");
             format!(
                 "{}://{}{}?keys=[{}]&len={}",
                 parsed.scheme(),
@@ -1006,7 +1022,12 @@ where
 struct SpectrumSource<S> {
     inner: S,
     levels: Arc<[AtomicU32; SPECTRUM_BANDS]>,
+    audio_frame: Arc<Mutex<crate::player::AudioFrameSnapshot>>,
     samples: Vec<f32>,
+    mono_samples: Vec<f32>,
+    channel_sum: f32,
+    channel_index: u16,
+    channels: u16,
     sample_rate: f32,
 }
 
@@ -1014,13 +1035,26 @@ impl<S> SpectrumSource<S>
 where
     S: Source,
 {
-    fn new(inner: S, levels: Arc<[AtomicU32; SPECTRUM_BANDS]>) -> Self {
+    fn new(
+        inner: S,
+        levels: Arc<[AtomicU32; SPECTRUM_BANDS]>,
+        audio_frame: Arc<Mutex<crate::player::AudioFrameSnapshot>>,
+    ) -> Self {
         clear_spectrum_levels(&levels);
         let sample_rate = inner.sample_rate() as f32;
+        let channels = inner.channels().max(1);
+        if let Ok(mut frame) = audio_frame.lock() {
+            *frame = crate::player::AudioFrameSnapshot::default();
+        }
         Self {
             inner,
             levels,
+            audio_frame,
             samples: Vec::with_capacity(SPECTRUM_WINDOW_SAMPLES),
+            mono_samples: Vec::with_capacity(AUDIO_FRAME_SAMPLES),
+            channel_sum: 0.0,
+            channel_index: 0,
+            channels,
             sample_rate,
         }
     }
@@ -1041,6 +1075,24 @@ where
             }
         };
         self.samples.push(sample);
+        self.channel_sum += sample;
+        self.channel_index += 1;
+        if self.channel_index >= self.channels {
+            self.mono_samples
+                .push(self.channel_sum / self.channels as f32);
+            self.channel_sum = 0.0;
+            self.channel_index = 0;
+            if self.mono_samples.len() >= AUDIO_FRAME_SAMPLES {
+                if let Ok(mut frame) = self.audio_frame.lock() {
+                    frame.sequence = frame.sequence.wrapping_add(1);
+                    frame.sample_rate = self.sample_rate as u32;
+                    frame.channels = 1;
+                    frame.samples.clear();
+                    frame.samples.extend_from_slice(&self.mono_samples);
+                }
+                self.mono_samples.clear();
+            }
+        }
         if self.samples.len() >= SPECTRUM_WINDOW_SAMPLES {
             update_spectrum_levels(&self.levels, &self.samples, self.sample_rate);
             self.samples.clear();
@@ -1082,6 +1134,12 @@ where
         };
         if result.is_ok() {
             self.samples.clear();
+            self.mono_samples.clear();
+            self.channel_sum = 0.0;
+            self.channel_index = 0;
+            if let Ok(mut frame) = self.audio_frame.lock() {
+                frame.samples.clear();
+            }
             clear_spectrum_levels(&self.levels);
         }
         result
@@ -1366,7 +1424,6 @@ impl StreamingHttpReader {
     fn shared_state(&self) -> Arc<(Mutex<StreamingHttpState>, Condvar)> {
         Arc::clone(&self.shared)
     }
-
 }
 
 impl Read for StreamingHttpReader {

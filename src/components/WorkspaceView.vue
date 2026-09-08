@@ -122,7 +122,7 @@ async function locateActiveTrack() {
   min-height: 0;
   box-sizing: border-box;
   overflow: hidden;
-  padding: 12px 22px 24px;
+  padding: 12px 22px 2px;
   background: var(--smw-bg-workspace);
 }
 

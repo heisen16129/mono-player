@@ -28,7 +28,10 @@ export function useLyricsMetadataState(options: LyricsMetadataStateOptions) {
       : t(toValue(options.locale), 'noLyrics');
   });
   const hasAssociatedLyrics = computed(() => Boolean(toValue(options.activeTrack)?.associatedLyrics?.lyrics.length));
-  const activeArtwork = computed(() => trackArtworkSource(toValue(options.activeTrack)));
+  const activeArtwork = computed(() => {
+    const track = toValue(options.activeTrack);
+    return track?.associatedArtwork ?? trackArtworkSource(track);
+  });
   const availableLyricFormats = computed(() => {
     const formats = activeLyrics.value?.lyrics.map((variant) => variant.format) ?? [];
     return formats.filter((format, index) => format && formats.indexOf(format) === index);

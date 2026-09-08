@@ -4,8 +4,8 @@ import type { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 import type { PluginSearchTrack } from '../types/plugin';
 import { isSameQueueSource } from '../utils/queueSource';
-import { resolveRustQueueSnapshotTrack } from '../utils/rustQueueSnapshot';
 import { mergeTrackRuntimeMetadata } from '../utils/trackRuntimeMetadata';
+import { normalizeTrackLyrics } from '../utils/trackLyrics';
 
 interface UseRustQueueSnapshotControllerOptions {
   currentPlaybackTrack: Ref<Track | null>;
@@ -15,11 +15,9 @@ interface UseRustQueueSnapshotControllerOptions {
   onlineActiveTrackKey: Ref<string | null>;
   onlinePlaybackSource: Ref<string>;
   playbackTime: Ref<number>;
-  queueSwitchingTrackKey: Ref<string | null>;
   rustPlaybackQueue: Ref<Track[]>;
   selectedTrack: Ref<Track | null>;
   player: ReturnType<typeof usePlayerStore>;
-  clearQueueSwitchingForTrack: (track: Track | null) => void;
   dedupePlaybackQueue: (tracks: Track[]) => Track[];
   findPluginTrackForQueueTrack: (track: Track) => PluginSearchTrack | null;
   getOnlineTrackKey: (track: PluginSearchTrack) => string;
@@ -36,11 +34,9 @@ export function useRustQueueSnapshotController({
   onlineActiveTrackKey,
   onlinePlaybackSource,
   playbackTime,
-  queueSwitchingTrackKey,
   rustPlaybackQueue,
   selectedTrack,
   player,
-  clearQueueSwitchingForTrack,
   dedupePlaybackQueue,
   findPluginTrackForQueueTrack,
   getOnlineTrackKey,
@@ -84,7 +80,7 @@ export function useRustQueueSnapshotController({
       onlineActivePluginTrack.value = null;
       onlinePlaybackSource.value = '';
       onlineActiveTrackKey.value = null;
-      if (!isSamePlaybackTrack) {
+      if (!isSamePlaybackTrack && !normalizeTrackLyrics(nextTrack)?.lyrics.length) {
         void loadLocalTrackLyricsInBackground(nextTrack);
       }
     }
@@ -102,34 +98,20 @@ export function useRustQueueSnapshotController({
     onlineActivePluginTrack.value = null;
     onlinePlaybackSource.value = '';
     onlineActiveTrackKey.value = null;
-    queueSwitchingTrackKey.value = null;
     playbackTime.value = 0;
     isAudioPlaying.value = false;
     syncLyricsViewStateForTrack(null);
   }
 
-  function handleRustQueueSnapshot(snapshot: RustQueueSnapshot, markPreparing = true) {
+  function syncRustQueueSnapshot(snapshot: RustQueueSnapshot) {
     const mergedTracks = mergeQueueRuntimeMetadata(snapshot.tracks);
     rustPlaybackQueue.value = dedupePlaybackQueue(mergedTracks);
-    const currentSource = snapshot.currentSource ?? '';
-    const track = resolveRustQueueSnapshotTrack(snapshot, mergedTracks);
-    if (track) {
-      const pluginTrack = findPluginTrackForQueueTrack(track);
-      const isSamePlaybackTrack = currentPlaybackTrack.value
-        ? isSameQueueSource(currentPlaybackTrack.value, track)
-        : false;
-      if (markPreparing && pluginTrack && currentSource.startsWith('plugin://') && !isSamePlaybackTrack) {
-        queueSwitchingTrackKey.value = getOnlineTrackKey(pluginTrack);
-        playbackTime.value = 0;
-        isAudioPlaying.value = false;
-      } else {
-        clearQueueSwitchingForTrack(track);
-      }
-      handleSeamlessAdvance(track);
-      return;
-    }
+    return mergedTracks;
+  }
 
-    if (!currentSource && rustPlaybackQueue.value.length === 0) {
+  function handleRustQueueSnapshot(snapshot: RustQueueSnapshot) {
+    syncRustQueueSnapshot(snapshot);
+    if (!snapshot.currentSource && rustPlaybackQueue.value.length === 0) {
       clearActivePlaybackState();
     }
   }
@@ -138,6 +120,5 @@ export function useRustQueueSnapshotController({
     clearActivePlaybackState,
     handleRustQueueSnapshot,
     handleSeamlessAdvance,
-    mergeQueueRuntimeMetadata,
   };
 }

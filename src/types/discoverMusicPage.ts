@@ -10,7 +10,6 @@ export interface DiscoverMusicPageProps {
   isPlaying: boolean;
   pendingDownloadTrackKeys: string[];
   resolvingTrackKey: string | null;
-  searchHistory: string[];
   searchError: string | null;
 }
 

@@ -81,6 +81,10 @@ defineExpose({ lyricsAnchorOffset });
 
 <style scoped>
 .lyrics-stage {
+  --lyrics-line-color: #fff;
+  --lyrics-current-color: #fff;
+  --lyrics-pending-color: rgb(255 255 255 / 72%);
+
   display: grid;
   grid-template-columns: minmax(240px, 360px) minmax(520px, 1.7fr);
   grid-template-rows: minmax(0, 1fr) var(--player-height);
@@ -100,5 +104,6 @@ defineExpose({ lyricsAnchorOffset });
 .lyrics-stage-panel {
   grid-row: 1 / 3;
   width: min(100%, 720px);
+  clip-path: inset(0 0 var(--lyrics-player-bar-cover-height, var(--player-height)) 0);
 }
 </style>

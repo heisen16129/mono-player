@@ -34,6 +34,8 @@ import { useLocalLibraryQueuePruning } from './composables/useLocalLibraryQueueP
 import { useLyricsDockAutoHide } from './composables/useLyricsDockAutoHide';
 import { useLyricsRendererSettings } from './composables/useLyricsRendererSettings';
 import { useLyricsViewVisibility } from './composables/useLyricsViewVisibility';
+import { useLyricsWindowTransparency } from './composables/useLyricsWindowTransparency';
+import { wallpaperEngineRuntime } from './composables/useWallpaperEngineBackground';
 import { useMusicSourcePluginAvailability } from './composables/useMusicSourcePluginAvailability';
 import { useNavigationAvailabilityGuards } from './composables/useNavigationAvailabilityGuards';
 import { useOnlinePlaybackController } from './composables/useOnlinePlaybackController';
@@ -67,14 +69,15 @@ import {
 const player = usePlayerStore();
 const isAppReady = ref(false);
 const appPlayerSurfaceRef = ref<{ getController: () => PlayerDockController | null } | null>(null);
-const { activeRenderer: activeLyricsRenderer } = useLyricsRendererSettings();
+const {
+  activeRenderer: activeLyricsRenderer,
+} = useLyricsRendererSettings();
 const lyricsRendererOwnsSurface = computed(() => Boolean(activeLyricsRenderer.value?.ownsSurface));
 type AppRustPlaybackRuntime = ReturnType<typeof useAppRustPlaybackRuntime>;
 let appRustPlaybackRuntime: AppRustPlaybackRuntime;
 const startRustPlaybackQueue = (...args: Parameters<AppRustPlaybackRuntime['startRustPlaybackQueue']>) => appRustPlaybackRuntime.startRustPlaybackQueue(...args);
 const restoreRustPlaybackQueue = (...args: Parameters<AppRustPlaybackRuntime['restoreRustPlaybackQueue']>) => appRustPlaybackRuntime.restoreRustPlaybackQueue(...args);
 const handleRustQueueSnapshot = (...args: Parameters<AppRustPlaybackRuntime['handleRustQueueSnapshot']>) => appRustPlaybackRuntime.handleRustQueueSnapshot(...args);
-const getIsRestoringPlaybackQueue = () => appRustPlaybackRuntime.getIsRestoringPlaybackQueue();
 const playNextTrack = () => appRustPlaybackRuntime.playNextTrack();
 const playPreviousTrack = () => appRustPlaybackRuntime.playPreviousTrack();
 const handlePlaybackFailure = (...args: Parameters<AppRustPlaybackRuntime['handlePlaybackFailure']>) => appRustPlaybackRuntime.handlePlaybackFailure(...args);
@@ -86,12 +89,32 @@ const { startWindowDrag } = useWindowDrag();
 const {
   closeLyricsView,
   finishLyricsEnter,
+  hasOpenedLyrics,
   isLibraryVisible,
   isLyricsOpen,
   isLyricsTransitioning,
   showLibraryAfterLyricsLeave,
   toggleLyricsView,
 } = useLyricsViewVisibility();
+const isLyricsDesktopTransparent = computed(() => {
+  const background = player.settings.lyricsBackground;
+  return isLyricsOpen.value && (
+    background.windowOpacity < 1
+    || (background.source === 'color' && background.opacity < 1)
+  );
+});
+useLyricsWindowTransparency(() => isLyricsDesktopTransparent.value);
+const isNativeWallpaperSceneSelected = computed(() => {
+  const background = player.settings.lyricsBackground;
+  return background.source === 'wallpaper'
+    && background.wallpaperProjectType === 'scene'
+    && Boolean(background.wallpaperProjectId);
+});
+const isLyricsSurfaceReady = computed(() => (
+  !isNativeWallpaperSceneSelected.value
+  || wallpaperEngineRuntime.value.phase === 'active'
+  || wallpaperEngineRuntime.value.phase === 'error'
+));
 const {
   isAudioPlaying,
   playbackTime,
@@ -260,7 +283,6 @@ const {
   onlinePlaybackSource,
   onlinePreparingTrackKey,
   onlineResolvingTrackKey,
-  queueSwitchingTrackKey,
   rustPlaybackQueue,
   selectedTrack,
   shouldShowOnlineQuality,
@@ -297,14 +319,12 @@ useNavigationAvailabilityGuards({
 
 const {
   buildOnlinePlaybackQueue,
-  clearQueueSwitchingForTrack,
   findPluginTrackForQueueTrack,
   getOnlineTrackKey,
 } = useOnlinePlaybackLookup({
   activePluginTrack: onlineActivePluginTrack,
   dedupeTracks: dedupePlaybackQueue,
   onlineSearchResults,
-  queueSwitchingTrackKey,
 });
 
 const {
@@ -515,13 +535,10 @@ appRustPlaybackRuntime = useAppRustPlaybackRuntime({
   onlineActiveTrackKey,
   onlinePlaybackSource,
   playbackTime,
-  queueSwitchingTrackKey,
-  restorePlaybackTime,
   rustPlaybackQueue,
   selectedTrack,
   player,
   clearPreparingPlaybackState,
-  clearQueueSwitchingForTrack,
   dedupePlaybackQueue,
   findPluginTrackForQueueTrack,
   getOnlineTrackKey,
@@ -558,7 +575,6 @@ const {
 } = useExternalPlaybackEventBridge({
   togglePlaybackRequestId,
   broadcastCurrentDesktopLyricsState,
-  getIsRestoringPlaybackQueue,
   handleDownloadQueueEvent,
   handleRustQueueSnapshot,
   openSettingsView,
@@ -897,6 +913,7 @@ const {
 <template>
   <AppShellLayout
     :has-theme-background="hasThemeBackground"
+    :lyrics-desktop-transparent="isLyricsDesktopTransparent"
     :lyrics-open="isLyricsOpen"
     :lyrics-transitioning="isLyricsTransitioning"
     :sidebar-collapsed="isSidebarCollapsed"
@@ -925,8 +942,8 @@ const {
 
         <Transition name="lyrics-slide" @after-enter="finishLyricsEnter" @after-leave="showLibraryAfterLyricsLeave">
           <LyricsView
-            v-if="activeTrack"
-            v-show="isLyricsOpen"
+            v-if="activeTrack && hasOpenedLyrics"
+            v-show="isLyricsOpen && isLyricsSurfaceReady"
             v-bind="{ ...lyricsViewPropsWithPlayerDock, ...lyricsViewListeners }"
           />
         </Transition>

@@ -20,7 +20,10 @@ pub(crate) fn read_tagged_file(path: &Path, context: &str) -> Result<TaggedFile,
                 "metadata parser panicked while reading {}",
                 path.to_string_lossy()
             );
-            eprintln!("[metadata] read panic context={} error={}", context, message);
+            eprintln!(
+                "[metadata] read panic context={} error={}",
+                context, message
+            );
             Err(message)
         }
     }

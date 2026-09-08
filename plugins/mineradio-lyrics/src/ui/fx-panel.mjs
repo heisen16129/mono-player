@@ -26,7 +26,6 @@ const ADVANCED_SLIDERS = [
   ['bloomStrength', '粒子溢光', 0, 1.6, 0.01],
   ['scatter', '离散感', 0, 0.5, 0.01],
   ['bgFade', '背景压缩', 0, 1.2, 0.01],
-  ['backgroundOpacity', '背景透明度', 0, 1, 0.01],
   ['controlGlassChromaticOffset', '玻璃色差', 0, 140, 1],
 ];
 
@@ -200,11 +199,10 @@ export function createFxPanel(getEngine, close) {
     panel.append(fonts, heading('歌词布局'));
     for (const spec of LYRIC_SLIDERS) panel.append(slider(engine, fx, spec, beginSliderDrag, finishSliderDrag));
 
-    panel.append(heading('颜色与背景'));
+    panel.append(heading('界面配色'));
     panel.append(
       colorRow('界面高亮', fx.uiAccentColor, (color) => engine.setUiAccentColor(color), [{ label: '默认', run: () => engine.resetUiAccentColor() }]),
       colorRow('视觉主色', fx.visualTintColor, (color) => engine.setVisualTintCustom(color), [{ label: '封面', active: fx.visualTintMode === 'auto', run: () => engine.setVisualTintAuto() }]),
-      colorRow('背景颜色', fx.backgroundColor, (color) => engine.setCustomBackgroundColor(color), [{ label: '封面', active: fx.backgroundColorMode !== 'custom', run: () => engine.setCustomBackgroundCoverMode() }]),
     );
 
     panel.append(heading('叠加效果'));

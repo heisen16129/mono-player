@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 
 export function useLyricsViewVisibility() {
+  const hasOpenedLyrics = ref(false);
   const isLyricsOpen = ref(false);
   const isLyricsTransitioning = ref(false);
   const isLibraryVisible = ref(true);
@@ -19,6 +20,7 @@ export function useLyricsViewVisibility() {
 
     isLibraryVisible.value = true;
     isLyricsTransitioning.value = true;
+    hasOpenedLyrics.value = true;
     isLyricsOpen.value = true;
   }
 
@@ -34,6 +36,7 @@ export function useLyricsViewVisibility() {
   return {
     closeLyricsView,
     finishLyricsEnter,
+    hasOpenedLyrics,
     isLibraryVisible,
     isLyricsOpen,
     isLyricsTransitioning,

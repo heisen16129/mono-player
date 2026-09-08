@@ -11,7 +11,9 @@ const locale = computed(() => player.settings.locale);
 const installedPlugins = ref<PluginManifest[]>([]);
 const pluginConfigs = ref<Record<string, PluginConfig>>({});
 const isLoadingPlugins = ref(false);
-const configurablePlugins = computed(() => installedPlugins.value.filter((plugin) => configFields(plugin).length > 0));
+const configurablePlugins = computed(() => installedPlugins.value.filter((plugin) => (
+  plugin.kind !== 'lyrics-renderer' && configFields(plugin).length > 0
+)));
 
 async function loadPlugins() {
   isLoadingPlugins.value = true;

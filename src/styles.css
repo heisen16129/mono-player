@@ -11,3 +11,28 @@ body.desktop-lyrics-page #app {
   overflow: hidden !important;
   background: transparent !important;
 }
+
+html.wallpaper-engine-scene-active,
+html.wallpaper-engine-scene-active body,
+html.wallpaper-engine-scene-active #app,
+html.wallpaper-engine-scene-active .mono-window.lyrics-open {
+  background: transparent !important;
+}
+
+html.wallpaper-engine-scene-active .mono-window::before,
+html.wallpaper-engine-scene-active .mono-window::after {
+  display: none !important;
+}
+
+html.wallpaper-engine-scene-active .mono-window.lyrics-open .app-shell-menu,
+html.wallpaper-engine-scene-active .mono-window.lyrics-open .app-shell-content,
+html.wallpaper-engine-scene-active .mono-window.lyrics-open .app-shell-dock {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+html.lyrics-desktop-transparent,
+html.lyrics-desktop-transparent body,
+html.lyrics-desktop-transparent #app {
+  background: transparent !important;
+}

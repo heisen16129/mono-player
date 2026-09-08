@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -47,14 +47,14 @@ where
     Ok(normalize_artist_value(value.as_ref()))
 }
 
-pub(crate) fn serialize_artist_names<S>(artist: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+pub(crate) fn serialize_artist_names<S>(
+    artist: &Option<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let names = artist
-        .as_deref()
-        .map(artist_names)
-        .unwrap_or_default();
+    let names = artist.as_deref().map(artist_names).unwrap_or_default();
     names.serialize(serializer)
 }
 

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Black hole rendering regression</title>
+<style>
+  html,body{margin:0;background:#000;color:#ddd;font:12px system-ui;height:100%;overflow:hidden}
+  #viewport{width:100%;height:100%;margin:auto;touch-action:none}
+  #viewport.portrait{width:390px;max-width:100%;height:100%}
+  canvas{display:block;width:100%;height:100%}
+  nav{position:fixed;top:8px;left:8px;display:flex;gap:6px;z-index:2}
+  button{background:#171719;color:#ddd;border:1px solid #444;padding:7px 10px;border-radius:4px}
+  output{position:fixed;bottom:8px;left:8px;max-width:90%;font:11px monospace;white-space:pre-wrap;pointer-events:none}
+</style>
+<nav>
+  <button id="edge">Edge view</button><button id="overhead">Above disk</button>
+  <button id="side">Reverse view</button><button id="motion">Pause</button>
+  <button id="size">Portrait</button><button id="test">Run checks</button>
+</nav>
+<div id="viewport"></div><output id="result"></output>
+<script src="../upstream/public/vendor/three.r128.min.js"></script>
+<script src="../upstream/public/js/modules/02-visual/00a-black-hole-shader.js"></script>
+<script src="../upstream/public/js/modules/02-visual/00a-black-hole.js"></script>
+<script>
+  const host = document.getElementById('viewport');
+  const webgl = new THREE.WebGLRenderer({antialias:false});
+  host.append(webgl.domElement);
+  const world = new THREE.Scene();
+  const view = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  const identity = new THREE.Quaternion();
+  const effect = createBlackHoleVisual(world);
+  const compositeTarget = new THREE.WebGLRenderTarget(1, 1, {depthBuffer:false,stencilBuffer:false});
+  let yaw=0, pitch=0.10, clock=0, paused=false, previous=performance.now(), attraction=0, flowPhase=0;
+  function pose(){
+    const distance = Math.max(8.8, 13.0 / view.aspect);
+    view.position.set(Math.sin(yaw)*Math.cos(pitch)*distance,Math.sin(pitch)*distance,Math.cos(yaw)*Math.cos(pitch)*distance);
+    view.lookAt(0,0,0);
+  }
+  function resize(){
+    webgl.setSize(host.clientWidth,host.clientHeight,false);
+    view.aspect=host.clientWidth/host.clientHeight;view.updateProjectionMatrix();pose();
+  }
+  new ResizeObserver(resize).observe(host);
+  function render(time,infall=attraction,flow=flowPhase){effect.update(webgl,view,identity,time,infall,flow);webgl.render(world,view);}
+  function pixels(time,infall=0,flow=0){
+    render(time,infall,flow);
+    compositeTarget.setSize(effect.target.width,effect.target.height);
+    webgl.setRenderTarget(compositeTarget);
+    webgl.render(world,view);
+    const bytes=new Uint8Array(effect.target.width*effect.target.height*4);
+    webgl.readRenderTargetPixels(compositeTarget,0,0,effect.target.width,effect.target.height,bytes);
+    webgl.setRenderTarget(null);
+    return bytes;
+  }
+  function diff(a,b){let count=0;for(let i=0;i<a.length;i+=4)if(Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2])>12)count++;return count/(a.length/4);}
+  function checks(){
+    const oldYaw=yaw,oldPitch=pitch;
+    yaw=0;pitch=.10;pose();
+    const start=performance.now();
+    const a=pixels(0),b=pixels(3);
+    const gpuReadbackMs=(performance.now()-start)/2;
+    const pausedA=pixels(0,1,0.5),pausedB=pixels(0,1,1.5);
+    const infallChange=diff(a,pausedA),infallMotion=diff(pausedA,pausedB);
+    let lit=0,clipped=0,pausedClipped=0;for(let i=0;i<a.length;i+=4){if(a[i]+a[i+1]+a[i+2]>45)lit++;if(a[i]>250&&a[i+1]>250&&a[i+2]>250)clipped++;if(pausedA[i]>250&&pausedA[i+1]>250&&pausedA[i+2]>250)pausedClipped++;}
+    pitch=.9;pose();const c=pixels(0);
+    const ratio=lit/(a.length/4),motion=diff(a,b),viewChange=diff(a,c);
+    const w=effect.target.width,h=effect.target.height;
+    const shadowIndex=(Math.floor(h*.5+Math.min(w,h)*.08)*w+Math.floor(w*.5))*4;
+    const shadow=Math.max(a[shadowIndex],a[shadowIndex+1],a[shadowIndex+2])/255;
+    const result={size:[host.clientWidth,host.clientHeight],lit:ratio,motion,viewChange,infallChange,infallMotion,shadow,clipped:clipped/(a.length/4),pausedClipped:pausedClipped/(a.length/4),gpuReadbackMs,glError:webgl.getContext().getError()};
+    result.pass=ratio>.02&&ratio<.8&&motion>.005&&viewChange>.05&&infallChange>.005&&infallMotion>.005&&shadow<.15&&result.clipped<.01&&result.pausedClipped<.01&&result.glError===0;
+    document.getElementById('result').textContent=JSON.stringify(result);
+    yaw=oldYaw;pitch=oldPitch;pose();
+  }
+  document.getElementById('edge').onclick=()=>{yaw=0;pitch=.10;pose();};
+  document.getElementById('overhead').onclick=()=>{yaw=.2;pitch=1.05;pose();};
+  document.getElementById('side').onclick=()=>{yaw=Math.PI;pitch=.35;pose();};
+  document.getElementById('motion').onclick=(e)=>{paused=!paused;e.target.textContent=paused?'Play':'Pause';};
+  document.getElementById('size').onclick=(e)=>{host.classList.toggle('portrait');e.target.textContent=host.classList.contains('portrait')?'Desktop':'Portrait';resize();};
+  document.getElementById('test').onclick=checks;
+  let drag=null;
+  host.onpointerdown=e=>{drag=[e.clientX,e.clientY];host.setPointerCapture(e.pointerId);};
+  host.onpointermove=e=>{if(!drag)return;yaw+=(e.clientX-drag[0])*.006;pitch=Math.max(-1.4,Math.min(1.4,pitch+(e.clientY-drag[1])*.004));drag=[e.clientX,e.clientY];pose();};
+  host.onpointerup=host.onpointercancel=()=>{drag=null;};
+  function frame(now){
+    const dt=Math.min(.05,(now-previous)/1000);previous=now;clock+=dt;
+    attraction+=((paused?1:0)-attraction)*(1-Math.exp(-dt*(paused?1.8:3.4)));
+    flowPhase+=dt*attraction;
+    render(clock);requestAnimationFrame(frame);
+  }
+  resize();requestAnimationFrame(frame);
+  addEventListener('pagehide',()=>{effect.dispose();compositeTarget.dispose();webgl.dispose();});
+</script>
+</html>

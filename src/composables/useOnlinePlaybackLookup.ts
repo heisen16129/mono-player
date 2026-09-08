@@ -1,4 +1,3 @@
-import type { Ref } from 'vue';
 import type { Track } from '../types/music';
 import type { PluginSearchTrack } from '../types/plugin';
 import {
@@ -14,14 +13,12 @@ interface ReadonlyRefValue<T> {
 interface UseOnlinePlaybackLookupOptions {
   activePluginTrack: ReadonlyRefValue<PluginSearchTrack | null>;
   onlineSearchResults: ReadonlyRefValue<PluginSearchTrack[]>;
-  queueSwitchingTrackKey: Ref<string | null>;
   dedupeTracks: (tracks: Track[]) => Track[];
 }
 
 export function useOnlinePlaybackLookup({
   activePluginTrack,
   onlineSearchResults,
-  queueSwitchingTrackKey,
   dedupeTracks,
 }: UseOnlinePlaybackLookupOptions) {
   function getOnlineTrackKey(track: PluginSearchTrack) {
@@ -35,16 +32,6 @@ export function useOnlinePlaybackLookup({
     });
   }
 
-  function onlineTrackKeyForQueueTrack(track: Track) {
-    const pluginTrack = findPluginTrackForQueueTrack(track);
-    return pluginTrack ? getOnlineTrackKey(pluginTrack) : null;
-  }
-
-  function clearQueueSwitchingForTrack(track: Track | null) {
-    if (!track || queueSwitchingTrackKey.value !== onlineTrackKeyForQueueTrack(track)) return;
-    queueSwitchingTrackKey.value = null;
-  }
-
   function buildOnlinePlaybackQueue(sourceTrack: PluginSearchTrack, playbackTrack: Track, queueTracks?: Track[]) {
     return buildOnlinePlaybackQueueFromTracks(sourceTrack, playbackTrack, {
       queueTracks,
@@ -56,9 +43,7 @@ export function useOnlinePlaybackLookup({
 
   return {
     buildOnlinePlaybackQueue,
-    clearQueueSwitchingForTrack,
     findPluginTrackForQueueTrack,
     getOnlineTrackKey,
-    onlineTrackKeyForQueueTrack,
   };
 }

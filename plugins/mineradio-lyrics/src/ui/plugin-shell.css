@@ -1,6 +1,8 @@
-.mineradio-player.mono-mineradio{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;background:#050608;color:#fff}
+.mineradio-player.mono-mineradio{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;background:color-mix(in srgb,#050608 calc(var(--mono-window-opacity,1) * 100%),transparent);color:#fff}
+.mineradio-player.mono-mineradio.native-wallpaper-scene{background:transparent}
+.mineradio-player.mono-mineradio.native-wallpaper-scene #custom-bg{background:transparent}
+.mono-mineradio #custom-bg{opacity:var(--mono-window-opacity,1)}
 .mono-mineradio button,.mono-mineradio input{font:inherit}
-.mono-mineradio .mono-close{position:fixed;z-index:60;top:18px;left:18px}
 .mono-mineradio .mono-top-actions{position:fixed;z-index:60;top:18px;right:120px;display:flex;gap:8px}
 .mono-mineradio .mono-top-actions .ctrl-btn{width:38px;height:38px;border:1px solid rgba(255,255,255,.1);border-radius:50%;background:rgba(8,10,12,.42);backdrop-filter:blur(14px)}
 .mono-mineradio #thumb-wrap{display:none}

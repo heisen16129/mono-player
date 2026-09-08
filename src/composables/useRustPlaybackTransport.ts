@@ -5,7 +5,6 @@ import { isPlaybackRequestReplacedError, normalizePlaybackErrorMessage } from '.
 
 interface UseRustPlaybackTransportOptions {
   isAudioPlaying: Ref<boolean>;
-  queueSwitchingTrackKey: Ref<string | null>;
   player: ReturnType<typeof usePlayerStore>;
   clearPreparingPlaybackState: () => void;
   handleRustQueueSnapshot: (snapshot: RustQueueSnapshot) => void;
@@ -14,7 +13,6 @@ interface UseRustPlaybackTransportOptions {
 
 export function useRustPlaybackTransport({
   isAudioPlaying,
-  queueSwitchingTrackKey,
   player,
   clearPreparingPlaybackState,
   handleRustQueueSnapshot,
@@ -26,7 +24,6 @@ export function useRustPlaybackTransport({
       handleRustQueueSnapshot(await playRustBackendPrevious());
     } catch (error) {
       if (isPlaybackRequestReplacedError(error)) return;
-      queueSwitchingTrackKey.value = null;
       const message = normalizePlaybackErrorMessage(error, '切换上一首失败');
       player.error = null;
       showToast(message);
@@ -39,7 +36,6 @@ export function useRustPlaybackTransport({
       handleRustQueueSnapshot(await playRustBackendNext());
     } catch (error) {
       if (isPlaybackRequestReplacedError(error)) return;
-      queueSwitchingTrackKey.value = null;
       const message = normalizePlaybackErrorMessage(error, '切换下一首失败');
       player.error = null;
       showToast(message);

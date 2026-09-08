@@ -47,7 +47,6 @@ export function createShell(target, api, getEngine) {
     <div id="album-bg"></div>
     <div id="canvas-container"></div>
     <div id="thumb-wrap" aria-hidden="true"><img id="thumb-cover" alt=""><div id="thumb-info"><div id="thumb-title"></div><div id="thumb-artist"></div></div></div>
-    <div data-slot="close"></div>
     <div class="mono-top-actions"><div data-slot="reset"></div><div data-slot="settings"></div></div>
     <div id="beat-chip"><span class="mini-spin"></span><span id="beat-text"></span></div>
     <div id="ai-depth-chip"><span class="mini-spin"></span><span id="ai-depth-text">封面深度处理中…</span></div>
@@ -65,6 +64,8 @@ export function createShell(target, api, getEngine) {
   const root = target.firstElementChild;
   const canvasContainer = root.querySelector('#canvas-container');
   const albumBg = root.querySelector('#album-bg');
+  const customBg = root.querySelector('#custom-bg');
+  const customBgVideo = root.querySelector('#custom-bg-video');
   const queuePanel = root.querySelector('.mono-queue');
   const queueList = root.querySelector('.mono-queue-list');
   const progress = root.querySelector('#progress-bar');
@@ -79,7 +80,6 @@ export function createShell(target, api, getEngine) {
   let lastLoggedPlaybackState = null;
   let lastPlaybackPointerRequestAt = -Infinity;
 
-  const closeButton = setButton('close', iconButton('close', '返回', 'mr-close-btn mono-close'), root);
   const resetButton = setButton('reset', iconButton('reset', '回正舞台'), root);
   const settingsButton = setButton('settings', iconButton('settings', '视觉控制台'), root);
   const favoriteButton = setButton('favorite', iconButton('heart', '收藏'), root);
@@ -142,7 +142,6 @@ export function createShell(target, api, getEngine) {
     post(api, 'togglePlayback', { observedPlaying, expectedPlaying: !observedPlaying }, requestId);
   }
 
-  closeButton.addEventListener('click', () => post(api, 'close'));
   resetButton.addEventListener('click', () => getEngine()?.recenterCamera());
   settingsButton.addEventListener('click', () => setFxOpen(!fxOpen));
   fxFab.addEventListener('click', () => setFxOpen(!fxOpen));
@@ -261,8 +260,48 @@ export function createShell(target, api, getEngine) {
     });
   }
 
+  function renderSharedBackground() {
+    const background = context.background || {};
+    const source = background.source || 'cover';
+    const cover = artworkUrl(context);
+    const isSharedMedia = source === 'media' || source === 'wallpaper';
+    const mediaUrl = source === 'cover' ? cover : (isSharedMedia ? String(background.mediaUrl || '') : '');
+    const isVideo = isSharedMedia && background.mediaKind === 'video' && Boolean(mediaUrl);
+    const isNativeScene = source === 'wallpaper' && background.wallpaperProjectType === 'scene';
+    const opacity = Math.min(1, Math.max(0, Number(background.opacity ?? .72)));
+    const windowOpacity = Math.min(1, Math.max(0, Number(background.windowOpacity ?? 1)));
+    const blur = Math.min(60, Math.max(0, Number(background.blur ?? 0)));
+    const position = `${Number(background.positionX ?? 50)}% ${Number(background.positionY ?? 50)}%`;
+    const scale = Math.min(2, Math.max(.5, Number(background.scale ?? 1)));
+    root.classList.add('custom-background-override');
+    root.classList.toggle('custom-background-flat', source === 'color');
+    root.classList.toggle('custom-background-video', isVideo);
+    root.classList.toggle('native-wallpaper-scene', isNativeScene);
+    root.style.setProperty('--mono-window-opacity', String(windowOpacity));
+    root.style.setProperty(
+      '--custom-bg-color',
+      isNativeScene ? 'transparent' : (source === 'color' ? String(background.color || '#000000') : '#000000'),
+    );
+    root.style.setProperty('--mono-shared-bg-position', position);
+    root.style.setProperty('--mono-shared-bg-scale', String(scale));
+    root.style.setProperty('--mono-shared-bg-blur', `${blur}px`);
+    root.style.setProperty('--mono-shared-bg-blur-scale', String(blur / 500));
+    customBg.style.setProperty('--custom-bg-image', !isVideo && mediaUrl ? `url(${JSON.stringify(mediaUrl)})` : 'none');
+    customBg.style.setProperty('--custom-bg-image-opacity', !isVideo && mediaUrl ? String(opacity) : '0');
+    customBg.style.setProperty('--custom-bg-video-opacity', isVideo ? String(opacity) : '0');
+    customBg.style.setProperty('--custom-bg-overlay-opacity', mediaUrl ? '.12' : '0');
+    if (isVideo) {
+      if (customBgVideo.src !== mediaUrl) customBgVideo.src = mediaUrl;
+      void customBgVideo.play().catch(() => {});
+    } else {
+      customBgVideo.pause();
+      customBgVideo.removeAttribute('src');
+    }
+  }
+
   function render(nextContext) {
     context = nextContext || {};
+    renderSharedBackground();
     const nextPlaying = Boolean(context.isPlaying);
     if (lastLoggedPlaybackState !== nextPlaying) {
       console.log('[Mineradio 歌词][播放控制] 状态更新', {

@@ -2,7 +2,7 @@ import type { Track } from '../types/music';
 import type { RustQueueSnapshot } from '../services/playerBackend';
 
 interface UseRustPlaybackQueueBridgeOptions {
-  handleSnapshot: (snapshot: RustQueueSnapshot, markPreparing?: boolean) => void;
+  handleSnapshot: (snapshot: RustQueueSnapshot) => void;
   restoreQueue: (track: Track, currentTime: number) => Promise<void>;
   startQueue: (tracks: Track[], requestedTrack: Track | null, startPosition?: number) => Promise<boolean>;
 }
@@ -16,8 +16,8 @@ export function useRustPlaybackQueueBridge({ handleSnapshot, restoreQueue, start
     await restoreQueue(track, currentTime);
   }
 
-  function handleRustQueueSnapshot(snapshot: RustQueueSnapshot, markPreparing = true) {
-    handleSnapshot(snapshot, markPreparing);
+  function handleRustQueueSnapshot(snapshot: RustQueueSnapshot) {
+    handleSnapshot(snapshot);
   }
 
   return {

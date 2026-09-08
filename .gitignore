@@ -39,6 +39,7 @@ desktop.ini
 .history/
 .uploads/
 .agents/
+.reference/
 
 # Temporary/debug artifacts
 *.tmp
@@ -47,6 +48,9 @@ desktop.ini
 *.sqlite
 *.sqlite3
 tmp_*
+.cargo-check-target/
+target-codex*/
+src-tauri/target-codex*/
 
 # Keep plugin wasm release artifacts available for distribution.
 !plugins/*/dist/

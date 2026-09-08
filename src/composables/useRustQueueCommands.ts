@@ -17,7 +17,7 @@ export function useRustQueueCommands({
 }: UseRustQueueCommandsOptions) {
   async function syncRustPlaybackMode() {
     try {
-      handleRustQueueSnapshot(await setRustBackendPlaybackMode(player.playbackMode));
+      await setRustBackendPlaybackMode(player.playbackMode);
     } catch (error) {
       showToast(getErrorMessage(error), 'error');
     }

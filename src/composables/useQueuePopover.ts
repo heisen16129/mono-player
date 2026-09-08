@@ -8,21 +8,40 @@ interface QueuePopoverOptions {
 
 export function useQueuePopover({ activeTrack, onPlayTrack }: QueuePopoverOptions) {
   const isQueueOpen = ref(false);
-  const queueControl = ref<HTMLElement | null>(null);
-  const queueTrackRefs = ref(new Map<number, HTMLElement>());
+  const queueControls = new Set<HTMLElement>();
+  const queueTrackRefs = new Map<number, Set<HTMLElement>>();
 
   function toggleQueuePanel() {
     isQueueOpen.value = !isQueueOpen.value;
   }
 
   function setQueueControl(element: Element | ComponentPublicInstance | null) {
-    queueControl.value = element instanceof HTMLElement ? element : null;
+    if (element instanceof HTMLElement) {
+      queueControls.add(element);
+      return;
+    }
+
+    queueMicrotask(pruneDisconnectedQueueElements);
+  }
+
+  function pruneDisconnectedQueueElements() {
+    for (const control of queueControls) {
+      if (!control.isConnected) queueControls.delete(control);
+    }
+
+    for (const [trackId, elements] of queueTrackRefs) {
+      for (const element of elements) {
+        if (!element.isConnected) elements.delete(element);
+      }
+      if (elements.size === 0) queueTrackRefs.delete(trackId);
+    }
   }
 
   function closeQueuePanelOnOutsidePointer(event: PointerEvent) {
     const target = event.target;
     if (!(target instanceof Node)) return;
-    if (queueControl.value?.contains(target)) return;
+    pruneDisconnectedQueueElements();
+    if ([...queueControls].some((control) => control.contains(target))) return;
     isQueueOpen.value = false;
   }
 
@@ -33,11 +52,13 @@ export function useQueuePopover({ activeTrack, onPlayTrack }: QueuePopoverOption
 
   function setQueueTrackRef(trackId: number, element: Element | ComponentPublicInstance | null) {
     if (element instanceof HTMLElement) {
-      queueTrackRefs.value.set(trackId, element);
+      const elements = queueTrackRefs.get(trackId) ?? new Set<HTMLElement>();
+      elements.add(element);
+      queueTrackRefs.set(trackId, elements);
       return;
     }
 
-    queueTrackRefs.value.delete(trackId);
+    queueMicrotask(pruneDisconnectedQueueElements);
   }
 
   function setQueueControlElement(element: unknown) {
@@ -52,8 +73,20 @@ export function useQueuePopover({ activeTrack, onPlayTrack }: QueuePopoverOption
     if (!activeTrack.value) return;
 
     await nextTick();
-    queueTrackRefs.value.get(activeTrack.value.id)?.scrollIntoView({
-      block: 'center',
+    pruneDisconnectedQueueElements();
+    const trackRows = [...(queueTrackRefs.get(activeTrack.value.id) ?? [])];
+    const trackRow = trackRows.find((element) => element.getClientRects().length > 0) ?? trackRows[0];
+    const queueList = trackRow?.closest<HTMLElement>('.queue-list');
+    if (!trackRow || !queueList) return;
+
+    const trackRect = trackRow.getBoundingClientRect();
+    const queueRect = queueList.getBoundingClientRect();
+    const trackTop = trackRect.top - queueRect.top + queueList.scrollTop;
+    const targetTop = trackTop - (queueList.clientHeight - trackRect.height) / 2;
+    const maxScrollTop = Math.max(0, queueList.scrollHeight - queueList.clientHeight);
+
+    queueList.scrollTo({
+      top: Math.min(Math.max(0, targetTop), maxScrollTop),
       behavior: 'smooth',
     });
   }

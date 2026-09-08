@@ -8,9 +8,8 @@ import type { PlaybackMode } from '../types/music';
 interface UseExternalPlaybackEventBridgeOptions {
   togglePlaybackRequestId: Ref<number>;
   broadcastCurrentDesktopLyricsState: () => Promise<void> | void;
-  getIsRestoringPlaybackQueue: () => boolean;
   handleDownloadQueueEvent: (event: DownloadQueueEvent) => void;
-  handleRustQueueSnapshot: (snapshot: RustQueueSnapshot, markPreparing?: boolean) => void;
+  handleRustQueueSnapshot: (snapshot: RustQueueSnapshot) => void;
   openSettingsView: () => void;
   playNextTrack: () => Promise<void>;
   playPreviousTrack: () => Promise<void>;
@@ -20,7 +19,6 @@ interface UseExternalPlaybackEventBridgeOptions {
 export function useExternalPlaybackEventBridge({
   togglePlaybackRequestId,
   broadcastCurrentDesktopLyricsState,
-  getIsRestoringPlaybackQueue,
   handleDownloadQueueEvent,
   handleRustQueueSnapshot,
   openSettingsView,
@@ -45,9 +43,7 @@ export function useExternalPlaybackEventBridge({
       void broadcastCurrentDesktopLyricsState();
     },
     onDownloadEvent: handleDownloadQueueEvent,
-    onRustQueueSnapshot: (snapshot) => {
-      handleRustQueueSnapshot(snapshot, !getIsRestoringPlaybackQueue());
-    },
+    onRustQueueSnapshot: handleRustQueueSnapshot,
   });
 
   return {

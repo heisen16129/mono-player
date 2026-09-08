@@ -26,7 +26,7 @@ defineExpose({ lyricsAnchorOffset });
   <LyricsRendererSurface
     :context="props.context"
     :player-dock-controller="props.playerDockController"
-    @close="props.context.close"
+    :window-background-opacity="props.context.background.windowOpacity"
   >
     <div class="focus-lyrics-renderer" :style="{ '--focus-lyrics-max-width': `${maxWidth}px` }">
       <LyricsPanel

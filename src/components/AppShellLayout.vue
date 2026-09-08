@@ -1,6 +1,7 @@
 <script setup lang="ts">
 defineProps<{
   hasThemeBackground: boolean;
+  lyricsDesktopTransparent: boolean;
   lyricsOpen: boolean;
   lyricsTransitioning: boolean;
   sidebarCollapsed: boolean;
@@ -18,6 +19,7 @@ defineEmits<{
     :class="{
       'sidebar-collapsed': sidebarCollapsed,
       'lyrics-open': lyricsOpen || lyricsTransitioning,
+      'lyrics-desktop-transparent': lyricsDesktopTransparent,
       'has-theme-background': hasThemeBackground,
     }"
     @click="$emit('closeContextMenus')"
@@ -57,6 +59,22 @@ defineEmits<{
 
 .mono-window.sidebar-collapsed {
   --app-sidebar-width: var(--sidebar-collapsed-width);
+}
+
+.mono-window.lyrics-desktop-transparent {
+  background: transparent !important;
+}
+
+.mono-window.lyrics-desktop-transparent::before,
+.mono-window.lyrics-desktop-transparent::after {
+  display: none;
+}
+
+.mono-window.lyrics-desktop-transparent .app-shell-menu,
+.mono-window.lyrics-desktop-transparent .app-shell-content,
+.mono-window.lyrics-desktop-transparent .app-shell-dock {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .app-shell-menu {

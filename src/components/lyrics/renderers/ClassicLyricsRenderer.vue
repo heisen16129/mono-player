@@ -23,7 +23,7 @@ defineExpose({ lyricsAnchorOffset });
   <LyricsRendererSurface
     :context="props.context"
     :player-dock-controller="props.playerDockController"
-    @close="props.context.close"
+    :window-background-opacity="props.context.background.windowOpacity"
   >
     <LyricsStage
       ref="stageRef"

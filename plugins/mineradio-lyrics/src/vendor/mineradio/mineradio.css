@@ -18,9 +18,9 @@
 /* ---------- 背景 ---------- */
 .mineradio-player #custom-bg{position:fixed;inset:0;z-index:0;background:var(--custom-bg-color,#000);overflow:hidden;transition:background .35s ease}
 
-.mineradio-player #custom-bg-video{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);object-fit:cover;opacity:var(--custom-bg-video-opacity,0);filter:none;transform:scale(1.002);transition:opacity .35s ease;pointer-events:none;background:#000}
+.mineradio-player #custom-bg-video{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);object-fit:cover;object-position:var(--mono-shared-bg-position,center);opacity:var(--custom-bg-video-opacity,0);filter:blur(var(--mono-shared-bg-blur,0px));transform:scale(calc(var(--mono-shared-bg-scale,1.002) + var(--mono-shared-bg-blur-scale,0)));transition:opacity .35s ease,filter .2s ease;pointer-events:none;background:#000}
 
-.mineradio-player #custom-bg::before{content:'';position:absolute;inset:-1px;background-image:var(--custom-bg-image,none);background-size:cover;background-position:center;opacity:var(--custom-bg-image-opacity,0);filter:none;transform:scale(1.002);transition:opacity .35s ease,background-image .35s ease;pointer-events:none}
+.mineradio-player #custom-bg::before{content:'';position:absolute;inset:-1px;background-image:var(--custom-bg-image,none);background-size:cover;background-position:var(--mono-shared-bg-position,center);opacity:var(--custom-bg-image-opacity,0);filter:blur(var(--mono-shared-bg-blur,0px));transform:scale(calc(var(--mono-shared-bg-scale,1.002) + var(--mono-shared-bg-blur-scale,0)));transition:opacity .35s ease,background-image .35s ease,filter .2s ease;pointer-events:none}
 
 .mineradio-player #custom-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.06),rgba(0,0,0,.16));opacity:var(--custom-bg-overlay-opacity,0);pointer-events:none}
 
@@ -987,10 +987,6 @@
 }
 
 /* ===== [sollin 补充] 覆盖层专用控件 ===== */
-.mineradio-player .mr-close-btn{position:fixed;z-index:30;top:18px;left:18px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.10);border-radius:50%;background:rgba(8,10,12,.44);color:rgba(232,236,239,.85);cursor:pointer;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);transition:background .2s,color .2s,transform .2s}
-.mineradio-player .mr-close-btn:hover{background:rgba(255,255,255,.12);color:#fff;transform:translateY(-1px)}
-.mineradio-player .mr-close-btn svg{width:22px;height:22px}
-.mineradio-player.immersive-mode .mr-close-btn{opacity:0;pointer-events:none}
 .mineradio-player .ctrl-btn .mini-spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
 .mineradio-player #heart-btn.liked{color:#ff5364}
 .mineradio-player .mini-queue-remove svg{width:13px;height:13px}

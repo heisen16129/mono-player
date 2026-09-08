@@ -100,7 +100,7 @@ export function useLocalLyricsLoader({
     () => [activeTrack.value?.id, activeTrack.value?.path, Boolean(onlineActiveTrack.value)] as const,
     ([, , isOnlineTrack]) => {
       const track = activeTrack.value;
-      if (!track || isOnlineTrack || isRemoteTrack(track)) return;
+      if (!track || isOnlineTrack || isRemoteTrack(track) || normalizeTrackLyrics(track)?.lyrics.length) return;
       void loadLocalTrackLyricsInBackground(track);
     },
     { immediate: true },

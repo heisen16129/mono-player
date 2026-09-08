@@ -47,6 +47,7 @@ const emit = defineEmits<{
 <style scoped>
 p {
   margin: 0;
+  color: var(--lyrics-line-color, inherit);
   font-size: var(--lyrics-font-size, 22px);
   line-height: 1.25;
   opacity: 0.22;
@@ -69,7 +70,7 @@ p.can-seek:focus-visible {
 }
 
 .current {
-  color: var(--smw-lyrics-current);
+  color: var(--lyrics-current-color, var(--smw-lyrics-current));
   font-weight: 680;
   opacity: 1;
   text-shadow: 0 8px 24px color-mix(in srgb, var(--smw-lyrics-current) 18%, transparent);
@@ -82,8 +83,8 @@ p.can-seek:focus-visible {
   background:
     linear-gradient(
       90deg,
-      var(--smw-lyrics-current) 0 var(--lyric-word-progress, 0%),
-      var(--smw-text-secondary) var(--lyric-word-progress, 0%) 100%
+      var(--lyrics-current-color, var(--smw-lyrics-current)) 0 var(--lyric-word-progress, 0%),
+      var(--lyrics-pending-color, var(--smw-text-secondary)) var(--lyric-word-progress, 0%) 100%
     );
   background-clip: text;
   -webkit-background-clip: text;

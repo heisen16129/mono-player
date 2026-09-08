@@ -53,6 +53,7 @@ export function useAppBootstrap({
       await loadLibraryPanelWidth();
       await loadDownloadItems();
       await player.loadLibrary();
+      await startRustQueueEventListener();
       const restored = restoreSavedPlaybackSession();
       if (restored) {
         await restoreRustPlaybackQueue(restored.track, restored.currentTime);
@@ -66,7 +67,6 @@ export function useAppBootstrap({
     await startDesktopLyricsActionListener();
     await startDesktopLyricsReadyListener();
     await startDownloadEventListener();
-    await startRustQueueEventListener();
   }
 
   onMounted(() => {

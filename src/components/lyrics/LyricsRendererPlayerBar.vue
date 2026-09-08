@@ -147,6 +147,16 @@ function toggleFavorite() {
 
 <style scoped>
 .lyrics-renderer-player-bar {
+  --smw-text-primary: rgba(255, 255, 255, 0.96);
+  --smw-text-body: rgba(255, 255, 255, 0.8);
+  --smw-text-secondary: rgba(255, 255, 255, 0.68);
+  --smw-icon-muted: rgba(255, 255, 255, 0.66);
+  --smw-bg-hover: rgba(255, 255, 255, 0.1);
+  --smw-progress-track: rgba(255, 255, 255, 0.28);
+  --smw-progress-fill: rgba(255, 255, 255, 0.92);
+  --smw-progress-thumb: #ffffff;
+  --smw-progress-thumb-border: rgba(0, 0, 0, 0.24);
+  --smw-progress-thumb-ring: rgba(255, 255, 255, 0.28);
   position: absolute;
   right: 0;
   bottom: 0;
@@ -160,8 +170,22 @@ function toggleFavorite() {
   padding: 14px var(--player-dock-padding-x);
   isolation: isolate;
   color: var(--smw-text-primary);
-  border-top: 1px solid transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
   background: transparent;
+}
+
+.lyrics-renderer-player-bar::before {
+  position: absolute;
+  inset: -96px 0 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.14) 48%,
+    rgba(0, 0, 0, 0.42) 100%
+  );
+  pointer-events: none;
+  content: "";
 }
 
 .lyrics-renderer-now-playing {
