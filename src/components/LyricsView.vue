@@ -169,7 +169,6 @@ const {
   activeLyrics,
   activeTrack: activeTrackRef,
   closeMenu: closeFontMenu,
-  onCoverChanged: (artwork) => emit('coverChanged', artwork),
   onNotify: (message, variant) => emit('notify', message, variant),
   player,
 });
@@ -184,6 +183,7 @@ const {
   setArtworkCover,
 } = useLyricsCover({
   activeArtwork,
+  coverVersion: computed(() => props.activeTrack?.coverVersion),
 });
 
 const {

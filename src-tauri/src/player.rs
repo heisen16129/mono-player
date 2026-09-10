@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -49,6 +49,68 @@ impl PlayerState {
             .map(|path| path.clone())
             .map_err(|err| err.to_string())
     }
+
+    pub(crate) fn publish_track_cover_change(
+        &self,
+        app: &AppHandle,
+        track_id: i64,
+        track_path: &str,
+        artwork: Option<String>,
+        associated_artwork: Option<String>,
+    ) {
+        let cover_version = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_millis() as u64)
+            .unwrap_or_default();
+        let normalized_path = track_path.trim().replace('\\', "/").to_ascii_lowercase();
+        if !normalized_path.is_empty() {
+            match self.inner.lock() {
+                Ok(mut backend) => {
+                    let mut updated = false;
+                    for track in &mut backend.queue_tracks {
+                        if track.path.trim().replace('\\', "/").to_ascii_lowercase()
+                            == normalized_path
+                        {
+                            track.artwork = artwork.as_ref().map(|value| {
+                                let separator = if value.contains('?') { '&' } else { '?' };
+                                format!("{value}{separator}monoCoverVersion={cover_version}")
+                            });
+                            updated = true;
+                        }
+                    }
+                    if updated {
+                        let snapshot = queue_snapshot_from_backend(&backend);
+                        drop(backend);
+                        emit_queue_snapshot(app, "cover_changed", &snapshot);
+                    }
+                }
+                Err(error) => {
+                    eprintln!("[player://cover-changed] update queue failed: {error}");
+                }
+            }
+        }
+
+        let event = PlayerCoverChangedEvent {
+            id: track_id,
+            path: track_path.to_string(),
+            artwork,
+            associated_artwork,
+            cover_version,
+        };
+        if let Err(error) = app.emit("player://cover-changed", event) {
+            eprintln!("[player://cover-changed] emit failed: {error}");
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlayerCoverChangedEvent {
+    id: i64,
+    path: String,
+    artwork: Option<String>,
+    associated_artwork: Option<String>,
+    cover_version: u64,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -153,18 +215,6 @@ fn queue_track_plugin_value(track: &QueueTrack) -> Value {
         "artwork": track.artwork,
         "sourceRaw": track.source_raw,
     })
-}
-
-fn read_installed_playback_plugins(
-    app: &AppHandle,
-) -> Result<Vec<crate::plugins::PluginPlaybackPlanPlugin>, String> {
-    let plugins = crate::store::read_value(app, "plugins.installed")
-        .map_err(|err| err.to_string())?
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    let configs = crate::store::read_value(app, "plugins.configs")
-        .ok()
-        .flatten();
-    crate::plugins::playback_plugins_from_values(plugins, configs)
 }
 
 fn read_quality_fallback(app: &AppHandle) -> String {
@@ -445,6 +495,26 @@ struct PlaybackAdvancedEvent {
     position: f64,
 }
 
+fn emit_playback_advanced(app: &AppHandle, event: PlaybackAdvancedEvent) {
+    let tray_title = event
+        .track
+        .as_ref()
+        .map(|track| {
+            [
+                Some(track.title.trim()),
+                track.artist.as_deref().map(str::trim),
+            ]
+            .into_iter()
+            .flatten()
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>()
+            .join(" - ")
+        })
+        .unwrap_or_default();
+    crate::tray::update_tray_now_playing_in_background(app, tray_title);
+    let _ = app.emit("player://advanced", &event);
+}
+
 fn emit_queue_snapshot(app: &AppHandle, reason: &str, snapshot: &QueueSnapshot) {
     match app.emit("player://queue", snapshot) {
         Ok(()) => eprintln!("[player://queue] emit reason={reason}"),
@@ -495,6 +565,7 @@ pub(crate) fn player_restore_queue(
             let is_online = is_plugin_queue_source(&source) || is_rust_playable_url(&source);
             let track = playback_advanced_track(
                 &state.inner,
+                &app,
                 &source,
                 restored_index,
                 is_online,
@@ -505,7 +576,7 @@ pub(crate) fn player_restore_queue(
                 track,
                 position: current_time.max(0.0),
             };
-            let _ = app.emit("player://advanced", &advanced_event);
+            emit_playback_advanced(&app, advanced_event);
         }
         emit_queue_snapshot(&app, "restore_queue", &snapshot);
         Ok(snapshot)
@@ -712,6 +783,62 @@ pub(crate) fn player_queue_remove(
         emit_queue_snapshot(&app, "remove", &snapshot);
         Ok(snapshot)
     })())
+}
+
+pub(crate) fn remove_library_queue_sources(
+    app: &AppHandle,
+    sources: Vec<String>,
+) -> Result<QueueSnapshot, String> {
+    let state = app.state::<PlayerState>();
+    if sources.is_empty() {
+        return queue_snapshot(&state.inner);
+    }
+    let normalized_sources = sources
+        .iter()
+        .map(|source| {
+            normalize_queue_source(source)
+                .ok_or_else(|| "Queue source is not playable.".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let removed_current_source = {
+        let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
+        let source_keys = normalized_sources
+            .into_iter()
+            .map(|source| {
+                queue_source_key_for_source(&backend.queue_tracks, &source).unwrap_or(source)
+            })
+            .collect::<Vec<_>>();
+        let current_source_key = backend.current_source.as_deref().and_then(|source| {
+            queue_source_key_for_source(&backend.queue_tracks, source)
+                .or_else(|| normalize_queue_source(source))
+        });
+        let removed_current_source = current_source_key
+            .as_ref()
+            .is_some_and(|source| source_keys.contains(source));
+
+        backend
+            .queue_tracks
+            .retain(|item| !source_keys.contains(&queue_track_source_key(item)));
+        backend
+            .queue_sources
+            .retain(|source| !source_keys.contains(source));
+        if backend
+            .queued_next_source
+            .as_ref()
+            .is_some_and(|source| source_keys.contains(source))
+        {
+            backend.queued_next_source = None;
+        }
+        refresh_queue_index(&mut backend);
+        removed_current_source
+    };
+
+    if removed_current_source {
+        stop_playback_and_emit_state(app)?;
+    }
+    let snapshot = queue_snapshot(&state.inner)?;
+    emit_queue_snapshot(app, "library_remove", &snapshot);
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -1141,9 +1268,15 @@ fn handle_worker_playback_failure(
         }
     }
 
-    let _ = app
-        .state::<crate::workers::audio::AudioWorkerState>()
-        .stop(false);
+    stop_playback_and_emit_state(app)?;
+    let _ = app.emit("player://error", message.to_string());
+    Ok(false)
+}
+
+fn stop_playback_and_emit_state(app: &AppHandle) -> Result<(), String> {
+    let audio_worker = app.state::<crate::workers::audio::AudioWorkerState>();
+    let _ = audio_worker.stop(false);
+
     let player_state = app.state::<PlayerState>();
     {
         let mut backend = player_state.inner.lock().map_err(|err| err.to_string())?;
@@ -1151,8 +1284,12 @@ fn handle_worker_playback_failure(
         backend.current_source = None;
         refresh_queue_index(&mut backend);
     }
-    let _ = app.emit("player://error", message.to_string());
-    Ok(false)
+
+    if let Ok(mut snapshot) = audio_worker.state() {
+        snapshot.audio_frame = None;
+        let _ = app.emit("player://state", snapshot);
+    }
+    Ok(())
 }
 
 fn retry_current_queue_track_from_plugin(
@@ -1356,7 +1493,7 @@ fn resolve_queue_source_for_playback(
             cache_identity: Some(cached_source.identity),
         });
     }
-    let plugins = read_installed_playback_plugins(app)?;
+    let plugins = crate::plugins::read_playback_plugin(app, &provider_id)?;
     let quality_fallback = read_quality_fallback(app);
     let track_value = queue_track_plugin_value(&track);
     ensure_current_playback_generation(state, generation)?;
@@ -1431,7 +1568,7 @@ fn resolve_and_cache_plugin_cover_for_queue_track(
     if provider_id.trim().is_empty() || track_id.is_empty() {
         return None;
     }
-    let plugins = read_installed_playback_plugins(app).ok()?;
+    let plugins = crate::plugins::read_playback_plugin(app, provider_id).ok()?;
     let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
     let artwork = crate::plugins::resolve_plugin_cover_metadata_backend(
         &worker,
@@ -1608,7 +1745,11 @@ fn play_queue_source_at_position(
             {
                 return Ok(snapshot);
             }
-            advance_worker_queue_after_failure(app, &error, generation)?.ok_or(error)
+            if let Some(snapshot) = advance_worker_queue_after_failure(app, &error, generation)? {
+                return Ok(snapshot);
+            }
+            stop_playback_and_emit_state(app)?;
+            Err(error)
         }
     }
 }
@@ -1626,6 +1767,7 @@ fn set_pending_queue_source(
 
 fn playback_advanced_track(
     state: &Arc<Mutex<PlayerBackend>>,
+    app: &AppHandle,
     source: &str,
     queue_index: Option<usize>,
     is_online: bool,
@@ -1661,6 +1803,23 @@ fn playback_advanced_track(
         current_track.lyrics = None;
         return Ok(track);
     }
+
+    current_track.artwork = match app
+        .state::<PlayerState>()
+        .cache_dir()
+        .and_then(|cache_root| {
+            crate::covers::cached_cover_files_in(&cache_root, Path::new(&current_track.path))
+        }) {
+        Ok(cover_files) => cover_files.map(|files| files.original_url),
+        Err(error) => {
+            eprintln!(
+                "[playback] local artwork failed source={} error={}",
+                playback_source_label(&current_track.path),
+                error
+            );
+            None
+        }
+    };
 
     let has_lyrics = current_track
         .lyrics
@@ -1792,6 +1951,7 @@ fn play_queue_source_raw(
 
     let advanced_track = playback_advanced_track(
         state,
+        app,
         &source,
         queue_index,
         is_online,
@@ -1804,7 +1964,7 @@ fn play_queue_source_raw(
         track: advanced_track,
         position: position.max(0.0),
     };
-    let _ = app.emit("player://advanced", &advanced_event);
+    emit_playback_advanced(app, advanced_event);
     spawn_audio_worker_state_watcher(app.clone(), generation);
     eprintln!(
         "[playback] started source={} elapsed_ms={}",

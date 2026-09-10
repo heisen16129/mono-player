@@ -76,9 +76,6 @@ export function normalizeSettings(value: unknown): PlayerSettings {
     const lastAddedTrackIds = Array.isArray(parsed.lastAddedTrackIds)
       ? parsed.lastAddedTrackIds.filter((id): id is number => typeof id === 'number')
       : [];
-    const recentPlayedTrackIds = Array.isArray(parsed.recentPlayedTrackIds)
-      ? parsed.recentPlayedTrackIds.filter((id): id is number => typeof id === 'number')
-      : [];
     const playlists = Array.isArray(parsed.playlists)
       ? parsed.playlists.filter((playlist): playlist is UserPlaylist => {
           return (
@@ -149,7 +146,9 @@ export function normalizeSettings(value: unknown): PlayerSettings {
     const mcpAutoStart = parsed.mcpAutoStart !== false;
     const enableAppShortcuts = parsed.enableAppShortcuts !== false;
     const appShortcuts = normalizeShortcutBindings(parsed.appShortcuts);
-    return { ...parsed, musicDirs: dirs, lastAddedTrackIds, recentPlayedTrackIds, playlists, closeAction, locale, sleepTimerAction, sleepTimerMinutes, theme, autoHideLyricsDock, lyricFontSize, useThemeLyricColor, lyricFontColor, lyricsBackground, downloadDir, audioCacheDir, audioCacheMaxMb, audioOutputDeviceId, searchHistoryLimit, showTrackNumbers, showTrackCovers, enableLocalMetadataEditing, enableTrackMetadataEdit, enableTrackCoverEdit, enableTrackDurationRefresh, enablePlugins, qualityFallback, onlinePlaybackFailureAction, seamlessPlayback, fadePlayback, crossfadePlayback, mcpAutoStart, enableAppShortcuts, appShortcuts };
+    const normalized: PlayerSettings = { ...parsed, musicDirs: dirs, lastAddedTrackIds, playlists, closeAction, locale, sleepTimerAction, sleepTimerMinutes, theme, autoHideLyricsDock, lyricFontSize, useThemeLyricColor, lyricFontColor, lyricsBackground, downloadDir, audioCacheDir, audioCacheMaxMb, audioOutputDeviceId, searchHistoryLimit, showTrackNumbers, showTrackCovers, enableLocalMetadataEditing, enableTrackMetadataEdit, enableTrackCoverEdit, enableTrackDurationRefresh, enablePlugins, qualityFallback, onlinePlaybackFailureAction, seamlessPlayback, fadePlayback, crossfadePlayback, mcpAutoStart, enableAppShortcuts, appShortcuts };
+    delete (normalized as PlayerSettings & { recentPlayedTrackIds?: unknown }).recentPlayedTrackIds;
+    return normalized;
   } catch {
     return fallbackSettings;
   }

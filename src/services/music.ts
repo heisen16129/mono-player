@@ -3,19 +3,6 @@ import type { CoverImage, LyricLine, Track, TrackLyrics } from '../types/music';
 import { artistNames } from '../utils/artist';
 import { invokeApi } from './api';
 
-export interface WorkerDiagnostic {
-  worker: string;
-  running: boolean;
-  pid: number | null;
-  startedAtMs: number | null;
-  error: string | null;
-  restartPolicy?: string | null;
-}
-
-export interface WorkerDiagnosticsSnapshot {
-  workers: WorkerDiagnostic[];
-}
-
 export interface ScanMusicDirResult {
   tracks: Track[];
   addedTracks: Track[];
@@ -50,6 +37,7 @@ export interface UpdateTrackMetadataResult {
 }
 
 export interface UpdateTrackCoverRequest {
+  trackId: number;
   path: string;
   coverPath: string;
   embedMetadata?: boolean;
@@ -60,6 +48,7 @@ export interface UpdateTrackCoverResult {
 }
 
 export interface CropCoverImageRequest {
+  imageDataUrl?: string;
   imagePath: string;
   x: number;
   y: number;
@@ -148,6 +137,14 @@ export function cropCoverImage(request: CropCoverImageRequest): Promise<CropCove
   return invokeApi<CropCoverImageResult>('crop_cover_image', { request });
 }
 
+export function readTrackCoverOriginal(path: string): Promise<string | null> {
+  if (!isTauriRuntime() || !path) {
+    return Promise.resolve(null);
+  }
+
+  return invokeApi<string | null>('read_track_cover_original', { path });
+}
+
 export function refreshTrackDuration(request: RefreshTrackDurationRequest): Promise<RefreshTrackDurationResult> {
   if (!isTauriRuntime()) {
     return Promise.reject(new Error('请在 Tauri 桌面窗口中重新读取歌曲时长。'));
@@ -172,14 +169,6 @@ export function readTrackAudioInfo(request: ReadTrackAudioInfoRequest): Promise<
   }
 
   return invokeApi<TrackAudioInfo>('read_track_audio_info', { request });
-}
-
-export function systemWorkerHealth(): Promise<WorkerDiagnosticsSnapshot> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve({ workers: [] });
-  }
-
-  return invokeApi<WorkerDiagnosticsSnapshot>('system_worker_health');
 }
 
 export async function scanMusicDir(path: string): Promise<ScanMusicDirResult> {
@@ -244,36 +233,12 @@ export function resolveLocalTrackLyrics(track?: Track | null): Promise<TrackLyri
   return invokeApi<TrackLyrics | null>('resolve_local_track_lyrics', { track });
 }
 
-export function readCover(path: string): Promise<CoverImage | null> {
-  if (!isTauriRuntime() || !path) {
-    return Promise.resolve(null);
-  }
-
-  return invokeApi<CoverImage | null>('read_cover', { path });
-}
-
 export function readArtworkFile(artwork: string): Promise<CoverImage | null> {
   if (!isTauriRuntime() || !artwork) {
     return Promise.resolve(null);
   }
 
   return invokeApi<CoverImage | null>('read_artwork_file', { artwork });
-}
-
-export function readCoverThumbnail(path: string): Promise<CoverImage | null> {
-  if (!isTauriRuntime() || !path) {
-    return Promise.resolve(null);
-  }
-
-  return invokeApi<CoverImage | null>('read_cover_thumbnail', { path });
-}
-
-export function clearCoverThumbnailCache(path: string): Promise<void> {
-  if (!isTauriRuntime() || !path) {
-    return Promise.resolve();
-  }
-
-  return invokeApi<void>('clear_cover_thumbnail_cache', { path });
 }
 
 export function openTrackInFolder(path: string): Promise<void> {
@@ -298,14 +263,6 @@ export function exitApp(): Promise<void> {
   }
 
   return invoke('exit_app');
-}
-
-export function updateTrayNowPlaying(title: string): Promise<void> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve();
-  }
-
-  return invokeApi<void>('update_tray_now_playing', { title });
 }
 
 export function toAudioSource(path: string): string {

@@ -1,5 +1,4 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct Track {
@@ -157,28 +156,4 @@ pub(crate) struct SystemThemeState {
     pub(crate) system_uses_light_theme: bool,
     #[serde(rename = "wallpaperColor")]
     pub(crate) wallpaper_color: Option<WallpaperThemeColor>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ThemePackageManifest {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) author: Option<String>,
-    pub(crate) entry: Option<String>,
-    pub(crate) preview: Option<String>,
-    pub(crate) background: Option<String>,
-    #[serde(rename = "backgroundOpacity")]
-    pub(crate) background_opacity: Option<f64>,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ImportedTheme {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) author: String,
-    pub(crate) variables: HashMap<String, String>,
-    pub(crate) preview: Option<String>,
-    pub(crate) background: Option<String>,
-    #[serde(rename = "backgroundOpacity")]
-    pub(crate) background_opacity: Option<f64>,
 }

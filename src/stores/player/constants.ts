@@ -4,6 +4,7 @@ export const SETTINGS_KEY = 'mono-player-settings';
 export const FAVORITES_KEY = 'mono-player-favorites';
 export const CUSTOM_THEMES_KEY = 'mono-player-custom-themes';
 export const PLAYBACK_SESSION_KEY = 'mono-player-playback-session';
+export const RECENT_PLAYED_TRACK_IDS_KEY = 'mono-player-recent-played-track-ids';
 export const STARTUP_THEME_KEY = 'mono-player-startup-theme';
 export const STARTUP_BG_KEY = 'mono-player-startup-bg';
 
@@ -56,7 +57,6 @@ export const fallbackSettings: PlayerSettings = {
   musicDirs: [],
   lastAddedMusicDir: '',
   lastAddedTrackIds: [],
-  recentPlayedTrackIds: [],
   playlists: [],
   theme: 'blueWhite',
   closeAction: 'exit',

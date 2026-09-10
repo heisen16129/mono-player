@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import { isTauriRuntime } from '../services/music';
-import { listPluginConfigs, savePluginConfig } from '../services/plugins';
+import { getPluginConfig, savePluginConfig } from '../services/plugins';
 import type { PluginConfig } from '../types/plugin';
 import { ensureBuiltinLyricsRenderers } from '../lyrics-renderers/builtins';
 import { loadExternalLyricsRenderers } from '../lyrics-renderers/external';
@@ -24,6 +24,14 @@ function rendererConfigId(pluginId: string) {
 
 function normalizeConfig(config: PluginConfig | undefined) {
   return config && typeof config === 'object' ? { ...config } : {};
+}
+
+async function loadRendererConfig(pluginId: string) {
+  const config = await getPluginConfig(rendererConfigId(pluginId));
+  rendererConfigs.value = {
+    ...rendererConfigs.value,
+    [pluginId]: normalizeConfig(config),
+  };
 }
 
 export function useLyricsRendererSettings() {
@@ -59,8 +67,8 @@ export function useLyricsRendererSettings() {
 
       const selectionVersionAtStart = rendererSelectionVersion;
       await loadExternalLyricsRenderers();
-      const configs = await listPluginConfigs();
-      const storedRendererId = configs[LYRICS_RENDERER_HOST_CONFIG_ID]?.rendererId;
+      const hostConfig = await getPluginConfig(LYRICS_RENDERER_HOST_CONFIG_ID);
+      const storedRendererId = hostConfig.rendererId;
       if (
         rendererSelectionVersion === selectionVersionAtStart
         && typeof storedRendererId === 'string'
@@ -69,12 +77,7 @@ export function useLyricsRendererSettings() {
         activeRendererId.value = storedRendererId;
       }
 
-      rendererConfigs.value = Object.fromEntries(
-        rendererPlugins.value.map((plugin) => [
-          plugin.id,
-          normalizeConfig(configs[rendererConfigId(plugin.id)]),
-        ]),
-      );
+      await loadRendererConfig(activeRendererId.value);
       isHydrated.value = true;
     })().finally(() => {
       hydrateRequest = null;
@@ -88,6 +91,7 @@ export function useLyricsRendererSettings() {
     activeRendererId.value = pluginId;
     if (isTauriRuntime()) {
       void savePluginConfig(LYRICS_RENDERER_HOST_CONFIG_ID, { rendererId: pluginId });
+      void loadRendererConfig(pluginId);
     }
     return true;
   }

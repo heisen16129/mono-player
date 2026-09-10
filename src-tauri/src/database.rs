@@ -14,7 +14,7 @@ use std::fs;
 use std::fs::File;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct UpdateTrackMetadataRequest {
@@ -43,6 +43,8 @@ pub(crate) struct UpdateTrackMetadataResult {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct UpdateTrackCoverRequest {
+    #[serde(rename = "trackId")]
+    pub(crate) track_id: i64,
     pub(crate) path: String,
     #[serde(rename = "coverPath")]
     pub(crate) cover_path: String,
@@ -134,13 +136,19 @@ pub(crate) fn list_latest_added_tracks(state: State<'_, AppState>) -> ApiRespons
 #[tauri::command]
 pub(crate) fn remove_music_dir(
     state: State<'_, AppState>,
+    app: AppHandle,
     path: String,
 ) -> ApiResponse<Vec<Track>> {
     ApiResponse::from_result((|| {
         let root = PathBuf::from(path.trim());
-        let db = state.db.lock().map_err(|err| err.to_string())?;
-        delete_tracks_for_dir(&db, &root)?;
-        read_tracks(&db)
+        let (removed_sources, tracks) = {
+            let db = state.db.lock().map_err(|err| err.to_string())?;
+            let removed_sources = delete_tracks_for_music_dir(&db, &root)?;
+            let tracks = read_tracks(&db)?;
+            (removed_sources, tracks)
+        };
+        crate::player::remove_library_queue_sources(&app, removed_sources)?;
+        Ok(tracks)
     })())
 }
 
@@ -194,6 +202,7 @@ pub(crate) fn update_track_metadata(
 
 #[tauri::command]
 pub(crate) fn update_track_cover(
+    app: AppHandle,
     state: State<'_, AppState>,
     player_state: State<'_, crate::player::PlayerState>,
     request: UpdateTrackCoverRequest,
@@ -201,39 +210,68 @@ pub(crate) fn update_track_cover(
     ApiResponse::from_result((|| {
         let track_path = Path::new(&request.path);
         let cover_path = Path::new(&request.cover_path);
+        let cache_root = player_state.cache_dir()?;
         let artwork = if request.embed_metadata {
-            match catch_unwind(AssertUnwindSafe(|| {
-                write_track_cover_metadata(&request.path, &request.cover_path)
-            })) {
-                Ok(Ok(())) => crate::covers::cached_cover_original_file_url_in(
-                    &player_state.cache_dir()?,
-                    track_path,
-                )?,
-                Ok(Err(error)) => {
-                    eprintln!(
-                        "[cover] embed cover failed, fallback to sidecar image: path={} error={}",
-                        request.path, error
-                    );
-                    crate::covers::write_sidecar_cover_file_url(track_path, cover_path)?
-                }
-                Err(error) => {
-                    eprintln!(
-                        "[cover] embed cover skipped after panic, fallback to sidecar image: path={} panic={}",
-                        request.path,
-                        panic_message(error)
-                    );
-                    crate::covers::write_sidecar_cover_file_url(track_path, cover_path)?
-                }
-            }
+            let cover_data = fs::read(cover_path).map_err(|err| err.to_string())?;
+            crate::covers::refresh_cached_cover_files_from_data_in(
+                &cache_root,
+                track_path,
+                &cover_data,
+            )?
+            .map(|files| files.thumbnail_url)
         } else {
-            crate::covers::write_sidecar_cover_file_url(track_path, cover_path)?
+            crate::covers::write_sidecar_cover_files(&cache_root, track_path, cover_path)?
+                .map(|files| files.thumbnail_url)
         };
-        let db = state.db.lock().map_err(|err| err.to_string())?;
-        db.execute(
-            "UPDATE tracks SET artwork = ?1 WHERE path = ?2",
-            params![artwork, request.path],
-        )
-        .map_err(|err| err.to_string())?;
+        {
+            let db = state.db.lock().map_err(|err| err.to_string())?;
+            db.execute(
+                "UPDATE tracks SET artwork = ?1, updated_at = CURRENT_TIMESTAMP WHERE path = ?2",
+                params![artwork, request.path],
+            )
+            .map_err(|err| err.to_string())?;
+        }
+        player_state.publish_track_cover_change(
+            &app,
+            request.track_id,
+            &request.path,
+            artwork.clone(),
+            None,
+        );
+        if request.embed_metadata {
+            let track_path = request.path.clone();
+            let cover_path = request.cover_path.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let write_result = catch_unwind(AssertUnwindSafe(|| {
+                    write_track_cover_metadata(&track_path, &cover_path)
+                }));
+                match write_result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        eprintln!(
+                            "[cover] background embed failed, fallback to sidecar image: path={track_path} error={error}"
+                        );
+                        let _ = crate::covers::write_sidecar_cover_files(
+                            &cache_root,
+                            Path::new(&track_path),
+                            Path::new(&cover_path),
+                        );
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "[cover] background embed skipped after panic, fallback to sidecar image: path={} panic={}",
+                            track_path,
+                            panic_message(error)
+                        );
+                        let _ = crate::covers::write_sidecar_cover_files(
+                            &cache_root,
+                            Path::new(&track_path),
+                            Path::new(&cover_path),
+                        );
+                    }
+                }
+            });
+        }
         Ok(UpdateTrackCoverResult { artwork })
     })())
 }
@@ -429,12 +467,14 @@ pub(crate) fn init_database(db: &Connection) -> rusqlite::Result<()> {
             duration INTEGER,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            scan_id TEXT
+            scan_id TEXT,
+            music_dir TEXT
         )",
         [],
     )?; //閸掓稑缂?tracks 鐞??  ? 閺冭绱濈€瑰啰娈戦柅鏄忕帆缁涘鐜禍搴濅簰娑?match 鐞涖劏鎻蹇ョ窗
     ensure_track_column(db, "added_at", "TEXT")?;
     ensure_track_column(db, "scan_id", "TEXT")?;
+    ensure_track_column(db, "music_dir", "TEXT")?;
     ensure_track_column(db, "artwork", "TEXT")?;
     db.execute(
         "UPDATE tracks SET added_at = COALESCE(added_at, updated_at, CURRENT_TIMESTAMP)",
@@ -557,7 +597,9 @@ pub(crate) fn upsert_track(
     db: &Connection,
     track: &Track,
     scan_id: Option<&str>,
+    music_dir: Option<&Path>,
 ) -> Result<(), String> {
+    let music_dir = music_dir.map(normalized_music_dir);
     let existing_path = match find_existing_track_path(db, &track.path)? {
         Some(path) => Some(path),
         None => find_existing_track_path_by_file_traits(db, track)?,
@@ -578,8 +620,9 @@ pub(crate) fn upsert_track(
         }
         db.execute(
             "UPDATE tracks
-             SET path = ?1, title = ?2, artist = ?3, album = ?4, duration = ?5, artwork = ?6, updated_at = CURRENT_TIMESTAMP
-             WHERE path = ?7",
+             SET path = ?1, title = ?2, artist = ?3, album = ?4, duration = ?5, artwork = ?6,
+                 music_dir = COALESCE(?7, music_dir), updated_at = CURRENT_TIMESTAMP
+             WHERE path = ?8",
             params![
                 track.path,
                 track.title,
@@ -587,6 +630,7 @@ pub(crate) fn upsert_track(
                 track.album,
                 track.duration,
                 track.artwork,
+                music_dir.as_deref(),
                 existing_path,
             ],
         )
@@ -607,14 +651,15 @@ pub(crate) fn upsert_track(
         );
     }
     db.execute(
-        "INSERT INTO tracks (path, title, artist, album, duration, artwork, updated_at, added_at, scan_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP, ?7, ?8)
+        "INSERT INTO tracks (path, title, artist, album, duration, artwork, updated_at, added_at, scan_id, music_dir)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP, ?7, ?8, ?9)
          ON CONFLICT(path) DO UPDATE SET
             title = excluded.title,
             artist = excluded.artist,
             album = excluded.album,
             duration = excluded.duration,
             artwork = excluded.artwork,
+            music_dir = COALESCE(excluded.music_dir, tracks.music_dir),
             updated_at = CURRENT_TIMESTAMP",
         params![
             track.path,
@@ -624,7 +669,8 @@ pub(crate) fn upsert_track(
             track.duration,
             track.artwork,
             added_at,
-            scan_id.or(track.scan_id.as_deref())
+            scan_id.or(track.scan_id.as_deref()),
+            music_dir.as_deref(),
         ],
     )
     .map(|_| ()) //閿涘瞼鏁ゆ禍搴℃嫹閻ｃ儲鎼锋担婊呮畱閹存劕濮涙潻鏂挎礀閸婄》绱濈亸鍡楀従鏉烆剚宕叉稉鍝勫礋閸忓啰琚崹?() 鐏?Result<usize, Error> 鏉烆剚宕叉稉?Result<(), String>
@@ -721,34 +767,58 @@ pub(crate) fn delete_missing_tracks_for_dir(
     db: &Connection,
     root: &Path,
     scanned_paths: &HashSet<String>,
-) -> Result<(), String> {
-    let root_prefix = normalized_folder_prefix(root);
+) -> Result<Vec<String>, String> {
+    let music_dir = normalized_music_dir(root);
     let scanned_paths = scanned_paths
         .iter()
         .map(|path| normalized_track_path(path))
         .collect::<HashSet<_>>();
     let mut statement = db
-        .prepare("SELECT path FROM tracks")
+        .prepare("SELECT path FROM tracks WHERE music_dir = ?1")
         .map_err(|err| err.to_string())?;
     let paths = statement
-        .query_map([], |row| row.get::<_, String>(0))
+        .query_map(params![music_dir], |row| row.get::<_, String>(0))
         .map_err(|err| err.to_string())?
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(|err| err.to_string())?;
 
+    let mut removed_paths = Vec::new();
     for path in paths {
         let normalized_path = normalized_track_path(&path);
-        if normalized_path.starts_with(&root_prefix) && !scanned_paths.contains(&normalized_path) {
+        if !scanned_paths.contains(&normalized_path) {
             db.execute("DELETE FROM tracks WHERE path = ?1", params![path])
                 .map_err(|err| err.to_string())?;
+            removed_paths.push(path);
         }
     }
 
-    Ok(())
+    Ok(removed_paths)
 }
 
-pub(crate) fn delete_tracks_for_dir(db: &Connection, root: &Path) -> Result<(), String> {
-    let root_prefix = normalized_folder_prefix(root);
+pub(crate) fn delete_tracks_for_music_dir(
+    db: &Connection,
+    root: &Path,
+) -> Result<Vec<String>, String> {
+    let music_dir = normalized_music_dir(root);
+    let mut statement = db
+        .prepare("SELECT path FROM tracks WHERE music_dir = ?1")
+        .map_err(|err| err.to_string())?;
+    let paths = statement
+        .query_map(params![music_dir.clone()], |row| row.get::<_, String>(0))
+        .map_err(|err| err.to_string())?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|err| err.to_string())?;
+
+    db.execute(
+        "DELETE FROM tracks WHERE music_dir = ?1",
+        params![music_dir],
+    )
+    .map_err(|err| err.to_string())?;
+
+    Ok(paths)
+}
+
+pub(crate) fn delete_tracks_without_files(db: &Connection) -> Result<Vec<String>, String> {
     let mut statement = db
         .prepare("SELECT path FROM tracks")
         .map_err(|err| err.to_string())?;
@@ -758,42 +828,22 @@ pub(crate) fn delete_tracks_for_dir(db: &Connection, root: &Path) -> Result<(), 
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(|err| err.to_string())?;
 
-    for path in paths {
-        if normalized_track_path(&path).starts_with(&root_prefix) {
-            db.execute("DELETE FROM tracks WHERE path = ?1", params![path])
-                .map_err(|err| err.to_string())?;
-        }
-    }
-
-    Ok(())
-}
-
-pub(crate) fn delete_tracks_without_files(db: &Connection) -> Result<(), String> {
-    let mut statement = db
-        .prepare("SELECT path FROM tracks")
-        .map_err(|err| err.to_string())?;
-    let paths = statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|err| err.to_string())?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|err| err.to_string())?;
-
+    let mut removed_paths = Vec::new();
     for path in paths {
         if !Path::new(&path).is_file() {
             db.execute("DELETE FROM tracks WHERE path = ?1", params![path])
                 .map_err(|err| err.to_string())?;
+            removed_paths.push(path);
         }
     }
 
-    Ok(())
+    Ok(removed_paths)
 }
 
-fn normalized_folder_prefix(root: &Path) -> String {
-    let mut value = normalized_track_path(&root.to_string_lossy());
-    if !value.ends_with('/') {
-        value.push('/');
-    }
-    value
+fn normalized_music_dir(root: &Path) -> String {
+    normalized_track_path(&root.to_string_lossy())
+        .trim_end_matches('/')
+        .to_string()
 }
 
 fn normalized_track_path(path: &str) -> String {
@@ -814,6 +864,56 @@ fn normalize_required_text(value: String, message: &str) -> Result<String, Strin
         Err(message.to_string())
     } else {
         Ok(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_track(path: &str) -> Track {
+        Track {
+            id: 0,
+            path: path.to_string(),
+            title: "Test Track".to_string(),
+            artist: None,
+            album: None,
+            duration: Some(180),
+            added_at: None,
+            scan_id: None,
+            year: None,
+            genre: None,
+            track_number: None,
+            artwork: None,
+            associated_artwork: None,
+            lyrics: None,
+            associated_lyrics: None,
+            source_id: None,
+            source_name: None,
+            source_provider_id: None,
+            source_raw: None,
+        }
+    }
+
+    #[test]
+    fn stores_and_deletes_tracks_by_music_directory() {
+        let db = Connection::open_in_memory().expect("open database");
+        init_database(&db).expect("initialize database");
+        let root = Path::new(r"D:\Music\Album");
+        let track = test_track(r"D:\Music\Album\song.mp3");
+
+        upsert_track(&db, &track, Some("scan-1"), Some(root)).expect("store track");
+
+        let stored_music_dir: String = db
+            .query_row("SELECT music_dir FROM tracks", [], |row| row.get(0))
+            .expect("read music directory");
+        assert_eq!(stored_music_dir, "d:/music/album");
+        assert_eq!(
+            delete_tracks_for_music_dir(&db, Path::new(r"d:/music/album"))
+                .expect("delete directory"),
+            vec![track.path]
+        );
+        assert_eq!(read_tracks(&db).expect("read tracks").len(), 0);
     }
 }
 

@@ -1,5 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import type { CoverImage, Track } from '../types/music';
+import type { Track } from '../types/music';
 
 export function trackArtworkSource(track: Pick<Track, 'artwork'> | null | undefined) {
   return track?.artwork ?? null;
@@ -20,25 +20,18 @@ export function filePathToArtworkUrl(path: string) {
   return `file:///${normalizedPath}`;
 }
 
-export function usableArtworkDisplaySrc(url: string | null | undefined, failedUrls?: Set<string>) {
-  const displayUrl = artworkDisplaySrc(url);
+function versionedLocalArtworkSrc(url: string, version?: number | null) {
+  if (!version || !/^(?:https?:\/\/asset\.localhost(?:\/|$)|asset:\/\/localhost(?:\/|$))/i.test(url)) {
+    return url;
+  }
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}monoCoverVersion=${version}`;
+}
+
+export function usableArtworkDisplaySrc(url: string | null | undefined, failedUrls?: Set<string>, version?: number | null) {
+  const displayUrl = versionedLocalArtworkSrc(artworkDisplaySrc(url), version);
   if (!displayUrl || failedUrls?.has(displayUrl)) return '';
   return displayUrl;
-}
-
-export function isTemporaryObjectUrl(url: string | null | undefined) {
-  return Boolean(url?.startsWith('blob:'));
-}
-
-export function revokeTemporaryObjectUrl(url: string | null | undefined) {
-  if (url && isTemporaryObjectUrl(url)) {
-    URL.revokeObjectURL(url);
-  }
-}
-
-export function coverImageObjectUrl(cover: CoverImage | null | undefined) {
-  if (!cover?.data.length) return null;
-  return URL.createObjectURL(new Blob([new Uint8Array(cover.data)], { type: cover.mime_type }));
 }
 
 export function artworkBlobDataUrl(blob: Blob) {

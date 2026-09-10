@@ -41,7 +41,6 @@ interface UseAppPlayerSurfaceBindingsState {
 }
 
 interface UseAppPlayerSurfaceBindingsActions {
-  applyTrackCoverRefresh: (trackId: number, artwork?: string | null) => void;
   changeLyricFormat: PlayerDockListeners['onLyricFormatChange'];
   changeOnlinePlaybackQuality: PlayerDockListeners['onOnlineQualityChange'];
   clearActiveTrackLyrics: LyricsViewListeners['onLyricsCleared'];
@@ -145,9 +144,6 @@ export function useAppPlayerSurfaceBindings({
     },
     listeners: {
       onClose: actions.closeLyricsView,
-      onCoverChanged: (artwork) => {
-        if (state.activeTrack.value) actions.applyTrackCoverRefresh(state.activeTrack.value.id, artwork);
-      },
       onLyricsCleared: actions.clearActiveTrackLyrics,
       onLyricsFound: actions.updateActiveTrackLyrics,
       onNotify: actions.showOnlineToast,

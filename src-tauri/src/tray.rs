@@ -105,12 +105,16 @@ pub(crate) fn tray_popup_action(app: AppHandle, action: String) -> ApiResponse<(
     ApiResponse::ok()
 }
 
-#[tauri::command]
-pub(crate) fn update_tray_now_playing(app: AppHandle, title: String) -> ApiResponse<()> {
-    ApiResponse::from_empty_result(update_tray_now_playing_inner(app, title))
+pub(crate) fn update_tray_now_playing_in_background(app: &AppHandle, title: String) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(error) = update_tray_now_playing_inner(&app, &title) {
+            eprintln!("[tray] update now playing failed: {error}");
+        }
+    });
 }
 
-fn update_tray_now_playing_inner(app: AppHandle, title: String) -> Result<(), String> {
+fn update_tray_now_playing_inner(app: &AppHandle, title: &str) -> Result<(), String> {
     let Some(tray) = app.tray_by_id("main-tray") else {
         return Ok(());
     };

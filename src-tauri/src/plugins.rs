@@ -55,6 +55,25 @@ pub(crate) fn playback_plugins_from_values(
     Ok(plugins)
 }
 
+pub(crate) fn read_playback_plugin(
+    app: &AppHandle,
+    provider_id: &str,
+) -> Result<Vec<PluginPlaybackPlanPlugin>, String> {
+    let plugins = crate::store::read_value(app, "plugins.installed")
+        .map_err(|err| err.to_string())?
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let config =
+        crate::store::read_plugin_config_value(app, provider_id).map_err(|err| err.to_string())?;
+    let configs = config.map(|config| {
+        let mut configs = serde_json::Map::new();
+        configs.insert(provider_id.to_string(), config);
+        Value::Object(configs)
+    });
+    let mut plugins = playback_plugins_from_values(plugins, configs)?;
+    plugins.retain(|plugin| plugin.id == provider_id);
+    Ok(plugins)
+}
+
 fn attach_plugin_configs(plugins: &mut [PluginPlaybackPlanPlugin], configs: &Value) {
     for plugin in plugins {
         let mut config = default_config_from_schema(plugin.config_schema.as_ref());
@@ -110,14 +129,6 @@ fn merge_config_value(target: &mut Value, source: Option<&Value>) {
             target.insert(key.clone(), value.clone());
         }
     }
-}
-
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PluginPlaybackPlan {
-    plugin_id: String,
-    plugin_name: String,
-    qualities: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -324,15 +335,6 @@ pub fn normalize_plugin_catalog_items(
 }
 
 #[tauri::command]
-pub fn normalize_plugin_catalog_text(catalog_text: String) -> ApiResponse<Vec<PluginCatalogItem>> {
-    ApiResponse::from_result((|| {
-        let catalog =
-            serde_json::from_str::<Value>(&catalog_text).map_err(|err| err.to_string())?;
-        Ok(normalize_catalog_values(catalog_values(catalog)))
-    })())
-}
-
-#[tauri::command]
 pub async fn fetch_plugin_catalog_items(
     app: AppHandle,
     url: String,
@@ -358,15 +360,6 @@ fn fetch_plugin_catalog_items_inner(
     let catalog_text = fetch_plugin_catalog_backend(url)?;
     let catalog = serde_json::from_str::<Value>(&catalog_text).map_err(|err| err.to_string())?;
     Ok(normalize_catalog_values(catalog_values(catalog)))
-}
-
-#[tauri::command]
-pub fn read_plugin_metadata_normalized(
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
-    entry: String,
-    permissions: Option<Vec<String>>,
-) -> ApiResponse<PluginMetadata> {
-    ApiResponse::from_result(read_plugin_metadata_backend(&worker, entry, permissions))
 }
 
 #[tauri::command]
@@ -627,49 +620,6 @@ fn search_plugin_backend(
     )?;
 
     normalize_plugin_search_page(unwrap_plugin_response_envelope(response)?, &plugin)
-}
-
-#[tauri::command]
-pub fn resolve_plugin_playback_plan(
-    provider_id: String,
-    preferred_quality: String,
-    _quality_fallback: String,
-    plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> ApiResponse<PluginPlaybackPlan> {
-    ApiResponse::from_result(resolve_plugin_playback_plan_inner(
-        provider_id,
-        preferred_quality,
-        plugins,
-    ))
-}
-
-fn resolve_plugin_playback_plan_inner(
-    provider_id: String,
-    preferred_quality: String,
-    plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> Result<PluginPlaybackPlan, String> {
-    let plugin = plugins
-        .into_iter()
-        .find(|plugin| plugin.id == provider_id)
-        .ok_or_else(|| "Plugin for selected track is not installed.".to_string())?;
-
-    if !plugin.enabled {
-        return Err("Plugin for selected track is not enabled.".to_string());
-    }
-
-    if !plugin
-        .capabilities
-        .iter()
-        .any(|capability| capability == "play")
-    {
-        return Err("Plugin for selected track does not support playback.".to_string());
-    }
-
-    Ok(PluginPlaybackPlan {
-        plugin_id: plugin.id,
-        plugin_name: plugin.name,
-        qualities: vec![preferred_quality],
-    })
 }
 
 #[tauri::command]
@@ -1025,22 +975,6 @@ pub async fn resolve_plugin_lyrics_metadata(
         )?;
         crate::player::write_cached_plugin_lyrics_metadata(&app, &provider_id, &track_id, &lyrics);
         Ok(lyrics)
-    })
-    .await
-    .map_err(|err| err.to_string())?;
-    Ok(ApiResponse::from_result(result))
-}
-
-#[tauri::command]
-pub async fn resolve_plugin_cover_metadata(
-    app: AppHandle,
-    provider_id: String,
-    track: serde_json::Value,
-    plugins: Vec<PluginPlaybackPlanPlugin>,
-) -> Result<ApiResponse<String>, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        resolve_plugin_cover_metadata_backend(&worker, provider_id, track, plugins)
     })
     .await
     .map_err(|err| err.to_string())?;

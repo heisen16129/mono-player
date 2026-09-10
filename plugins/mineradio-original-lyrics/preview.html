@@ -49,6 +49,7 @@
     });
     const queueTracks = Array.from({ length: 12 }, (_, index) => ({
       id: `preview-${index}`,
+      path: `preview-${index}`,
       title: ['逆战', '白素贞', '星河漫游'][index % 3] + (index > 2 ? ` ${index + 1}` : ''),
       artist: ['张杰', '裘杰', 'Mono Session'][index % 3],
       album: 'Mineradio 原版预览',
@@ -59,19 +60,31 @@
       activeTrack: queueTracks[0],
       queueTracks,
       lines,
-      currentTime: 16,
-      duration: queueTracks[0].duration,
-      isPlaying: true,
-      isFavorite: false,
-      volume: 72,
-      playbackRate: 1,
-      playbackMode: 'fixed',
+      background: { source: 'cover', opacity: .72, windowOpacity: 1, blur: 24, positionX: 50, positionY: 50, scale: 1 },
       config: {},
+      playback: { currentTime: 16, isPlaying: true, isFavorite: false, volume: 72, isMuted: false, playbackRate: 1, playbackMode: 'fixed', playbackModeLabel: '固定播放' },
+      lyricsUi: { activeLyricIndex: 2, lyricTimeOffset: 0, fontSize: 17, lyricColor: null, useThemeLyricColor: true, isLoading: false, loadingText: '正在载入歌词…', emptyMessage: '暂无歌词', locale: 'zh-CN' },
     };
-    const update = () => renderer.update(state);
+    const trackKey = () => `${state.activeTrack.id}:${state.activeTrack.path}`;
+    const updatePlayback = () => {
+      state.lyricsUi.activeLyricIndex = state.lines.findLastIndex((line) => line.time <= state.playback.currentTime);
+      renderer.update({ type: 'playback', playback: state.playback });
+      renderer.update({ type: 'lyrics-ui', lyricsUi: state.lyricsUi });
+    };
+    const updateTrack = () => {
+      renderer.update({ type: 'track', trackKey: trackKey(), activeTrack: state.activeTrack });
+      renderer.update({ type: 'lyrics', trackKey: trackKey(), lines: state.lines });
+    };
+    const sendSnapshot = () => {
+      updateTrack();
+      renderer.update({ type: 'queue', queueTracks: state.queueTracks });
+      renderer.update({ type: 'background', background: state.background });
+      renderer.update({ type: 'config', config: state.config });
+      updatePlayback();
+    };
     let audioFrameSequence = 0;
     const previewAudioFrame = () => {
-      if (!state.isPlaying) return;
+      if (!state.playback.isPlaying) return;
       const sampleRate = 44100;
       const startedAt = performance.now() / 1000;
       const samples = Float32Array.from({ length: 2048 }, (_, index) => {
@@ -88,31 +101,36 @@
         samples,
       });
     };
-    await renderer.mount(document.querySelector('#root'), state, {
+    await renderer.mount(document.querySelector('#root'), {
       post(action, payload = {}) {
         console.log('[预览宿主]', action, payload);
-        if (action === 'togglePlayback') state.isPlaying = !state.isPlaying;
+        if (action === 'togglePlayback') state.playback.isPlaying = !state.playback.isPlaying;
         if (action === 'playPrevious' || action === 'playNext') {
           const current = state.queueTracks.findIndex((track) => track.id === state.activeTrack.id);
           const delta = action === 'playNext' ? 1 : -1;
           state.activeTrack = state.queueTracks[(current + delta + state.queueTracks.length) % state.queueTracks.length];
-          state.duration = state.activeTrack.duration;
-          state.currentTime = 0;
+          state.playback.currentTime = 0;
+          updateTrack();
         }
-        if (action === 'toggleFavorite') state.isFavorite = !state.isFavorite;
-        if (action === 'seekTime') state.currentTime = Number(payload.time) || 0;
-        if (action === 'setVolume') state.volume = Number(payload.value) || 0;
+        if (action === 'toggleFavorite') state.playback.isFavorite = !state.playback.isFavorite;
+        if (action === 'seekTime') state.playback.currentTime = Number(payload.time) || 0;
+        if (action === 'setVolume') state.playback.volume = Number(payload.value) || 0;
+        if (action === 'togglePlaybackMode') {
+          state.playback.playbackMode = state.playback.playbackMode === 'fixed' ? 'shuffle' : state.playback.playbackMode === 'shuffle' ? 'repeat' : 'fixed';
+          state.playback.playbackModeLabel = state.playback.playbackMode === 'shuffle' ? '随机播放' : state.playback.playbackMode === 'repeat' ? '循环播放' : '固定播放';
+        }
         if (action === 'playQueueTrack' && state.queueTracks[payload.index]) {
           state.activeTrack = state.queueTracks[payload.index];
-          state.duration = state.activeTrack.duration;
-          state.currentTime = 0;
+          state.playback.currentTime = 0;
+          updateTrack();
         }
-        update();
+        updatePlayback();
       },
     });
+    sendSnapshot();
     setInterval(() => {
-      if (state.isPlaying) state.currentTime = (state.currentTime + 0.1) % state.duration;
-      update();
+      if (state.playback.isPlaying) state.playback.currentTime = (state.playback.currentTime + 0.1) % state.activeTrack.duration;
+      updatePlayback();
     }, 100);
     setInterval(previewAudioFrame, 46);
   </script>

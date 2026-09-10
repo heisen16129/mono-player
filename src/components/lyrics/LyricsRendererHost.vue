@@ -41,6 +41,7 @@ defineExpose({ lyricsAnchorOffset });
     <component
       :is="plugin.component"
       v-if="!hasError"
+      :key="plugin.id"
       class="lyrics-renderer-layer"
       ref="rendererRef"
       :context="context"

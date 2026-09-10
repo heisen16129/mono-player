@@ -5,6 +5,7 @@ const failedArtworkUrls = new Set<string>();
 
 export function useLyricsCover(options: {
   activeArtwork: ComputedRef<string | null | undefined>;
+  coverVersion: ComputedRef<number | null | undefined>;
 }) {
   const coverUrl = ref('');
   const displayCoverUrl = computed(() => coverUrl.value);
@@ -15,11 +16,11 @@ export function useLyricsCover(options: {
   }
 
   function setArtworkCover(artwork: string) {
-    coverUrl.value = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
+    coverUrl.value = usableArtworkDisplaySrc(artwork, failedArtworkUrls, options.coverVersion.value);
   }
 
   function prepareTrackCover(artwork: string | null | undefined = options.activeArtwork.value) {
-    coverUrl.value = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
+    coverUrl.value = usableArtworkDisplaySrc(artwork, failedArtworkUrls, options.coverVersion.value);
   }
 
   function clearLyricsCoverCache() {

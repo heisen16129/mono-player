@@ -16,7 +16,6 @@ pub(crate) struct McpServiceSnapshot {
     pid: Option<u32>,
     started_at_ms: Option<u128>,
     error: Option<String>,
-    restart_policy: Option<&'static str>,
     endpoint: &'static str,
     health_endpoint: &'static str,
 }
@@ -56,7 +55,6 @@ fn snapshot_from_status(status: WorkerRuntimeStatus) -> McpServiceSnapshot {
         pid: status.pid,
         started_at_ms: status.started_at_ms,
         error: status.error,
-        restart_policy: status.restart_policy,
         endpoint: MCP_ENDPOINT,
         health_endpoint: MCP_HEALTH_ENDPOINT,
     }

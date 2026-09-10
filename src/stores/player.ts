@@ -10,6 +10,7 @@ import {
   FAVORITES_KEY,
   fallbackSettings,
   PLAYBACK_SESSION_KEY,
+  RECENT_PLAYED_TRACK_IDS_KEY,
   SETTINGS_KEY,
 } from './player/constants';
 import { createPlayerFavoriteActions } from './player/favoriteActions';
@@ -23,6 +24,7 @@ import {
 import { createPlayerPlaylistActions } from './player/playlistActions';
 import { createPlayerPlaybackStateActions } from './player/playbackStateActions';
 import { createPlaybackSessionSnapshot, resolvePlaybackSessionRestore } from './player/playbackSession';
+import { normalizeRecentPlayedTrackIds } from './player/recentPlayed';
 import { createPlayerSettingsActions } from './player/settingsActions';
 import { createPlayerThemeController } from './player/theme';
 
@@ -33,6 +35,7 @@ export const usePlayerStore = defineStore('player', () => {
   const currentTrack = ref<Track | null>(null);
   const favoriteTrackIds = ref<number[]>([]);
   const favoriteTrackSnapshots = ref<Track[]>([]);
+  const recentPlayedTrackIds = ref<number[]>([]);
   const customThemes = ref<CustomTheme[]>([]);
   const query = ref('');
   const loading = ref(false);
@@ -63,7 +66,15 @@ export const usePlayerStore = defineStore('player', () => {
     recordRecentlyPlayed,
     setCurrentTrack,
     togglePlaybackMode,
-  } = createPlayerPlaybackStateActions({ currentTrack, persistSettings, playbackMode, query, settings, tracks });
+  } = createPlayerPlaybackStateActions({
+    currentTrack,
+    persistRecentlyPlayed,
+    playbackMode,
+    query,
+    recentPlayedTrackIds,
+    settings,
+    tracks,
+  });
 
   async function hydratePersistedState() {
     const [
@@ -71,15 +82,34 @@ export const usePlayerStore = defineStore('player', () => {
       storedFavoriteTrackIds,
       storedCustomThemes,
       storedPlaybackSession,
+      storedRecentPlayedTrackIds,
     ] = await Promise.all([
       readPersistentValue<unknown>(SETTINGS_KEY),
       readPersistentValue<unknown>(FAVORITES_KEY),
       readPersistentValue<unknown>(CUSTOM_THEMES_KEY),
       readPersistentValue<unknown>(PLAYBACK_SESSION_KEY),
+      readPersistentValue<unknown>(RECENT_PLAYED_TRACK_IDS_KEY),
     ]);
+
+    const legacyRecentPlayedTrackIds = storedSettings && typeof storedSettings === 'object'
+      ? (storedSettings as { recentPlayedTrackIds?: unknown }).recentPlayedTrackIds
+      : undefined;
+    const hasLegacyRecentPlayedTrackIds = storedSettings !== null
+      && typeof storedSettings === 'object'
+      && Object.prototype.hasOwnProperty.call(storedSettings, 'recentPlayedTrackIds');
 
     if (storedSettings) {
       settings.value = normalizeSettings(storedSettings);
+    }
+
+    recentPlayedTrackIds.value = normalizeRecentPlayedTrackIds(
+      storedRecentPlayedTrackIds ?? legacyRecentPlayedTrackIds,
+    );
+    if (storedRecentPlayedTrackIds === null && hasLegacyRecentPlayedTrackIds) {
+      await writePersistentValue(RECENT_PLAYED_TRACK_IDS_KEY, recentPlayedTrackIds.value);
+    }
+    if (hasLegacyRecentPlayedTrackIds) {
+      await writePersistentValue(SETTINGS_KEY, settings.value);
     }
 
     if (storedFavoriteTrackIds) {
@@ -104,6 +134,10 @@ export const usePlayerStore = defineStore('player', () => {
       ids: favoriteTrackIds.value,
       tracks: favoriteTrackSnapshots.value,
     });
+  }
+
+  function persistRecentlyPlayed() {
+    void writePersistentValue(RECENT_PLAYED_TRACK_IDS_KEY, recentPlayedTrackIds.value);
   }
 
   function persistPlaybackSession(currentTime = 0, track?: Track | null, queueOverride?: Track[]) {
@@ -272,6 +306,7 @@ export const usePlayerStore = defineStore('player', () => {
     error,
     favoriteTrackIds,
     favoriteTracks,
+    recentPlayedTrackIds,
     filteredTracks,
     loading,
     playbackMode,

@@ -3,6 +3,7 @@ use crate::{
     models::CoverImage,
     player::{mono_cache_dir, PlayerState},
 };
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use lofty::file::TaggedFileExt;
@@ -18,10 +19,13 @@ use std::time::UNIX_EPOCH;
 use tauri::{State, Url};
 
 static FAILED_EMBEDDED_COVER_KEYS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+const COVER_CACHE_VERSION: u8 = 2;
+const MAX_EDITED_COVER_SIZE: u32 = 1600;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CropCoverImageRequest {
+    image_data_url: Option<String>,
     image_path: String,
     x: u32,
     y: u32,
@@ -34,9 +38,9 @@ pub(crate) struct CropCoverImageResult {
     path: String,
 }
 
-#[tauri::command]
-pub(crate) fn read_cover(path: String) -> ApiResponse<Option<CoverImage>> {
-    ApiResponse::from_result(read_cover_backend(path))
+pub(crate) struct CachedCoverFiles {
+    pub(crate) original_url: String,
+    pub(crate) thumbnail_url: String,
 }
 
 #[tauri::command]
@@ -75,33 +79,72 @@ pub(crate) fn read_cover_backend(path: String) -> Result<Option<CoverImage>, Str
 }
 
 #[tauri::command]
+pub(crate) fn read_track_cover_original(
+    state: State<'_, PlayerState>,
+    path: String,
+) -> ApiResponse<Option<String>> {
+    ApiResponse::from_result((|| {
+        let audio_path = PathBuf::from(path.trim());
+        if !audio_path.is_file() {
+            return Ok(None);
+        }
+        let cache_root = state.cache_dir()?;
+        if cached_cover_files_in(&cache_root, &audio_path)?.is_none() {
+            return Ok(None);
+        }
+        Ok(find_cached_cover_original_path(&cache_root, &audio_path)
+            .map(|cover_path| cover_path.to_string_lossy().to_string()))
+    })())
+}
+
+#[tauri::command]
 pub(crate) fn crop_cover_image(
     state: State<'_, PlayerState>,
     request: CropCoverImageRequest,
 ) -> ApiResponse<CropCoverImageResult> {
     ApiResponse::from_result((|| {
-        let image_path = PathBuf::from(request.image_path.trim());
-        let image = image::open(&image_path).map_err(|err| err.to_string())?;
-        let image_width = image.width();
-        let image_height = image.height();
-        if image_width == 0 || image_height == 0 {
-            return Err("Invalid cover image.".to_string());
-        }
-
-        let max_size = image_width.min(image_height);
-        let crop_size = request.size.clamp(1, max_size);
-        let x = request.x.min(image_width.saturating_sub(crop_size));
-        let y = request.y.min(image_height.saturating_sub(crop_size));
-        let cropped = image.crop_imm(x, y, crop_size, crop_size).to_rgb8();
-
         let output_dir = mono_cache_dir(&state.cache_dir()?).join("cover-edits");
         fs::create_dir_all(&output_dir).map_err(|err| err.to_string())?;
         let output_path = output_dir.join(format!("{}.jpg", uuid::Uuid::new_v4()));
-        let file = fs::File::create(&output_path).map_err(|err| err.to_string())?;
-        let mut encoder = JpegEncoder::new_with_quality(file, 92);
-        encoder
-            .encode_image(&cropped)
-            .map_err(|err| err.to_string())?;
+        if let Some(image_data_url) = request.image_data_url.as_deref() {
+            let encoded = image_data_url
+                .strip_prefix("data:image/jpeg;base64,")
+                .ok_or_else(|| "Invalid edited cover image.".to_string())?;
+            if encoded.len() > 16 * 1024 * 1024 {
+                return Err("Edited cover image is too large.".to_string());
+            }
+            let data = STANDARD.decode(encoded).map_err(|err| err.to_string())?;
+            fs::write(&output_path, data).map_err(|err| err.to_string())?;
+        } else {
+            let image_path = PathBuf::from(request.image_path.trim());
+            let image = image::open(&image_path).map_err(|err| err.to_string())?;
+            let image_width = image.width();
+            let image_height = image.height();
+            if image_width == 0 || image_height == 0 {
+                return Err("Invalid cover image.".to_string());
+            }
+
+            let max_size = image_width.min(image_height);
+            let crop_size = request.size.clamp(1, max_size);
+            let x = request.x.min(image_width.saturating_sub(crop_size));
+            let y = request.y.min(image_height.saturating_sub(crop_size));
+            let cropped = image.crop_imm(x, y, crop_size, crop_size).to_rgb8();
+            let output = if crop_size > MAX_EDITED_COVER_SIZE {
+                image::imageops::resize(
+                    &cropped,
+                    MAX_EDITED_COVER_SIZE,
+                    MAX_EDITED_COVER_SIZE,
+                    FilterType::Triangle,
+                )
+            } else {
+                cropped
+            };
+            let file = fs::File::create(&output_path).map_err(|err| err.to_string())?;
+            let mut encoder = JpegEncoder::new_with_quality(file, 92);
+            encoder
+                .encode_image(&output)
+                .map_err(|err| err.to_string())?;
+        }
 
         Ok(CropCoverImageResult {
             path: output_path.to_string_lossy().to_string(),
@@ -109,113 +152,124 @@ pub(crate) fn crop_cover_image(
     })())
 }
 
-#[tauri::command]
-pub(crate) async fn read_cover_thumbnail(
-    state: State<'_, PlayerState>,
-    path: String,
-) -> Result<ApiResponse<Option<CoverImage>>, String> {
-    Ok(ApiResponse::from_result(
-        (|| async {
-            let cache_root = state.cache_dir()?;
-            tauri::async_runtime::spawn_blocking(move || {
-                read_cover_thumbnail_blocking(&cache_root, &path)
-            })
-            .await
-            .map_err(|err| err.to_string())?
-        })()
-        .await,
-    ))
-}
-
-fn read_cover_thumbnail_blocking(
+pub(crate) fn cached_cover_files_in(
     cache_root: &Path,
-    path: &str,
-) -> Result<Option<CoverImage>, String> {
-    let audio_path = PathBuf::from(path);
-    let cache_path = cached_cover_thumbnail_path(cache_root, &audio_path)?;
-
-    if cache_path.is_file() {
-        let data = fs::read(cache_path).map_err(|err| err.to_string())?;
-        return Ok(Some(CoverImage {
-            mime_type: "image/jpeg".to_string(),
-            data,
-        }));
+    audio_path: &Path,
+) -> Result<Option<CachedCoverFiles>, String> {
+    let thumbnail_path = cover_thumbnail_cache_path(cache_root, audio_path)?;
+    let original_path = find_cached_cover_original_path(cache_root, audio_path);
+    if thumbnail_path.is_file() {
+        if let Some(original_path) = original_path {
+            return cached_cover_files(&original_path, &thumbnail_path);
+        }
     }
-
-    let Some(cover) = read_thumbnail_cover_uncached(&audio_path)? else {
+    let Some(cover) = read_cover_uncached(audio_path)? else {
         return Ok(None);
     };
-    let thumbnail = create_cover_thumbnail(&cover.data)?;
-    fs::write(&cache_path, &thumbnail).map_err(|err| err.to_string())?;
+    write_cached_cover_files(cache_root, audio_path, &cover, true)
+}
 
-    Ok(Some(CoverImage {
-        mime_type: "image/jpeg".to_string(),
-        data: thumbnail,
+pub(crate) fn refresh_cached_cover_files_in(
+    cache_root: &Path,
+    audio_path: &Path,
+) -> Result<Option<CachedCoverFiles>, String> {
+    let Some(cover) = read_cover_uncached(audio_path)? else {
+        return Ok(None);
+    };
+    write_cached_cover_files(cache_root, audio_path, &cover, true)
+}
+
+pub(crate) fn refresh_cached_cover_files_from_data_in(
+    cache_root: &Path,
+    audio_path: &Path,
+    cover_data: &[u8],
+) -> Result<Option<CachedCoverFiles>, String> {
+    let mime_type = cover_mime_type_from_data(cover_data)?;
+    let cover = CoverImage {
+        mime_type: mime_type.to_string(),
+        data: cover_data.to_vec(),
+    };
+    write_cached_cover_files(cache_root, audio_path, &cover, true)
+}
+
+fn write_cached_cover_files(
+    cache_root: &Path,
+    audio_path: &Path,
+    cover: &CoverImage,
+    overwrite: bool,
+) -> Result<Option<CachedCoverFiles>, String> {
+    let original_path = cover_original_cache_path(cache_root, audio_path, &cover.mime_type)?;
+    let thumbnail_path = cover_thumbnail_cache_path(cache_root, audio_path)?;
+    if overwrite {
+        remove_other_cached_cover_originals(cache_root, audio_path, &original_path);
+    }
+    if overwrite || !original_path.is_file() {
+        fs::write(&original_path, &cover.data).map_err(|err| err.to_string())?;
+    }
+    if overwrite || !thumbnail_path.is_file() {
+        let thumbnail = create_cover_thumbnail(&cover.data)?;
+        fs::write(&thumbnail_path, thumbnail).map_err(|err| err.to_string())?;
+    }
+    cached_cover_files(&original_path, &thumbnail_path)
+}
+
+fn cover_thumbnail_cache_path(cache_root: &Path, audio_path: &Path) -> Result<PathBuf, String> {
+    let cache_dir = mono_cache_dir(cache_root).join("cover-thumbnails");
+    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+    Ok(cache_dir.join(format!("{}.jpg", cover_cache_key(audio_path))))
+}
+
+fn cover_original_cache_path(
+    cache_root: &Path,
+    audio_path: &Path,
+    mime_type: &str,
+) -> Result<PathBuf, String> {
+    let cache_dir = mono_cache_dir(cache_root).join("cover-originals");
+    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+    Ok(cache_dir.join(format!(
+        "{}.{}",
+        cover_cache_key(audio_path),
+        cover_extension(mime_type)
+    )))
+}
+
+fn find_cached_cover_original_path(cache_root: &Path, audio_path: &Path) -> Option<PathBuf> {
+    let cache_dir = mono_cache_dir(cache_root).join("cover-originals");
+    let cache_key = cover_cache_key(audio_path);
+    ["jpg", "png", "webp"]
+        .into_iter()
+        .map(|extension| cache_dir.join(format!("{cache_key}.{extension}")))
+        .find(|path| path.is_file())
+}
+
+fn remove_other_cached_cover_originals(cache_root: &Path, audio_path: &Path, retained_path: &Path) {
+    let cache_dir = mono_cache_dir(cache_root).join("cover-originals");
+    let cache_key = cover_cache_key(audio_path);
+    for extension in ["jpg", "png", "webp"] {
+        let path = cache_dir.join(format!("{cache_key}.{extension}"));
+        if path != retained_path && path.is_file() {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+fn cached_cover_files(
+    original_path: &Path,
+    thumbnail_path: &Path,
+) -> Result<Option<CachedCoverFiles>, String> {
+    let original_url = cover_asset_url(original_path);
+    let thumbnail_url = cover_asset_url(thumbnail_path);
+    Ok(Some(CachedCoverFiles {
+        original_url,
+        thumbnail_url,
     }))
 }
 
-#[tauri::command]
-pub(crate) fn clear_cover_thumbnail_cache(
-    state: State<'_, PlayerState>,
-    path: String,
-) -> ApiResponse<()> {
-    ApiResponse::from_empty_result((|| {
-        let audio_path = PathBuf::from(path);
-        let cache_path = cached_cover_thumbnail_path(&state.cache_dir()?, &audio_path)?;
-        if cache_path.is_file() {
-            fs::remove_file(cache_path).map_err(|err| err.to_string())?;
-        }
-
-        Ok(())
-    })())
-}
-
-pub(crate) fn cached_cover_original_file_url_in(
+pub(crate) fn write_sidecar_cover_files(
     cache_root: &Path,
-    audio_path: &Path,
-) -> Result<Option<String>, String> {
-    let Some(cover) = read_cover_uncached(audio_path)? else {
-        return Ok(None);
-    };
-
-    let cache_dir = mono_cache_dir(cache_root).join("cover-originals");
-    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
-    let cache_path = cache_dir.join(format!(
-        "{}.{}",
-        cover_cache_key(audio_path),
-        cover_extension(&cover.mime_type)
-    ));
-    if !cache_path.is_file() {
-        fs::write(&cache_path, &cover.data).map_err(|err| err.to_string())?;
-    }
-
-    Ok(cover_file_url(&cache_path))
-}
-
-pub(crate) fn refresh_cached_cover_original_file_url_in(
-    cache_root: &Path,
-    audio_path: &Path,
-) -> Result<Option<String>, String> {
-    let Some(cover) = read_cover_uncached(audio_path)? else {
-        return Ok(None);
-    };
-
-    let cache_dir = mono_cache_dir(cache_root).join("cover-originals");
-    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
-    let cache_path = cache_dir.join(format!(
-        "{}.{}",
-        cover_cache_key(audio_path),
-        cover_extension(&cover.mime_type)
-    ));
-    fs::write(&cache_path, &cover.data).map_err(|err| err.to_string())?;
-
-    Ok(cover_file_url(&cache_path))
-}
-
-pub(crate) fn write_sidecar_cover_file_url(
     audio_path: &Path,
     cover_path: &Path,
-) -> Result<Option<String>, String> {
+) -> Result<Option<CachedCoverFiles>, String> {
     if !audio_path.is_file() || !cover_path.is_file() {
         return Ok(None);
     }
@@ -229,27 +283,40 @@ pub(crate) fn write_sidecar_cover_file_url(
     let data = fs::read(cover_path).map_err(|err| err.to_string())?;
     let mime_type = cover_mime_type(cover_path).unwrap_or("image/jpeg");
     let sidecar_path = parent.join(format!("{stem}.{}", cover_extension(mime_type)));
-    fs::write(&sidecar_path, data).map_err(|err| err.to_string())?;
-    Ok(cover_file_url(&sidecar_path))
+    fs::write(&sidecar_path, &data).map_err(|err| err.to_string())?;
+    refresh_cached_cover_files_from_data_in(cache_root, audio_path, &data)
 }
 
-fn cached_cover_thumbnail_path(cache_root: &Path, audio_path: &Path) -> Result<PathBuf, String> {
-    let cache_dir = mono_cache_dir(cache_root).join("cover-thumbnails");
-    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
-    Ok(cache_dir.join(format!("{}.jpg", cover_cache_key(audio_path))))
+fn cover_asset_url(path: &Path) -> String {
+    let path = path.to_string_lossy().replace('\\', "/");
+    asset_url_from_path(&path)
 }
 
-#[cfg(target_os = "windows")]
-fn cover_file_url(path: &Path) -> Option<String> {
-    Some(format!(
-        "file:///{}",
-        path.to_string_lossy().replace('\\', "/")
-    ))
+#[cfg(any(target_os = "windows", target_os = "android"))]
+fn asset_url_from_path(path: &str) -> String {
+    format!("http://asset.localhost/{}", encode_uri_component(path))
 }
 
-#[cfg(not(target_os = "windows"))]
-fn cover_file_url(path: &Path) -> Option<String> {
-    Url::from_file_path(path).ok().map(|url| url.to_string())
+#[cfg(not(any(target_os = "windows", target_os = "android")))]
+fn asset_url_from_path(path: &str) -> String {
+    format!("asset://localhost/{}", encode_uri_component(path))
+}
+
+fn encode_uri_component(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')'
+            )
+        {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
 }
 
 fn read_cover_uncached(audio_path: &Path) -> Result<Option<CoverImage>, String> {
@@ -258,14 +325,6 @@ fn read_cover_uncached(audio_path: &Path) -> Result<Option<CoverImage>, String> 
     }
 
     read_local_cover_image(audio_path)
-}
-
-fn read_thumbnail_cover_uncached(audio_path: &Path) -> Result<Option<CoverImage>, String> {
-    if let Some(cover) = read_local_cover_image(audio_path)? {
-        return Ok(Some(cover));
-    }
-
-    read_embedded_cover_image(audio_path)
 }
 
 fn read_embedded_cover_image(audio_path: &Path) -> Result<Option<CoverImage>, String> {
@@ -326,8 +385,18 @@ fn create_cover_thumbnail(data: &[u8]) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+fn cover_mime_type_from_data(data: &[u8]) -> Result<&'static str, String> {
+    match image::guess_format(data).map_err(|err| err.to_string())? {
+        image::ImageFormat::Jpeg => Ok("image/jpeg"),
+        image::ImageFormat::Png => Ok("image/png"),
+        image::ImageFormat::WebP => Ok("image/webp"),
+        _ => Err("Unsupported artwork image format.".to_string()),
+    }
+}
+
 fn cover_cache_key(audio_path: &Path) -> String {
     let mut hasher = DefaultHasher::new();
+    COVER_CACHE_VERSION.hash(&mut hasher);
     audio_path.to_string_lossy().hash(&mut hasher);
     if let Ok(metadata) = audio_path.metadata() {
         metadata.len().hash(&mut hasher);

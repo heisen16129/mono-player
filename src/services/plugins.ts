@@ -1,6 +1,5 @@
 import type {
   PluginConfig,
-  PluginConfigMap,
   PluginCatalogItem,
   PluginManifest,
   PluginSubscription,
@@ -12,7 +11,6 @@ import { readPersistentValue, writePersistentValue } from './persistentStore';
 
 const INSTALLED_PLUGINS_KEY = 'plugins.installed';
 const PLUGIN_SUBSCRIPTIONS_KEY = 'plugins.subscriptions';
-const PLUGIN_CONFIGS_KEY = 'plugins.configs';
 const DELETED_PLUGINS_KEY = 'plugins.deleted';
 const PLUGIN_CATALOG_CACHE_KEY = 'plugins.catalog.cache';
 let pluginMutationQueue: Promise<void> = Promise.resolve();
@@ -65,20 +63,29 @@ export async function addPluginSubscription(url: string): Promise<PluginSubscrip
 }
 
 export async function listInstalledPlugins(): Promise<PluginManifest[]> {
+  const manifests = await listInstalledPluginManifests();
+  return Promise.all(manifests.map(withPluginConfig));
+}
+
+export async function listInstalledPluginManifests(): Promise<PluginManifest[]> {
   const storedPlugins = (await readPersistentValue<PluginManifest[]>(INSTALLED_PLUGINS_KEY)) ?? [];
-  const normalizedPlugins = await normalizeManifests(storedPlugins);
+  const normalizedPlugins = (await normalizeManifests(storedPlugins)).map(withoutPluginConfig);
   if (JSON.stringify(storedPlugins) !== JSON.stringify(normalizedPlugins)) {
     await saveInstalledPlugins(normalizedPlugins);
   }
-  const configs = await listPluginConfigs();
-  return normalizedPlugins.map((plugin) => ({
-    ...plugin,
-    config: { ...defaultPluginConfig(plugin), ...(configs[plugin.id] ?? {}) },
-  }));
+  return normalizedPlugins;
 }
 
 export async function saveInstalledPlugins(plugins: PluginManifest[]): Promise<void> {
-  await writePersistentValue(INSTALLED_PLUGINS_KEY, await normalizeManifests(plugins));
+  await writePersistentValue(
+    INSTALLED_PLUGINS_KEY,
+    (await normalizeManifests(plugins.map(withoutPluginConfig))).map(withoutPluginConfig),
+  );
+}
+
+function withoutPluginConfig(plugin: PluginManifest): PluginManifest {
+  const { config: _config, ...manifest } = plugin;
+  return manifest;
 }
 
 function normalizePluginConfig(value: unknown): PluginConfig {
@@ -100,15 +107,6 @@ function normalizePluginConfigValue(value: unknown): PluginConfig[string] {
   return undefined;
 }
 
-function normalizePluginConfigMap(value: unknown): PluginConfigMap {
-  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
-  return Object.fromEntries(
-    Object.entries(source)
-      .map(([pluginId, config]) => [pluginId, normalizePluginConfig(config)] as const)
-      .filter(([pluginId, config]) => pluginId.trim() && Object.keys(config).length > 0),
-  );
-}
-
 function defaultPluginConfig(plugin: PluginManifest): PluginConfig {
   return Object.fromEntries(
     (plugin.configSchema?.fields ?? [])
@@ -118,23 +116,36 @@ function defaultPluginConfig(plugin: PluginManifest): PluginConfig {
   );
 }
 
-export async function listPluginConfigs(): Promise<PluginConfigMap> {
-  return normalizePluginConfigMap(await readPersistentValue<PluginConfigMap>(PLUGIN_CONFIGS_KEY));
+export async function getPluginConfig(pluginId: string): Promise<PluginConfig> {
+  const normalizedPluginId = pluginId.trim();
+  if (!normalizedPluginId || !isTauriRuntime()) return {};
+  return normalizePluginConfig(await invokeApi<unknown>('plugin_config_get', { pluginId: normalizedPluginId }));
 }
 
-export async function savePluginConfig(pluginId: string, config: PluginConfig): Promise<PluginConfigMap> {
+export async function savePluginConfig(pluginId: string, config: PluginConfig): Promise<PluginConfig> {
   const normalizedPluginId = pluginId.trim();
-  if (!normalizedPluginId) return listPluginConfigs();
-  const configs = await listPluginConfigs();
+  if (!normalizedPluginId) return {};
   const normalizedConfig = normalizePluginConfig(config);
-  const nextConfigs = { ...configs };
-  if (Object.keys(normalizedConfig).length > 0) {
-    nextConfigs[normalizedPluginId] = normalizedConfig;
-  } else {
-    delete nextConfigs[normalizedPluginId];
-  }
-  await writePersistentValue(PLUGIN_CONFIGS_KEY, nextConfigs);
-  return nextConfigs;
+  if (!isTauriRuntime()) return normalizedConfig;
+  return runPluginMutation(async () => {
+    await invokeApi<void>('plugin_config_set', { pluginId: normalizedPluginId, config: normalizedConfig });
+    return normalizedConfig;
+  });
+}
+
+export async function getInstalledPlugin(pluginId: string): Promise<PluginManifest | null> {
+  const normalizedPluginId = pluginId.trim();
+  if (!normalizedPluginId) return null;
+  const manifest = (await listInstalledPluginManifests()).find((plugin) => plugin.id === normalizedPluginId);
+  return manifest ? withPluginConfig(manifest) : null;
+}
+
+async function withPluginConfig(plugin: PluginManifest): Promise<PluginManifest> {
+  const config = await getPluginConfig(plugin.id);
+  return {
+    ...plugin,
+    config: { ...defaultPluginConfig(plugin), ...config },
+  };
 }
 
 export async function listDeletedPluginIds(): Promise<string[]> {

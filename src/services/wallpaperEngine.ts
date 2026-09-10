@@ -35,10 +35,6 @@ export function startWallpaperEngineScene(projectId: string) {
   return invokeApi<WallpaperEngineSceneStatus>('wallpaper_engine_start_scene', { projectId });
 }
 
-export function updateWallpaperEngineSceneSurface() {
-  return invokeApi<void>('wallpaper_engine_update_scene_surface');
-}
-
 export function getWallpaperEngineSceneStatus() {
   return invokeApi<WallpaperEngineSceneStatus>('wallpaper_engine_scene_status');
 }

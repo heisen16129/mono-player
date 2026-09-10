@@ -33,6 +33,10 @@ export function useLyricsViewVisibility() {
     isLyricsTransitioning.value = false;
   }
 
+  function preloadLyricsView() {
+    hasOpenedLyrics.value = true;
+  }
+
   return {
     closeLyricsView,
     finishLyricsEnter,
@@ -40,6 +44,7 @@ export function useLyricsViewVisibility() {
     isLibraryVisible,
     isLyricsOpen,
     isLyricsTransitioning,
+    preloadLyricsView,
     showLibraryAfterLyricsLeave,
     toggleLyricsView,
   };

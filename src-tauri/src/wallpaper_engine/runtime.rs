@@ -104,8 +104,7 @@ pub(super) fn ensure_engine_ready(
 ) -> Result<PathBuf, String> {
     if running_engine(executable)?.is_none() {
         return Err(
-            "请先启动 Wallpaper Engine 后重试。为避免修改桌面背景，Mono 不会代为启动它"
-                .into(),
+            "请先启动 Wallpaper Engine 后重试。为避免修改桌面背景，Mono 不会代为启动它".into(),
         );
     }
     let deadline = Instant::now() + Duration::from_secs(20);

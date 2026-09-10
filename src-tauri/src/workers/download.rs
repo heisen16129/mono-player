@@ -3,7 +3,7 @@ use crate::{
         download_online_track_blocking_with_progress, DownloadQueueEvent,
         ResolvedDownloadTrackRequest,
     },
-    workers::lifecycle::{RestartPolicy, WorkerChild},
+    workers::lifecycle::WorkerChild,
     workers::manager::{WorkerProcess, WorkerProcessParts},
     workers::protocol::{decode_request, encode_line, methods, WorkerMessage, WorkerRequest},
     workers::DOWNLOAD_WORKER_FLAG,
@@ -38,10 +38,6 @@ impl DownloadWorkerState {
         Ok(state)
     }
 
-    pub(crate) fn restart_policy(&self) -> RestartPolicy {
-        RestartPolicy::RestartBeforeSendOnly
-    }
-
     pub(crate) fn enqueue_download_track(
         &self,
         task_id: String,
@@ -58,24 +54,6 @@ impl DownloadWorkerState {
 
         match self.request(worker_request)? {
             WorkerMessage::Response { ok: true, .. } => Ok(()),
-            WorkerMessage::Response {
-                error: Some(error), ..
-            } => Err(error),
-            message => Err(format!("unexpected download worker response: {message:?}")),
-        }
-    }
-
-    pub(crate) fn health(&self) -> Result<Value, String> {
-        match self.request(WorkerRequest {
-            id: "download-health".to_string(),
-            method: methods::WORKER_HEALTH.to_string(),
-            payload: json!({}),
-        })? {
-            WorkerMessage::Response {
-                ok: true,
-                payload: Some(payload),
-                ..
-            } => Ok(payload),
             WorkerMessage::Response {
                 error: Some(error), ..
             } => Err(error),

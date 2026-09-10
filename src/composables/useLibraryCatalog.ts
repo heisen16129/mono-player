@@ -75,7 +75,7 @@ export function useLibraryCatalog({
 
   const recentPlayedVisibleTracks = computed(() => {
     const trackById = new Map(allVisibleTracks.value.map((track) => [track.id, track]));
-    return player.settings.recentPlayedTrackIds
+    return player.recentPlayedTrackIds
       .map((id) => trackById.get(id))
       .filter((track): track is Track => Boolean(track));
   });

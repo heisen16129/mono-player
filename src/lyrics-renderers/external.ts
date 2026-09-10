@@ -1,5 +1,5 @@
 import { defineComponent, h, type PropType } from 'vue';
-import { listInstalledPlugins } from '../services/plugins';
+import { listInstalledPluginManifests } from '../services/plugins';
 import type { PluginManifest } from '../types/plugin';
 import type { LyricsRendererContext } from '../types/lyricsRenderer';
 import type { PlayerDockController } from '../types/playerDockController';
@@ -42,7 +42,7 @@ export async function loadExternalLyricsRenderers() {
   if (externalRendererLoadRequest) return externalRendererLoadRequest;
   externalRendererLoadRequest = (async () => {
     try {
-      const manifests = await listInstalledPlugins();
+      const manifests = await listInstalledPluginManifests();
       manifests
         .filter((manifest) => manifest.enabled && manifest.runtime === 'module' && manifest.kind === 'lyrics-renderer')
         .filter((manifest) => manifest.capabilities.includes('lyrics-renderer'))

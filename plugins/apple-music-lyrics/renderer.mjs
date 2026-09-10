@@ -4,7 +4,6 @@ const DEFAULT_CONFIG = {
   lineGap: 0.5,
   alignPosition: 45,
   backgroundMode: 'dynamic',
-  backgroundBlur: 32,
   showCover: true,
   enableBlur: true,
   enableScale: true,
@@ -43,14 +42,15 @@ button { color:inherit; }
 .app { position:relative; width:100%; height:100%; min-height:520px; overflow:clip; color-scheme:dark; color:var(--fg); background:transparent; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif; }
 .app.native-wallpaper-scene { background:transparent; }
 .app.native-wallpaper-scene .backdrop { background-image:none!important; opacity:0; }
+.backdrop-group { position:absolute; inset:0; pointer-events:none; opacity:1; transition:opacity .3s ease; }
 .backdrop-color { position:absolute; inset:0; pointer-events:none; background:#09090a; }
 .backdrop,.backdrop::before,.backdrop::after { position:absolute; inset:-10%; content:""; pointer-events:none; }
-.backdrop { background-position:center; background-size:cover; transform:scale(1.12); filter:blur(calc(var(--bg-blur,32px) + var(--shared-bg-blur,0px))) saturate(1.12); opacity:.52; transition:filter .3s ease,opacity .3s ease; }
-.backdrop-video { position:absolute; inset:-10%; width:120%; height:120%; object-fit:cover; pointer-events:none; opacity:0; transform:scale(1.12); filter:blur(calc(var(--bg-blur,32px) + var(--shared-bg-blur,0px))) saturate(1.12); transition:filter .3s ease,opacity .3s ease; }
+.backdrop { background-position:center; background-size:cover; transform:scale(1.12); filter:blur(var(--shared-bg-blur,0px)) saturate(1.12); opacity:.52; transition:filter .3s ease,opacity .3s ease; }
+.backdrop-video { position:absolute; inset:-10%; width:120%; height:120%; object-fit:cover; pointer-events:none; opacity:0; transform:scale(1.12); filter:blur(var(--shared-bg-blur,0px)) saturate(1.12); transition:filter .3s ease,opacity .3s ease; }
 .backdrop::before { background:linear-gradient(105deg,rgba(5,5,7,.58),rgba(8,8,10,.36) 45%,rgba(3,3,5,.68)); }
 .backdrop::after { background:linear-gradient(to bottom,rgba(0,0,0,.08),rgba(0,0,0,.42) 76%,rgba(0,0,0,.64)); }
-.app[data-background="static"] .backdrop { filter:blur(calc(var(--bg-blur,32px) + var(--shared-bg-blur,0px))) saturate(.72); opacity:.34; transform:scale(1.08); }
-.app[data-background="amll"] .backdrop { filter:blur(calc(var(--bg-blur,32px) + var(--shared-bg-blur,0px) + 12px)) saturate(1.45); opacity:.65; animation:drift 16s ease-in-out infinite alternate; }
+.app[data-background="static"] .backdrop { filter:blur(var(--shared-bg-blur,0px)) saturate(.72); opacity:.34; transform:scale(1.08); }
+.app[data-background="amll"] .backdrop { filter:blur(calc(var(--shared-bg-blur,0px) + 12px)) saturate(1.45); opacity:.65; animation:drift 16s ease-in-out infinite alternate; }
 .grain { position:absolute; inset:0; opacity:var(--grain-opacity,.055); pointer-events:none; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E"); }
 @keyframes drift { from { transform:scale(1.13) translate3d(-1.5%,-1%,0); } to { transform:scale(1.2) translate3d(1.5%,1%,0); } }
 .chrome { position:absolute; inset:0; display:flex; flex-direction:column; padding:54px 24px 22px; z-index:1; }
@@ -183,7 +183,7 @@ button { color:inherit; }
 @media (max-height:680px) and (min-width:761px) {
   .chrome { padding-top:10px; padding-bottom:12px; }
   .topbar { height:34px; }
-  .main { align-items:start; }
+  .main { align-items:center; }
   .player { --player-cover-width:min(46vh,300px); transform:none; }
   .cover-wrap { margin-bottom:14px; }
   .seek { margin-top:10px; }
@@ -197,7 +197,36 @@ button { color:inherit; }
 
 let root;
 let api;
-let context = {};
+const createContext = () => ({
+  activeTrack: null,
+  queueTracks: [],
+  lines: [],
+  background: {},
+  config: {},
+  playback: {
+    currentTime: 0,
+    isPlaying: false,
+    isFavorite: false,
+    volume: 0,
+    isMuted: false,
+    playbackRate: 1,
+    playbackMode: 'fixed',
+    playbackModeLabel: '',
+  },
+  lyricsUi: {
+    activeLyricIndex: -1,
+    lyricTimeOffset: 0,
+    fontSize: 17,
+    lyricColor: null,
+    useThemeLyricColor: true,
+    isLoading: false,
+    loadingText: '',
+    emptyMessage: '',
+    locale: 'zh-CN',
+  },
+});
+let context = createContext();
+let activeTrackKey = '';
 let elements = {};
 let playbackRequestSequence = 0;
 let lastLoggedPlaybackState = null;
@@ -234,14 +263,14 @@ const formatTime = (seconds) => {
 
 function requestPlaybackToggle(trigger) {
   const requestId = `apple-music-playback-${Date.now()}-${++playbackRequestSequence}`;
-  const observedPlaying = Boolean(context.isPlaying);
+  const observedPlaying = Boolean(context.playback.isPlaying);
   console.log('[Apple Music 歌词][播放控制] 发起切换请求', {
     请求编号: requestId,
     触发方式: trigger,
     插件看到的播放状态: observedPlaying,
     预期播放状态: !observedPlaying,
     曲目编号: context.activeTrack?.id ?? null,
-    歌曲名: context.activeTrack?.title ?? context.title ?? '',
+    歌曲名: context.activeTrack?.title ?? '',
   });
   post('togglePlayback', { observedPlaying, expectedPlaying: !observedPlaying }, requestId);
 }
@@ -258,7 +287,7 @@ function button(label, iconName, className = 'icon-btn') {
 
 function createLayout() {
   root.innerHTML = `<style>${CSS}</style><div class="app">
-    <div class="backdrop-color"></div><video class="backdrop-video" muted loop playsinline></video><div class="backdrop"></div><div class="grain"></div>
+    <div class="backdrop-group"><div class="backdrop-color"></div><video class="backdrop-video" muted loop playsinline></video><div class="backdrop"></div><div class="grain"></div></div>
     <div class="chrome">
       <header class="topbar"><div class="topbar-title">正在播放</div></header>
       <main class="main">
@@ -280,7 +309,7 @@ function createLayout() {
   const app = root.querySelector('.app');
   elements = {
     app,
-    backdropColor: app.querySelector('.backdrop-color'), backdrop: app.querySelector('.backdrop'), backdropVideo: app.querySelector('.backdrop-video'), cover: app.querySelector('.cover'), coverPlaceholder: app.querySelector('.cover-placeholder'), coverWrap: app.querySelector('.cover-wrap'),
+    backdropGroup: app.querySelector('.backdrop-group'), backdropColor: app.querySelector('.backdrop-color'), backdrop: app.querySelector('.backdrop'), backdropVideo: app.querySelector('.backdrop-video'), cover: app.querySelector('.cover'), coverPlaceholder: app.querySelector('.cover-placeholder'), coverWrap: app.querySelector('.cover-wrap'),
     marquee: app.querySelector('.marquee'), titleA: app.querySelector('.title-a'), titleB: app.querySelector('.title-b'), subtitle: app.querySelector('.subtitle'),
     seek: app.querySelector('.seek-range'), elapsed: app.querySelector('.elapsed'), remaining: app.querySelector('.remaining'), volume: app.querySelector('.volume'), volumeValue: app.querySelector('.volume-value'),
     lyrics: app.querySelector('.lyrics'), queue: app.querySelector('.queue'), settingsPanel: app.querySelector('.settings-panel'),
@@ -294,7 +323,7 @@ function createLayout() {
   play.addEventListener('pointerdown', (event) => {
     event.stopPropagation();
     console.log('[Apple Music 歌词][播放控制] 指针按下', {
-      当前是否播放: Boolean(context.isPlaying),
+      当前是否播放: Boolean(context.playback.isPlaying),
       指针类型: event.pointerType,
       鼠标按键: event.button,
     });
@@ -374,7 +403,6 @@ function updateConfig(patch, refreshSettings = false) {
 function applyConfig() {
   const current = config();
   elements.app.dataset.background = current.backgroundMode;
-  elements.app.style.setProperty('--bg-blur', `${Number(current.backgroundBlur)}px`);
   elements.app.style.setProperty('--lyric-size', `${Number(current.fontSize)}px`);
   elements.app.style.setProperty('--line-height', Number(current.lineHeight));
   elements.app.style.setProperty('--line-gap', Number(current.lineGap));
@@ -410,7 +438,6 @@ function renderSettings() {
   panel.append(settingRange('lineHeight', '行高', 1, 1.8, .05));
   panel.append(settingRange('lineGap', '行距', .2, 1.2, .05));
   panel.append(settingRange('alignPosition', '焦点位置', 25, 65, 1, '%'));
-  panel.append(settingRange('backgroundBlur', '背景模糊', 0, 60, 2, ' px'));
   const background = document.createElement('div');
   background.className = 'setting';
   background.innerHTML = `<div class="setting-label"><span>背景效果</span></div><div class="choice"><button type="button" data-mode="dynamic">动态</button><button type="button" data-mode="static">静态</button><button type="button" data-mode="amll">流体</button></div>`;
@@ -423,7 +450,7 @@ function renderSettings() {
   panel.append(settingToggle('smoothScroll', 'AMLL 弹簧跟随'));
   const rate = document.createElement('div');
   rate.className = 'setting';
-  rate.innerHTML = `<div class="setting-label"><span>播放速度</span><output>${Number(context.playbackRate || 1).toFixed(2)}×</output></div><input class="range" type="range" min="0.5" max="2" step="0.05" value="${Number(context.playbackRate || 1)}">`;
+  rate.innerHTML = `<div class="setting-label"><span>播放速度</span><output>${Number(context.playback.playbackRate || 1).toFixed(2)}×</output></div><input class="range" type="range" min="0.5" max="2" step="0.05" value="${Number(context.playback.playbackRate || 1)}">`;
   const rateInput = rate.querySelector('input'); rateInput.style.setProperty('--value', `${((Number(rateInput.value) - .5) / 1.5) * 100}%`);
   rateInput.addEventListener('input', () => { const value = Number(rateInput.value); rate.querySelector('output').textContent = `${value.toFixed(2)}×`; rateInput.style.setProperty('--value', `${((value - .5) / 1.5) * 100}%`); post('setPlaybackRate', { value }); });
   panel.append(rate);
@@ -435,12 +462,12 @@ function renderSettings() {
 
 function renderLines() {
   const lines = Array.isArray(context.lines) ? context.lines : [];
-  const nextKey = `${context.isLoading ? 'loading' : 'ready'}|${context.loadingText || ''}|${context.emptyMessage || ''}|${lines.map((line) => `${line.time}:${line.text}:${(line.words || []).length}`).join('\u0001')}`;
+  const nextKey = `${context.lyricsUi.isLoading ? 'loading' : 'ready'}|${context.lyricsUi.loadingText || ''}|${context.lyricsUi.emptyMessage || ''}|${lines.map((line) => `${line.time}:${line.text}:${(line.words || []).length}`).join('\u0001')}`;
   if (nextKey === linesKey) return;
   linesKey = nextKey;
   elements.lyrics.replaceChildren();
   if (!lines.length) {
-    const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = context.isLoading ? (context.loadingText || '正在载入歌词…') : (context.emptyMessage || '暂无歌词'); elements.lyrics.append(empty); return;
+    const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = context.lyricsUi.isLoading ? (context.lyricsUi.loadingText || '正在载入歌词…') : (context.lyricsUi.emptyMessage || '暂无歌词'); elements.lyrics.append(empty); return;
   }
   lines.forEach((line, index) => {
     const node = document.createElement('button'); node.type = 'button'; node.className = 'lyric-line'; node.dataset.index = String(index); node.dataset.time = String(Number(line.time) || 0); node.setAttribute('aria-label', `${formatTime(line.time)} ${line.text || ''}`);
@@ -461,13 +488,14 @@ function renderLines() {
 
 function updateLyricState() {
   const nodes = [...elements.lyrics.querySelectorAll('.lyric-line')];
-  const active = Number(context.activeLyricIndex ?? -1);
+  const active = Number(context.lyricsUi.activeLyricIndex ?? -1);
+  const scaleByHierarchy = bool('enableScale') && !context.playback.isPlaying;
   nodes.forEach((node, index) => {
     const distance = Math.abs(index - active);
     node.classList.toggle('active', index === active);
     node.classList.toggle('past', index < active);
     node.style.filter = bool('enableBlur') && distance > 1 ? `blur(${Math.min(5, (distance - 1) * .75)}px)` : '';
-    node.style.transform = bool('enableScale') && distance > 0 ? `scale(${Math.max(.88, 1 - distance * .018)})` : '';
+    node.style.transform = scaleByHierarchy && distance > 0 ? `scale(${Math.max(.88, 1 - distance * .018)})` : '';
     node.style.opacity = String(Math.max(.35, 1 - distance * .07));
   });
   if (active !== lastActiveIndex) {
@@ -480,7 +508,7 @@ function updateLyricState() {
 
 function updateWordProgress(activeLine) {
   if (!activeLine) return;
-  const currentTime = Number(context.currentTime) || 0;
+  const currentTime = Number(context.playback.currentTime) || 0;
   for (const word of activeLine.querySelectorAll('.word')) {
     const start = Number(word.dataset.time) || 0;
     const duration = Math.max(Number(word.dataset.duration) || 0, .001);
@@ -578,19 +606,13 @@ function trackArtist(track) {
 }
 
 function trackArtwork(track) {
-  return track?.associatedArtwork || track?.artwork || '';
-}
-
-function trackArtworkDisplayUrl(track) {
-  const artwork = String(trackArtwork(track) || '').trim();
-  if (!artwork.toLowerCase().startsWith('file:///')) return artwork;
-  return `http://asset.localhost/${encodeURIComponent(artwork.replace(/^file:\/\/\//i, ''))}`;
+  return track?.artworkDataUrl || track?.associatedArtwork || track?.artwork || '';
 }
 
 function renderQueue() {
   const queue = Array.isArray(context.queueTracks) ? context.queueTracks : [];
   const activeTrackId = context.activeTrack?.id ?? null;
-  const nextKey = `${activeTrackId || ''}|${context.isPlaying ? 'playing' : 'paused'}|${queue.map((item) => `${item.id}:${item.title}:${trackArtist(item)}:${item.album}:${item.duration}:${trackArtworkDisplayUrl(item)}`).join('\u0001')}`;
+  const nextKey = `${activeTrackId || ''}|${context.playback.isPlaying ? 'playing' : 'paused'}|${queue.map((item) => `${item.id}:${item.title}:${trackArtist(item)}:${item.album}:${item.duration}:${trackArtwork(item)}`).join('\u0001')}`;
   if (nextKey === queueKey) return;
   queueKey = nextKey;
   elements.queue.replaceChildren();
@@ -601,9 +623,9 @@ function renderQueue() {
   queue.forEach((item, index) => {
     const isCurrent = String(item.id) === String(activeTrackId);
     const artist = trackArtist(item);
-    const artworkUrl = trackArtworkDisplayUrl(item);
+    const artworkUrl = trackArtwork(item);
     const artwork = artworkUrl ? `<img src="${escapeHtml(artworkUrl)}" alt="">` : svg('lyrics', 16);
-    const row = document.createElement('button'); row.type = 'button'; row.className = `queue-row${isCurrent ? ' current' : ''}`; row.setAttribute('aria-label', `${index + 1}. ${item.title || '未知歌曲'} ${artist} ${formatTime(item.duration)}`); row.innerHTML = `<span class="queue-index">${isCurrent ? svg(context.isPlaying ? 'pause' : 'play', 13, true) : index + 1}</span><span class="queue-artwork">${artwork}</span><span class="queue-copy"><span class="queue-title">${escapeHtml(item.title || '未知歌曲')}</span><span class="queue-sub">${escapeHtml([artist, item.album].filter(Boolean).join(' · '))}</span></span><span class="queue-time">${formatTime(item.duration)}</span>`;
+    const row = document.createElement('button'); row.type = 'button'; row.className = `queue-row${isCurrent ? ' current' : ''}`; row.setAttribute('aria-label', `${index + 1}. ${item.title || '未知歌曲'} ${artist} ${formatTime(item.duration)}`); row.innerHTML = `<span class="queue-index">${isCurrent ? svg(context.playback.isPlaying ? 'pause' : 'play', 13, true) : index + 1}</span><span class="queue-artwork">${artwork}</span><span class="queue-copy"><span class="queue-title">${escapeHtml(item.title || '未知歌曲')}</span><span class="queue-sub">${escapeHtml([artist, item.album].filter(Boolean).join(' · '))}</span></span><span class="queue-time">${formatTime(item.duration)}</span>`;
     row.querySelector('.queue-artwork img')?.addEventListener('error', (event) => {
       const artworkNode = event.currentTarget.parentElement;
       event.currentTarget.remove();
@@ -622,33 +644,33 @@ function locateCurrentQueueRow(behavior = 'smooth') {
 }
 
 function updateTransport() {
-  const nextPlaying = Boolean(context.isPlaying);
+  const nextPlaying = Boolean(context.playback.isPlaying);
   if (lastLoggedPlaybackState !== nextPlaying) {
     console.log('[Apple Music 歌词][播放控制] 状态更新', {
       更新前是否播放: lastLoggedPlaybackState,
       当前是否播放: nextPlaying,
       曲目编号: context.activeTrack?.id ?? null,
-      歌曲名: context.activeTrack?.title ?? context.title ?? '',
+      歌曲名: context.activeTrack?.title ?? '',
     });
     lastLoggedPlaybackState = nextPlaying;
   }
-  const duration = Math.max(0, Number(context.duration) || 0);
-  const currentTime = Math.min(duration || Infinity, Math.max(0, Number(context.currentTime) || 0));
+  const duration = Math.max(0, Number(context.activeTrack?.duration) || 0);
+  const currentTime = Math.min(duration || Infinity, Math.max(0, Number(context.playback.currentTime) || 0));
   if (!seeking) { elements.seek.max = String(duration || 1); elements.seek.value = String(currentTime); elements.seek.style.setProperty('--value', `${duration ? (currentTime / duration) * 100 : 0}%`); elements.elapsed.textContent = formatTime(currentTime); }
   elements.remaining.textContent = formatTime(duration);
-  elements.play.innerHTML = svg(context.isPlaying ? 'pause' : 'play', 32, true); elements.play.setAttribute('aria-label', context.isPlaying ? '暂停' : '播放'); elements.play.title = context.isPlaying ? '暂停' : '播放';
-  elements.app.classList.toggle('is-playing', Boolean(context.isPlaying));
-  elements.favorite.classList.toggle('active', Boolean(context.isFavorite)); elements.favorite.innerHTML = svg('heart', 20, Boolean(context.isFavorite));
-  const volume = Math.max(0, Math.min(100, Number(context.volume) || 0)); elements.volume.value = String(volume); elements.volume.style.setProperty('--value', `${volume}%`); elements.volumeValue.textContent = `${Math.round(volume)}%`; const muted = Boolean(context.isMuted) || volume === 0; elements.mute.innerHTML = svg(muted ? 'muted' : 'volume'); elements.mute.setAttribute('aria-label', muted ? '取消静音' : '静音');
-  const mode = context.playbackMode || 'repeat'; const iconName = mode === 'shuffle' ? 'shuffle' : mode === 'fixed' ? 'repeatOne' : 'repeat'; if (elements.mode.dataset.icon !== iconName) { elements.mode.innerHTML = svg(iconName); elements.mode.dataset.icon = iconName; } elements.mode.classList.toggle('active', mode !== 'repeat'); elements.mode.title = context.playbackModeLabel || '播放模式'; elements.mode.setAttribute('aria-label', elements.mode.title);
+  elements.play.innerHTML = svg(context.playback.isPlaying ? 'pause' : 'play', 32, true); elements.play.setAttribute('aria-label', context.playback.isPlaying ? '暂停' : '播放'); elements.play.title = context.playback.isPlaying ? '暂停' : '播放';
+  elements.app.classList.toggle('is-playing', Boolean(context.playback.isPlaying));
+  elements.favorite.classList.toggle('active', Boolean(context.playback.isFavorite)); elements.favorite.innerHTML = svg('heart', 20, Boolean(context.playback.isFavorite));
+  const volume = Math.max(0, Math.min(100, Number(context.playback.volume) || 0)); elements.volume.value = String(volume); elements.volume.style.setProperty('--value', `${volume}%`); elements.volumeValue.textContent = `${Math.round(volume)}%`; const muted = Boolean(context.playback.isMuted) || volume === 0; elements.mute.innerHTML = svg(muted ? 'muted' : 'volume'); elements.mute.setAttribute('aria-label', muted ? '取消静音' : '静音');
+  const mode = context.playback.playbackMode || 'repeat'; const iconName = mode === 'shuffle' ? 'shuffle' : mode === 'fixed' ? 'repeatOne' : 'repeat'; if (elements.mode.dataset.icon !== iconName) { elements.mode.innerHTML = svg(iconName); elements.mode.dataset.icon = iconName; } elements.mode.classList.toggle('active', mode !== 'repeat'); elements.mode.title = context.playback.playbackModeLabel || '播放模式'; elements.mode.setAttribute('aria-label', elements.mode.title);
 }
 
 function renderMeta() {
   const activeTrack = context.activeTrack || null;
-  const title = activeTrack?.title || context.title || '未在播放';
+  const title = activeTrack?.title || '未在播放';
   elements.titleA.textContent = title; elements.titleB.textContent = title;
-  const artist = trackArtist(activeTrack) || context.artist || '未知艺术家'; const album = activeTrack?.album || context.album || ''; elements.subtitle.textContent = [artist, album].filter(Boolean).join(' · '); elements.subtitle.title = elements.subtitle.textContent;
-  const cover = context.coverUrl || trackArtworkDisplayUrl(activeTrack) || '';
+  const artist = trackArtist(activeTrack) || '未知艺术家'; const album = activeTrack?.album || ''; elements.subtitle.textContent = [artist, album].filter(Boolean).join(' · '); elements.subtitle.title = elements.subtitle.textContent;
+  const cover = trackArtwork(activeTrack) || '';
   const nextCoverKey = `${activeTrack?.id ?? ''}:${cover}`;
   if (nextCoverKey !== coverKey) {
     coverKey = nextCoverKey;
@@ -686,17 +708,18 @@ function renderBackground(cover) {
   elements.app.classList.toggle('native-wallpaper-scene', isNativeScene);
   const baseColor = source === 'color' ? String(background.color || '#000000') : '#09090a';
   const baseOpacity = source === 'color' ? opacity : 1;
+  elements.backdropGroup.style.opacity = String(windowOpacity);
   elements.backdropColor.style.backgroundColor = baseColor;
-  elements.backdropColor.style.opacity = isNativeScene ? '0' : String(baseOpacity * windowOpacity);
-  elements.app.style.setProperty('--grain-opacity', String(.055 * baseOpacity * windowOpacity));
+  elements.backdropColor.style.opacity = isNativeScene ? '0' : String(baseOpacity);
+  elements.app.style.setProperty('--grain-opacity', String(.055 * baseOpacity));
   elements.app.style.setProperty('--shared-bg-blur', `${blur}px`);
   elements.backdrop.style.backgroundPosition = position;
   elements.backdrop.style.transform = `scale(${scale * 1.12})`;
-  elements.backdrop.style.opacity = isVideo ? '0' : (!isVideo && mediaUrl ? String(opacity * windowOpacity) : '0');
+  elements.backdrop.style.opacity = isVideo ? '0' : (!isVideo && mediaUrl ? String(opacity) : '0');
   elements.backdrop.style.backgroundImage = !isVideo && mediaUrl ? `url(${JSON.stringify(mediaUrl)})` : '';
   elements.backdropVideo.style.objectPosition = position;
   elements.backdropVideo.style.transform = `scale(${scale * 1.12})`;
-  elements.backdropVideo.style.opacity = isVideo ? String(opacity * windowOpacity) : '0';
+  elements.backdropVideo.style.opacity = isVideo ? String(opacity) : '0';
   if (isVideo) {
     if (elements.backdropVideo.src !== mediaUrl) elements.backdropVideo.src = mediaUrl;
     void elements.backdropVideo.play().catch(() => {});
@@ -706,14 +729,62 @@ function renderBackground(cover) {
   }
 }
 
-function render(nextContext = {}) {
-  context = { ...context, ...nextContext, config: { ...(context.config || {}), ...(nextContext.config || {}) } };
+function renderAll() {
   applyConfig(); renderMeta(); renderLines(); updateLyricState(); renderQueue(); updateTransport();
 }
 
+function applyMessage(message) {
+  if (message.type === 'track') {
+    activeTrackKey = String(message.trackKey || '');
+    context.activeTrack = message.activeTrack || null;
+  } else if (message.type === 'lyrics') {
+    if (String(message.trackKey || '') !== activeTrackKey) return false;
+    context.lines = Array.isArray(message.lines) ? message.lines : [];
+  } else if (message.type === 'queue') {
+    context.queueTracks = Array.isArray(message.queueTracks) ? message.queueTracks : [];
+  } else if (message.type === 'background') {
+    context.background = message.background || {};
+  } else if (message.type === 'config') {
+    context.config = message.config || {};
+  } else if (message.type === 'playback') {
+    context.playback = { ...context.playback, ...(message.playback || {}) };
+  } else if (message.type === 'lyrics-ui') {
+    context.lyricsUi = { ...context.lyricsUi, ...(message.lyricsUi || {}) };
+  } else {
+    return false;
+  }
+  return true;
+}
+
+function update(message) {
+  const wasPlaying = context.playback.isPlaying;
+  if (!applyMessage(message || {})) return;
+  if (message.type === 'track') {
+    renderMeta();
+    updateTransport();
+    renderQueue();
+  } else if (message.type === 'lyrics') {
+    renderLines();
+    updateLyricState();
+  } else if (message.type === 'queue') {
+    renderQueue();
+  } else if (message.type === 'background') {
+    renderMeta();
+  } else if (message.type === 'playback') {
+    updateLyricState();
+    updateTransport();
+    if (wasPlaying !== context.playback.isPlaying) renderQueue();
+  } else if (message.type === 'lyrics-ui') {
+    renderLines();
+    updateLyricState();
+  } else {
+    renderAll();
+  }
+}
+
 export default {
-  mount(target, initialContext, rendererApi) { root = target; api = rendererApi; context = initialContext || {}; createLayout(); render(context); },
-  update(nextContext) { render(nextContext); },
+  mount(target, rendererApi) { root = target; api = rendererApi; context = createContext(); activeTrackKey = ''; createLayout(); renderAll(); },
+  update,
   destroy() {
     clearTimeout(browseTimer);
     for (const timer of lyricLayoutTimers) clearTimeout(timer);
@@ -724,7 +795,8 @@ export default {
     root?.replaceChildren();
     root = null;
     api = null;
-    context = {};
+    context = createContext();
+    activeTrackKey = '';
     elements = {};
     linesKey = null;
     queueKey = null;

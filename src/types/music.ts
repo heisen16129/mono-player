@@ -137,7 +137,6 @@ export interface PlayerSettings {
   musicDirs: string[];
   lastAddedMusicDir: string;
   lastAddedTrackIds: number[];
-  recentPlayedTrackIds: number[];
   playlists: UserPlaylist[];
   theme: AppTheme;
   closeAction: 'exit' | 'tray';

@@ -1,5 +1,4 @@
 use crate::workers::{
-    lifecycle::{RestartPolicy, WorkerRuntimeStatus},
     manager::WorkerProcess,
     protocol::{decode_request, encode_line, methods, WorkerMessage, WorkerRequest},
     AUDIO_WORKER_FLAG,
@@ -66,10 +65,6 @@ impl AudioWorkerState {
             cache_dir: Mutex::new(cache_dir.clone()),
             worker: Mutex::new(start_audio_worker(&cache_dir)?),
         })
-    }
-
-    pub(crate) fn restart_policy(&self) -> RestartPolicy {
-        RestartPolicy::RestartOnceAndRetry
     }
 
     pub(crate) fn request(&self, request: &WorkerRequest) -> Result<WorkerMessage, String> {
@@ -240,32 +235,6 @@ impl AudioWorkerState {
             method: methods::PLAYER_STATE.to_string(),
             payload: json!({}),
         })
-    }
-
-    pub(crate) fn status(&self) -> WorkerRuntimeStatus {
-        match self.worker.lock() {
-            Ok(mut worker) => worker.status(),
-            Err(error) => WorkerRuntimeStatus::stopped("audio", Some(error.to_string())),
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn restart_process(&self) -> Result<(), String> {
-        let cache_dir = self
-            .cache_dir
-            .lock()
-            .map(|path| path.clone())
-            .map_err(|err| err.to_string())?;
-        let mut worker = self.worker.lock().map_err(|err| err.to_string())?;
-        worker.stop();
-        *worker = start_audio_worker(&cache_dir)?;
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn stop_process(&self) -> Result<(), String> {
-        self.worker.lock().map_err(|err| err.to_string())?.stop();
-        Ok(())
     }
 
     fn deserialize_response<T: for<'de> Deserialize<'de>>(

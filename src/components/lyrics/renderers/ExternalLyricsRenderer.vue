@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useWindowDrag } from '../../../composables/useWindowDrag';
 import { invokeApi } from '../../../services/api';
 import { readArtworkFile } from '../../../services/music';
 import { listenRustBackendAudioFrame, type RustAudioFrame } from '../../../services/playerBackend';
-import type { LyricsRendererContext } from '../../../types/lyricsRenderer';
+import type {
+  ExternalLyricsRendererHostMessage,
+  ExternalLyricsRendererTrack,
+  LyricsRendererContext,
+} from '../../../types/lyricsRenderer';
 import type { Track } from '../../../types/music';
 import type { PlayerDockController } from '../../../types/playerDockController';
 import { artworkBlobDataUrl, artworkDisplaySrc, artworkUrlDataUrl, trackArtworkSource } from '../../../utils/artwork';
@@ -26,19 +30,32 @@ let loadGeneration = 0;
 let unlistenAudioFrame: (() => void) | null = null;
 let latestAudioFrame: RustAudioFrame | null = null;
 let audioFrameDisposed = false;
-const serializableTrackCache = new WeakMap<object, Track>();
 const artworkDataUrlCache = new Map<string, Promise<string>>();
 const activeArtworkDataUrl = ref('');
+let activeArtworkIdentity = '';
 let artworkLoadGeneration = 0;
 
-function serializableTrack(track: Track | null | undefined) {
+function trackKey(track: Track | null | undefined) {
+  if (!track) return '';
+  return `${track.id}:${track.path}`;
+}
+
+function serializableTrack(track: Track | null | undefined): ExternalLyricsRendererTrack | null {
   if (!track) return null;
-  const rawTrack = toRaw(track);
-  const cached = serializableTrackCache.get(rawTrack);
-  if (cached) return cached;
-  const serialized = JSON.parse(JSON.stringify(rawTrack)) as Track;
-  serializableTrackCache.set(rawTrack, serialized);
-  return serialized;
+  return {
+    id: track.id,
+    path: track.path,
+    title: track.title,
+    artist: Array.isArray(track.artist) ? [...track.artist] : null,
+    album: track.album,
+    duration: track.duration,
+    coverVersion: track.coverVersion,
+    artwork: track.artwork,
+    associatedArtwork: track.associatedArtwork,
+    sourceId: track.sourceId,
+    sourceName: track.sourceName,
+    sourceProviderId: track.sourceProviderId,
+  };
 }
 
 function cachedArtworkDataUrl(reference: string) {
@@ -76,15 +93,19 @@ function activeArtworkReference(activeTrack: Track, displayCoverUrl: string) {
 async function refreshActiveArtworkDataUrl() {
   const generation = ++artworkLoadGeneration;
   activeArtworkDataUrl.value = '';
+  activeArtworkIdentity = '';
   const activeTrack = props.playerDockController?.playbackMetaControlProps.value.activeTrack;
+  postTrackContext();
   if (!activeTrack) return;
   const reference = activeArtworkReference(activeTrack, String(props.context.coverUrl || '').trim());
   if (!reference) return;
+  const identity = `${trackKey(activeTrack)}:${reference}`;
   try {
     const dataUrl = await cachedArtworkDataUrl(reference);
     if (generation !== artworkLoadGeneration) return;
     activeArtworkDataUrl.value = dataUrl;
-    postContext(true);
+    activeArtworkIdentity = identity;
+    postTrackContext();
   } catch (error) {
     if (generation === artworkLoadGeneration) activeArtworkDataUrl.value = '';
     console.warn('[歌词插件宿主][封面] 转换 Base64 失败', {
@@ -127,15 +148,16 @@ function createSandboxDocument(entry: string) {
   const serializedEntry = JSON.stringify(entry).replace(/</g, '\\u003c');
   const serializedSource = JSON.stringify(sandboxModuleSource.value).replace(/</g, '\\u003c');
   return `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent!important;color-scheme:normal!important}</style><script>
-const entry=${serializedEntry};const source=${serializedSource};let renderer=null;let rendererReady=false;let moduleUrl=entry;let latestAudioFrame=null;let pendingContext=null;let api={post:(action,payload,requestId)=>parent.postMessage({type:'lyrics-renderer-action',action,payload,requestId},'*')};
-function mergePendingContext(current,next){if(!current)return next||{};if(!next)return current;const previousTrack=current.activeTrack;const nextTrack=next.activeTrack;const hasNextTrack=Object.prototype.hasOwnProperty.call(next,'activeTrack');const sameTrack=previousTrack&&nextTrack&&String(previousTrack.id??previousTrack.path??'')===String(nextTrack.id??nextTrack.path??'');return {...current,...next,activeTrack:hasNextTrack?(nextTrack?{...(sameTrack?previousTrack:{}),...nextTrack}:null):previousTrack}}
-async function applyPendingContext(){if(!rendererReady||!pendingContext||!renderer?.update)return;const next=pendingContext;pendingContext=null;await renderer.update(next)}
-  window.addEventListener('message',async(event)=>{if(event.source!==parent)return;const message=event.data||{};try{if(message.type==='init'){rendererReady=false;const initialContext=mergePendingContext(message.context,pendingContext);pendingContext=null;if(source!==null)moduleUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const loaded=await import(moduleUrl);renderer=loaded.default||loaded;if(typeof renderer.mount!=='function')throw new Error('Renderer must export mount(root, context, api)');await renderer.mount(document.body,initialContext,api);rendererReady=true;if(typeof renderer.updateAudioFrame==='function')parent.postMessage({type:'lyrics-renderer-audio-frame-subscribe'},'*');await applyPendingContext();if(latestAudioFrame&&renderer.updateAudioFrame)renderer.updateAudioFrame(latestAudioFrame)}else if(message.type==='update'){if(rendererReady&&renderer?.update)await renderer.update(message.context);else pendingContext=mergePendingContext(pendingContext,message.context)}else if(message.type==='audio-frame'){latestAudioFrame=message.frame||null;if(rendererReady&&renderer?.updateAudioFrame)renderer.updateAudioFrame(latestAudioFrame)}else if(message.type==='lyrics-renderer-action-result'&&String(message.requestId||'').includes('playback-')){console.log('[歌词插件通信桥][播放控制] 执行结果',{请求编号:message.requestId,是否成功:message.ok,错误信息:message.message||''})}}catch(error){parent.postMessage({type:'lyrics-renderer-error',message:String(error)},'*') }});
+const entry=${serializedEntry};const source=${serializedSource};const contextMessageTypes=new Set(['track','lyrics','queue','background','config','playback','lyrics-ui']);const pendingMessages=new Map();const pendingOrder=['track','lyrics','queue','background','config','playback','lyrics-ui'];let renderer=null;let rendererReady=false;let moduleUrl=entry;let latestAudioFrame=null;let currentTrackKey='';let api={post:(action,payload,requestId)=>parent.postMessage({type:'lyrics-renderer-action',action,payload,requestId},'*')};
+async function deliver(message){if(message.type==='track'){currentTrackKey=String(message.trackKey||'');const pendingLyrics=pendingMessages.get('lyrics');if(pendingLyrics&&String(pendingLyrics.trackKey||'')!==currentTrackKey)pendingMessages.delete('lyrics')}if(message.type==='lyrics'&&String(message.trackKey||'')!==currentTrackKey)return;if(rendererReady&&renderer?.update)await renderer.update(message);else pendingMessages.set(message.type,message)}
+async function deliverPending(){if(!rendererReady||!renderer?.update)return;for(const type of pendingOrder){const message=pendingMessages.get(type);if(!message)continue;pendingMessages.delete(type);await deliver(message)}}
+window.addEventListener('message',async(event)=>{if(event.source!==parent)return;const message=event.data||{};try{if(message.type==='init'){rendererReady=false;pendingMessages.clear();currentTrackKey='';if(source!==null)moduleUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const loaded=await import(moduleUrl);renderer=loaded.default||loaded;if(typeof renderer.mount!=='function'||typeof renderer.update!=='function')throw new Error('Renderer must export mount(root, api) and update(message)');await renderer.mount(document.body,api);rendererReady=true;if(typeof renderer.updateAudioFrame==='function')parent.postMessage({type:'lyrics-renderer-audio-frame-subscribe'},'*');await deliverPending();if(latestAudioFrame&&renderer.updateAudioFrame)renderer.updateAudioFrame(latestAudioFrame)}else if(contextMessageTypes.has(message.type)){await deliver(message)}else if(message.type==='audio-frame'){latestAudioFrame=message.frame||null;if(rendererReady&&renderer?.updateAudioFrame)renderer.updateAudioFrame(latestAudioFrame)}else if(message.type==='lyrics-renderer-action-result'&&String(message.requestId||'').includes('playback-')){console.log('[歌词插件通信桥][播放控制] 执行结果',{请求编号:message.requestId,是否成功:message.ok,错误信息:message.message||''})}}catch(error){parent.postMessage({type:'lyrics-renderer-error',message:String(error)},'*')}});
+window.addEventListener('pagehide',()=>{try{renderer?.destroy?.()}catch{}if(source!==null&&String(moduleUrl).startsWith('blob:'))URL.revokeObjectURL(moduleUrl)},{once:true});
 <\/script>`;
 }
 
-function contextPayload(context: LyricsRendererContext, includeArtworkData = false) {
-  const lines = context.lines.map((line) => ({
+function lyricsPayload() {
+  return props.context.lines.map((line) => ({
     time: typeof line.time === 'number' ? line.time : null,
     text: String(line.text ?? ''),
     ...(line.words
@@ -148,49 +170,6 @@ function contextPayload(context: LyricsRendererContext, includeArtworkData = fal
         }
       : {}),
   }));
-  const config = Object.fromEntries(
-    Object.entries(context.config).map(([key, value]) => [
-      key,
-      Array.isArray(value) ? value.map((item) => String(item)) : value,
-    ]),
-  );
-  const meta = props.playerDockController?.playbackMetaControlProps.value;
-  const transport = props.playerDockController?.transportControlProps.value;
-  const queueTracks = meta?.queueTracks ?? [];
-  const activeTrack = serializableTrack(meta?.activeTrack);
-  const activeTrackPayload = activeTrack && includeArtworkData && activeArtworkDataUrl.value
-    ? { ...activeTrack, artworkDataUrl: activeArtworkDataUrl.value }
-    : activeTrack;
-  return {
-    lines,
-    currentTime: context.currentTime,
-    isPlaying: context.isPlaying,
-    isFavorite: context.isFavorite,
-    activeLyricIndex: context.activeLyricIndex,
-    lyricTimeOffset: context.lyricTimeOffset,
-    fontSize: context.fontSize,
-    lyricColor: context.lyricColor,
-    useThemeLyricColor: context.useThemeLyricColor,
-    coverUrl: context.coverUrl,
-    background: context.background,
-    isLoading: context.isLoading,
-    emptyMessage: context.emptyMessage,
-    loadingText: context.loadingText,
-    label: context.label,
-    title: context.title,
-    artist: context.artist,
-    album: context.album,
-    duration: context.duration,
-    volume: meta?.volume ?? context.volume,
-    isMuted: meta?.isMuted ?? false,
-    locale: meta?.locale ?? 'zh-CN',
-    playbackRate: meta?.playbackRate ?? 1,
-    playbackMode: transport?.playbackMode ?? 'fixed',
-    playbackModeLabel: transport?.playbackModeLabel ?? '',
-    activeTrack: activeTrackPayload,
-    queueTracks: queueTracks.map((track) => serializableTrack(track)),
-    config,
-  };
 }
 
 function configPayload(value: unknown) {
@@ -207,30 +186,93 @@ function configPayload(value: unknown) {
   return config;
 }
 
-function postContext(includeArtworkData = false) {
+function postHostMessage(message: ExternalLyricsRendererHostMessage) {
   try {
-    frame.value?.contentWindow?.postMessage({
-      type: 'update',
-      context: contextPayload(props.context, includeArtworkData),
-    }, '*');
+    frame.value?.contentWindow?.postMessage(message, '*');
   } catch (error) {
     loadError.value = `歌词插件通信失败：${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
-function postPlaybackModeContext() {
-  const transport = props.playerDockController?.transportControlProps.value;
-  try {
-    frame.value?.contentWindow?.postMessage({
-      type: 'update',
-      context: {
-        playbackMode: transport?.playbackMode ?? 'fixed',
-        playbackModeLabel: transport?.playbackModeLabel ?? '',
-      },
-    }, '*');
-  } catch (error) {
-    loadError.value = `歌词插件通信失败：${error instanceof Error ? error.message : String(error)}`;
+function postTrackContext() {
+  const sourceTrack = props.playerDockController?.playbackMetaControlProps.value.activeTrack;
+  const activeTrack = serializableTrack(sourceTrack);
+  if (sourceTrack && activeTrack && activeArtworkDataUrl.value) {
+    const reference = activeArtworkReference(sourceTrack, String(props.context.coverUrl || '').trim());
+    if (activeArtworkIdentity === `${trackKey(sourceTrack)}:${reference}`) {
+      activeTrack.artworkDataUrl = activeArtworkDataUrl.value;
+    }
   }
+  postHostMessage({ type: 'track', trackKey: trackKey(sourceTrack), activeTrack });
+}
+
+function postLyricsContext() {
+  const activeTrack = props.playerDockController?.playbackMetaControlProps.value.activeTrack;
+  postHostMessage({ type: 'lyrics', trackKey: trackKey(activeTrack), lines: lyricsPayload() });
+}
+
+function postQueueContext() {
+  const queueTracks = props.playerDockController?.playbackMetaControlProps.value.queueTracks ?? [];
+  postHostMessage({
+    type: 'queue',
+    queueTracks: queueTracks
+      .map((track) => serializableTrack(track))
+      .filter((track): track is ExternalLyricsRendererTrack => track !== null),
+  });
+}
+
+function postBackgroundContext() {
+  postHostMessage({ type: 'background', background: { ...props.context.background } });
+}
+
+function postConfigContext() {
+  postHostMessage({ type: 'config', config: configPayload(props.context.config) ?? {} });
+}
+
+function postPlaybackContext() {
+  const meta = props.playerDockController?.playbackMetaControlProps.value;
+  const transport = props.playerDockController?.transportControlProps.value;
+  postHostMessage({
+    type: 'playback',
+    playback: {
+      currentTime: props.context.currentTime,
+      isPlaying: props.context.isPlaying,
+      isFavorite: props.context.isFavorite,
+      volume: meta?.volume ?? props.context.volume,
+      isMuted: meta?.isMuted ?? false,
+      playbackRate: meta?.playbackRate ?? 1,
+      playbackMode: transport?.playbackMode ?? 'fixed',
+      playbackModeLabel: transport?.playbackModeLabel ?? '',
+    },
+  });
+}
+
+function postLyricsUiContext() {
+  const meta = props.playerDockController?.playbackMetaControlProps.value;
+  postHostMessage({
+    type: 'lyrics-ui',
+    lyricsUi: {
+      activeLyricIndex: props.context.activeLyricIndex,
+      lyricTimeOffset: props.context.lyricTimeOffset,
+      fontSize: props.context.fontSize,
+      lyricColor: props.context.lyricColor,
+      useThemeLyricColor: props.context.useThemeLyricColor,
+      isLoading: props.context.isLoading,
+      loadingText: props.context.loadingText,
+      emptyMessage: props.context.emptyMessage,
+      locale: meta?.locale ?? 'zh-CN',
+    },
+  });
+}
+
+function postInitialContext() {
+  postTrackContext();
+  postLyricsContext();
+  postQueueContext();
+  postBackgroundContext();
+  postConfigContext();
+  postPlaybackContext();
+  postLyricsUiContext();
 }
 
 function postAudioFrame(audioFrame: RustAudioFrame) {
@@ -350,15 +392,9 @@ async function handleMessage(event: MessageEvent) {
 
 function handleLoad() {
   loadError.value = '';
-  try {
-    frame.value?.contentWindow?.postMessage({
-      type: 'init',
-      context: contextPayload(props.context, Boolean(activeArtworkDataUrl.value)),
-    }, '*');
-    if (latestAudioFrame) postAudioFrame(latestAudioFrame);
-  } catch (error) {
-    loadError.value = `歌词插件通信失败：${error instanceof Error ? error.message : String(error)}`;
-  }
+  postHostMessage({ type: 'init', protocolVersion: 2 });
+  postInitialContext();
+  if (latestAudioFrame) postAudioFrame(latestAudioFrame);
 }
 
 onMounted(() => {
@@ -372,29 +408,60 @@ onBeforeUnmount(() => {
   unlistenAudioFrame = null;
 });
 watch(
-  () => [
-    props.context,
-    props.playerDockController?.playbackMetaControlProps.value,
-  ],
-  () => postContext(),
+  () => props.playerDockController?.playbackMetaControlProps.value.queueTracks,
+  () => postQueueContext(),
+  { deep: true },
+);
+watch(
+  () => props.context.lines,
+  () => postLyricsContext(),
+  { deep: true },
+);
+watch(
+  () => props.context.background,
+  () => postBackgroundContext(),
+  { deep: true },
+);
+watch(
+  () => props.context.config,
+  () => postConfigContext(),
   { deep: true },
 );
 watch(
   () => [
+    props.context.currentTime,
+    props.context.isPlaying,
+    props.context.isFavorite,
+    props.context.volume,
+    props.playerDockController?.playbackMetaControlProps.value.volume,
+    props.playerDockController?.playbackMetaControlProps.value.isMuted,
+    props.playerDockController?.playbackMetaControlProps.value.playbackRate,
     props.playerDockController?.transportControlProps.value.playbackMode,
     props.playerDockController?.transportControlProps.value.playbackModeLabel,
   ],
-  () => postPlaybackModeContext(),
+  () => postPlaybackContext(),
 );
 watch(
   () => [
-    props.playerDockController?.playbackMetaControlProps.value.activeTrack?.id,
-    props.playerDockController?.playbackMetaControlProps.value.activeTrack?.path,
-    props.playerDockController?.playbackMetaControlProps.value.activeTrack?.associatedArtwork,
-    props.playerDockController?.playbackMetaControlProps.value.activeTrack?.artwork,
-    props.playerDockController?.playbackMetaControlProps.value.activeTrack?.coverVersion,
-    props.context.coverUrl,
+    props.context.activeLyricIndex,
+    props.context.lyricTimeOffset,
+    props.context.fontSize,
+    props.context.lyricColor,
+    props.context.useThemeLyricColor,
+    props.context.isLoading,
+    props.context.loadingText,
+    props.context.emptyMessage,
+    props.playerDockController?.playbackMetaControlProps.value.locale,
   ],
+  () => postLyricsUiContext(),
+);
+watch(
+  () => JSON.stringify({
+    activeTrack: serializableTrack(
+      props.playerDockController?.playbackMetaControlProps.value.activeTrack,
+    ),
+    coverUrl: props.context.coverUrl,
+  }),
   () => void refreshActiveArtworkDataUrl(),
   { immediate: true },
 );

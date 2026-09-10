@@ -1,28 +1,32 @@
 import { ref } from 'vue';
-import { clearCoverThumbnailCache, cropCoverImage, updateTrackCover } from '../services/music';
+import { cropCoverImage, updateTrackCover } from '../services/music';
 import type { Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
 
 interface CoverCropPayload {
+  imageDataUrl?: string;
   x: number;
   y: number;
   size: number;
 }
 
 interface UseCoverCropDialogOptions {
-  applyTrackCoverRefresh: (trackId: number, artwork?: string | null) => void;
   isTrackPlaying: (track: Track) => boolean;
   queueTrackCoverEmbed: (track: Track, coverPath: string) => void;
   showToast: (message: string, variant?: 'success' | 'error') => void;
 }
 
-export function useCoverCropDialog({ applyTrackCoverRefresh, isTrackPlaying, queueTrackCoverEmbed, showToast }: UseCoverCropDialogOptions) {
+export function useCoverCropDialog({ isTrackPlaying, queueTrackCoverEmbed, showToast }: UseCoverCropDialogOptions) {
   const coverCropTrack = ref<Track | null>(null);
   const coverCropImagePath = ref('');
   const isSavingCoverCrop = ref(false);
 
-  function openCoverCropDialog(track: Track, imagePath: string) {
+  function openCoverCropDialog(track: Track, imagePath = '') {
     coverCropTrack.value = track;
+    coverCropImagePath.value = imagePath;
+  }
+
+  function setCoverCropImagePath(imagePath: string) {
     coverCropImagePath.value = imagePath;
   }
 
@@ -32,18 +36,16 @@ export function useCoverCropDialog({ applyTrackCoverRefresh, isTrackPlaying, que
     coverCropImagePath.value = '';
   }
 
-  async function saveCoverCrop({ x, y, size }: CoverCropPayload) {
+  async function saveCoverCrop({ imageDataUrl, x, y, size }: CoverCropPayload) {
     const track = coverCropTrack.value;
     const imagePath = coverCropImagePath.value;
     if (!track || !imagePath) return;
 
     isSavingCoverCrop.value = true;
     try {
-      const cropped = await cropCoverImage({ imagePath, x, y, size });
+      const cropped = await cropCoverImage({ imageDataUrl, imagePath, x, y, size });
       const embedMetadata = !isTrackPlaying(track);
-      await clearCoverThumbnailCache(track.path);
-      const result = await updateTrackCover({ path: track.path, coverPath: cropped.path, embedMetadata });
-      applyTrackCoverRefresh(track.id, result.artwork);
+      await updateTrackCover({ trackId: track.id, path: track.path, coverPath: cropped.path, embedMetadata });
       if (!embedMetadata) {
         queueTrackCoverEmbed(track, cropped.path);
       }
@@ -65,5 +67,6 @@ export function useCoverCropDialog({ applyTrackCoverRefresh, isTrackPlaying, que
     isSavingCoverCrop,
     openCoverCropDialog,
     saveCoverCrop,
+    setCoverCropImagePath,
   };
 }

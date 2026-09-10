@@ -657,17 +657,6 @@ pub(crate) async fn wallpaper_engine_start_scene(
     }
 }
 
-#[tauri::command]
-pub(crate) fn wallpaper_engine_update_scene_surface(
-    state: State<'_, WallpaperEngineState>,
-) -> Result<(), String> {
-    let status = scene_status(&state)?;
-    if !status.active && !status.session_id.is_empty() {
-        return Err("Wallpaper Engine 背景窗口已断开，请重试".into());
-    }
-    Ok(())
-}
-
 fn scene_status(state: &WallpaperEngineState) -> Result<WallpaperEngineSceneStatus, String> {
     let session = state.runtime.session.lock().map_err(|_| "壁纸会话不可用")?;
     let mut status = WallpaperEngineSceneStatus {

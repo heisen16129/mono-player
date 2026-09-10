@@ -2,7 +2,7 @@ import type { PluginManifest, PluginPlaybackQualities, PluginSearchProvider, Plu
 import type { TrackLyrics } from '../types/music';
 import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
-import { listInstalledPlugins } from './plugins';
+import { getInstalledPlugin, listInstalledPluginManifests } from './plugins';
 
 export type PluginLyricsMetadata = TrackLyrics;
 
@@ -12,7 +12,7 @@ export interface PluginSearchPage {
 }
 
 export async function listPluginSearchProviders(): Promise<PluginSearchProvider[]> {
-  const plugins = await listInstalledPlugins();
+  const plugins = await listInstalledPluginManifests();
   return plugins
     .filter((plugin) => plugin.capabilities.includes('search') && plugin.capabilities.includes('play'))
     .map((plugin) => ({
@@ -24,7 +24,7 @@ export async function listPluginSearchProviders(): Promise<PluginSearchProvider[
 }
 
 export async function listPluginLyricSearchProviders(): Promise<PluginSearchProvider[]> {
-  const plugins = await listInstalledPlugins();
+  const plugins = await listInstalledPluginManifests();
   return plugins
     .filter((plugin) => plugin.capabilities.includes('search') && plugin.capabilities.includes('lyrics'))
     .map((plugin) => ({
@@ -39,7 +39,7 @@ export async function searchPluginMusic(keyword: string, providerId?: string | n
   const query = keyword.trim();
   if (!query) return { tracks: [], isEnd: true };
 
-  const plugins = await listInstalledPlugins();
+  const plugins = await listInstalledPluginManifests();
   const candidateProviders = plugins.filter((plugin) => {
     return plugin.enabled
       && plugin.capabilities.includes('search')
@@ -82,7 +82,7 @@ export async function searchPluginLyrics(keyword: string, providerId?: string | 
   const query = keyword.trim();
   if (!query) return { tracks: [], isEnd: true };
 
-  const plugins = await listInstalledPlugins();
+  const plugins = await listInstalledPluginManifests();
   const candidateProviders = plugins.filter((plugin) => {
     return plugin.enabled
       && plugin.capabilities.includes('search')
@@ -127,25 +127,25 @@ export interface PluginLyricsPlaybackGuard {
 }
 
 export async function getPluginLyricsMetadata(track: PluginSearchTrack, playbackGuard?: PluginLyricsPlaybackGuard): Promise<PluginLyricsMetadata> {
-  const plugins = await listInstalledPlugins();
   if (!isTauriRuntime()) throw new Error('Plugin lyrics are only available in the desktop runtime.');
+  const plugin = await requireInstalledPlugin(track.providerId);
 
   return invokeApi<PluginLyricsMetadata>('resolve_plugin_lyrics_metadata', {
     providerId: track.providerId,
     track,
-    plugins,
+    plugins: [plugin],
     playbackGuard,
   });
 }
 
 export async function resolvePluginPlaybackQualitiesWithRust(track: PluginSearchTrack): Promise<PluginPlaybackQualities> {
-  const plugins = await listInstalledPlugins();
   if (!isTauriRuntime()) throw new Error('Plugin playback is only available in the desktop runtime.');
+  const plugin = await requireInstalledPlugin(track.providerId);
 
   return invokeApi<PluginPlaybackQualities>('resolve_plugin_playback_qualities', {
     providerId: track.providerId,
     track,
-    plugins,
+    plugins: [plugin],
   });
 }
 
@@ -174,12 +174,18 @@ async function searchWithPluginPage(plugin: PluginManifest, keyword: string, pag
 async function searchWithPlugin(plugin: PluginManifest, keyword: string, page: number, pageSize: number): Promise<PluginSearchPage> {
   if (!isTauriRuntime()) throw new Error('Plugin search is only available in the desktop runtime.');
 
-  const plugins = await listInstalledPlugins();
+  const configuredPlugin = await requireInstalledPlugin(plugin.id);
   return invokeApi<PluginSearchPage>('search_plugin', {
     providerId: plugin.id,
     keyword,
     page,
     pageSize,
-    plugins,
+    plugins: [configuredPlugin],
   });
+}
+
+async function requireInstalledPlugin(pluginId: string): Promise<PluginManifest> {
+  const plugin = await getInstalledPlugin(pluginId);
+  if (!plugin) throw new Error('Selected plugin is not installed.');
+  return plugin;
 }

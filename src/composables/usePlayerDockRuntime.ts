@@ -218,7 +218,7 @@ export function usePlayerDockRuntime({
 
   function handleRustPlaybackState(state: RustPlayerState) {
     if (!isActiveRustPath(state.currentPath)) {
-      if (rustBackendActive.value) {
+      if (rustBackendActive.value || isPlaying.value) {
         rustBackendActive.value = false;
         isPlaying.value = false;
         progress.stopSmoothProgress();

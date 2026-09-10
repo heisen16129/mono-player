@@ -9,7 +9,7 @@
 <body>
   <iframe id="plugin" sandbox="allow-scripts"></iframe>
   <script type="module">
-    const moduleSource = await fetch('./renderer.mjs?v=1.0.5', { cache: 'no-store' }).then((response) => response.text());
+    const moduleSource = await fetch('./renderer.mjs?v=2.0.0', { cache: 'no-store' }).then((response) => response.text());
     const coverCanvas = document.createElement('canvas');
     coverCanvas.width = coverCanvas.height = 640;
     const coverContext = coverCanvas.getContext('2d');
@@ -29,28 +29,29 @@
     coverContext.textAlign = 'center';
     coverContext.fillText('MONO', 320, 330);
     const coverDataUrl = coverCanvas.toDataURL('image/png');
-    const context = {
-      activeTrack: {
+    const activeTrack = {
         id: 'host-collision-preview',
+        path: 'host-collision-preview',
         title: '宿主作用域测试',
         artist: 'Mono Player',
         album: 'Mineradio 原版歌词',
         duration: 231,
         artworkDataUrl: coverDataUrl,
-      },
+    };
+    const state = {
+      activeTrack,
       queueTracks: [],
       lines: [{ time: 0, text: '原版运行时已与宿主变量隔离' }],
-      currentTime: 8,
-      duration: 231,
-      isPlaying: true,
-      volume: 72,
+      background: { source: 'cover', opacity: .72, windowOpacity: 1, blur: 24, positionX: 50, positionY: 50, scale: 1 },
       config: {},
+      playback: { currentTime: 8, isPlaying: true, isFavorite: false, volume: 72, isMuted: false, playbackRate: 1, playbackMode: 'fixed', playbackModeLabel: '固定播放' },
+      lyricsUi: { activeLyricIndex: 0, lyricTimeOffset: 0, fontSize: 17, lyricColor: null, useThemeLyricColor: true, isLoading: false, loadingText: '正在载入歌词…', emptyMessage: '暂无歌词', locale: 'zh-CN' },
     };
     const serializedSource = JSON.stringify(moduleSource).replace(/</g, '\\u003c');
-    const serializedContext = JSON.stringify(context).replace(/</g, '\\u003c');
+    const serializedState = JSON.stringify(state).replace(/</g, '\\u003c');
     document.querySelector('#plugin').srcdoc = `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style><script>
 const entry='local-module';const source=${serializedSource};let renderer=null;let rendererReady=false;let moduleUrl=entry;let api={post:(action,payload)=>parent.postMessage({type:'preview-action',action,payload},'*')};
-(async()=>{const liveContext=${serializedContext};let sequence=0;moduleUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const loaded=await import(moduleUrl);renderer=loaded.default||loaded;await renderer.mount(document.body,liveContext,api);rendererReady=true;setInterval(()=>{liveContext.currentTime=(liveContext.currentTime+.1)%liveContext.duration;renderer.update?.(liveContext)},100);setInterval(()=>{const sampleRate=44100;const startedAt=performance.now()/1000;const samples=Float32Array.from({length:2048},(_,index)=>{const time=startedAt+index/sampleRate;const pulse=.42+Math.max(0,Math.sin(time*Math.PI*3.4))*.38;return Math.sin(time*Math.PI*2*82)*pulse+Math.sin(time*Math.PI*2*440)*.22+Math.sin(time*Math.PI*2*3200)*.08});renderer.updateAudioFrame?.({sequence:++sequence,sampleRate,channels:1,samples})},46);parent.postMessage({type:'preview-ready'},'*')})().catch((error)=>parent.postMessage({type:'preview-error',message:String(error)},'*'));
+(async()=>{const state=${serializedState};const trackKey=state.activeTrack.id+':'+state.activeTrack.path;const sendSnapshot=()=>{renderer.update({type:'track',trackKey,activeTrack:state.activeTrack});renderer.update({type:'lyrics',trackKey,lines:state.lines});renderer.update({type:'queue',queueTracks:state.queueTracks});renderer.update({type:'background',background:state.background});renderer.update({type:'config',config:state.config});renderer.update({type:'playback',playback:state.playback});renderer.update({type:'lyrics-ui',lyricsUi:state.lyricsUi})};let sequence=0;moduleUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const loaded=await import(moduleUrl);renderer=loaded.default||loaded;await renderer.mount(document.body,api);rendererReady=true;sendSnapshot();setInterval(()=>{state.playback.currentTime=(state.playback.currentTime+.1)%state.activeTrack.duration;renderer.update?.({type:'playback',playback:state.playback})},100);setInterval(()=>{const sampleRate=44100;const startedAt=performance.now()/1000;const samples=Float32Array.from({length:2048},(_,index)=>{const time=startedAt+index/sampleRate;const pulse=.42+Math.max(0,Math.sin(time*Math.PI*3.4))*.38;return Math.sin(time*Math.PI*2*82)*pulse+Math.sin(time*Math.PI*2*440)*.22+Math.sin(time*Math.PI*2*3200)*.08});renderer.updateAudioFrame?.({sequence:++sequence,sampleRate,channels:1,samples})},46);parent.postMessage({type:'preview-ready'},'*')})().catch((error)=>parent.postMessage({type:'preview-error',message:String(error)},'*'));
 <\/script>`;
     window.addEventListener('message', (event) => {
       if (event.data?.type === 'preview-ready') document.body.dataset.hostPreviewReady = 'true';

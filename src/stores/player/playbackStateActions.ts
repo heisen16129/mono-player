@@ -6,18 +6,20 @@ import { artistLabel } from '../../utils/artist';
 
 interface PlayerPlaybackStateActionsOptions {
   currentTrack: Ref<Track | null>;
-  persistSettings: () => void;
+  persistRecentlyPlayed: () => void;
   playbackMode: Ref<PlaybackMode>;
   query: Ref<string>;
+  recentPlayedTrackIds: Ref<number[]>;
   settings: Ref<PlayerSettings>;
   tracks: Ref<Track[]>;
 }
 
 export function createPlayerPlaybackStateActions({
   currentTrack,
-  persistSettings,
+  persistRecentlyPlayed,
   playbackMode,
   query,
+  recentPlayedTrackIds,
   settings,
   tracks,
 }: PlayerPlaybackStateActionsOptions) {
@@ -63,11 +65,11 @@ export function createPlayerPlaybackStateActions({
   function recordRecentlyPlayed(track: Track | null) {
     if (!track?.path) return;
 
-    settings.value.recentPlayedTrackIds = [
+    recentPlayedTrackIds.value = [
       track.id,
-      ...settings.value.recentPlayedTrackIds.filter((id) => id !== track.id),
+      ...recentPlayedTrackIds.value.filter((id) => id !== track.id),
     ].slice(0, 100);
-    persistSettings();
+    persistRecentlyPlayed();
   }
 
   return {

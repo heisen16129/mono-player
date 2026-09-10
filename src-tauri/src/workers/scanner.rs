@@ -1,7 +1,6 @@
 use crate::{
     models::Track,
     workers::{
-        lifecycle::{RestartPolicy, WorkerRuntimeStatus},
         manager::WorkerProcess,
         protocol::{decode_request, encode_line, methods, WorkerMessage, WorkerRequest},
         SCAN_WORKER_FLAG,
@@ -33,19 +32,11 @@ struct ScanWorkerInner {
 #[derive(Clone)]
 struct ScanTaskHandle {
     pid: u32,
-    started_at_ms: u128,
 }
 
 impl ScanTaskHandle {
     fn new(pid: u32) -> Self {
-        Self {
-            pid,
-            started_at_ms: crate::workers::worker_started_at_ms(),
-        }
-    }
-
-    fn status(&self) -> WorkerRuntimeStatus {
-        WorkerRuntimeStatus::running("scan", Some(self.pid), Some(self.started_at_ms))
+        Self { pid }
     }
 
     fn kill(&self) -> Result<(), String> {
@@ -54,10 +45,6 @@ impl ScanTaskHandle {
 }
 
 impl ScanWorkerState {
-    pub(crate) fn restart_policy(&self) -> RestartPolicy {
-        RestartPolicy::PerTask
-    }
-
     pub(crate) fn run_scan<F>(&self, path: String, mut on_track: F) -> Result<(), String>
     where
         F: FnMut(Track) -> Result<(), String>,
@@ -96,16 +83,6 @@ impl ScanWorkerState {
         };
         task.kill()?;
         Ok(true)
-    }
-
-    pub(crate) fn status(&self) -> WorkerRuntimeStatus {
-        match self.inner.current_task.lock() {
-            Ok(task) => task
-                .as_ref()
-                .map(ScanTaskHandle::status)
-                .unwrap_or_else(|| WorkerRuntimeStatus::stopped("scan", None)),
-            Err(error) => WorkerRuntimeStatus::stopped("scan", Some(error.to_string())),
-        }
     }
 
     fn register_current_task(&self, task: ScanTaskHandle) -> Result<(), String> {

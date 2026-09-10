@@ -9,6 +9,8 @@ import type {
   LyricLine,
   LyricsBackgroundMediaKind,
   LyricsBackgroundSource,
+  PlaybackMode,
+  Track,
 } from './music';
 
 export interface LyricsRendererBackgroundContext {
@@ -127,6 +129,57 @@ export interface LyricsRendererHandle {
   update: (context: LyricsRendererContext) => void;
   destroy: () => void;
 }
+
+export type ExternalLyricsRendererTrack = Pick<
+  Track,
+  | 'id'
+  | 'path'
+  | 'title'
+  | 'artist'
+  | 'album'
+  | 'duration'
+  | 'coverVersion'
+  | 'artwork'
+  | 'associatedArtwork'
+  | 'sourceId'
+  | 'sourceName'
+  | 'sourceProviderId'
+> & {
+  artworkDataUrl?: string;
+};
+
+export interface ExternalLyricsRendererPlaybackContext {
+  currentTime: number;
+  isPlaying: boolean;
+  isFavorite: boolean;
+  volume: number;
+  isMuted: boolean;
+  playbackRate: number;
+  playbackMode: PlaybackMode;
+  playbackModeLabel: string;
+}
+
+export interface ExternalLyricsRendererUiContext {
+  activeLyricIndex: number;
+  lyricTimeOffset: number;
+  fontSize: number;
+  lyricColor: string | null;
+  useThemeLyricColor: boolean;
+  isLoading: boolean;
+  loadingText: string;
+  emptyMessage: string;
+  locale: string;
+}
+
+export type ExternalLyricsRendererHostMessage =
+  | { type: 'init'; protocolVersion: 2 }
+  | { type: 'track'; trackKey: string; activeTrack: ExternalLyricsRendererTrack | null }
+  | { type: 'lyrics'; trackKey: string; lines: LyricLine[] }
+  | { type: 'queue'; queueTracks: ExternalLyricsRendererTrack[] }
+  | { type: 'background'; background: LyricsRendererBackgroundContext }
+  | { type: 'config'; config: PluginConfig }
+  | { type: 'playback'; playback: ExternalLyricsRendererPlaybackContext }
+  | { type: 'lyrics-ui'; lyricsUi: ExternalLyricsRendererUiContext };
 
 export interface LyricsRendererPlugin {
   id: string;

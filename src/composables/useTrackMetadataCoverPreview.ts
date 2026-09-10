@@ -1,46 +1,30 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { ref } from 'vue';
-import { readCoverThumbnail } from '../services/music';
+import { readTrackCoverOriginal } from '../services/music';
 import type { Track } from '../types/music';
-import { coverImageObjectUrl, revokeTemporaryObjectUrl, trackArtworkSource, usableArtworkDisplaySrc } from '../utils/artwork';
 
 export function useTrackMetadataCoverPreview() {
   const coverPreviewUrl = ref('');
-  let coverLoadId = 0;
-  let temporaryCoverUrl: string | null = null;
-
-  function clearTemporaryCoverUrl() {
-    revokeTemporaryObjectUrl(temporaryCoverUrl);
-    temporaryCoverUrl = null;
-  }
-
-  function stopCoverPreviewLoading() {
-    coverLoadId += 1;
-    clearTemporaryCoverUrl();
-  }
+  let loadRequestId = 0;
 
   async function loadCoverPreview(track: Track) {
-    const currentLoadId = ++coverLoadId;
-    clearTemporaryCoverUrl();
-
-    const artworkUrl = usableArtworkDisplaySrc(trackArtworkSource(track));
-    if (artworkUrl) {
-      coverPreviewUrl.value = artworkUrl;
-      return;
-    }
-
+    const requestId = ++loadRequestId;
     coverPreviewUrl.value = '';
-    const cover = await readCoverThumbnail(track.path).catch(() => null);
-    if (currentLoadId !== coverLoadId) return;
-
-    const objectUrl = coverImageObjectUrl(cover);
-    if (!objectUrl) return;
-    temporaryCoverUrl = objectUrl;
-    coverPreviewUrl.value = objectUrl;
+    try {
+      const originalPath = await readTrackCoverOriginal(track.path);
+      if (requestId !== loadRequestId) return;
+      coverPreviewUrl.value = originalPath ? convertFileSrc(originalPath) : '';
+    } catch {
+      if (requestId === loadRequestId) coverPreviewUrl.value = '';
+    }
   }
 
   function handleCoverError() {
     coverPreviewUrl.value = '';
-    clearTemporaryCoverUrl();
+  }
+
+  function stopCoverPreviewLoading() {
+    loadRequestId += 1;
   }
 
   return {

@@ -16,6 +16,24 @@ WASM 音源/歌词插件 -> TrackLyrics -> Rust 歌词解析 -> 歌词渲染插�
 - 宿主负责生命周期、播放时钟、播放状态、跳转、错误回退和全局歌词操作。
 - 通用设置留在播放器设置；渲染插件设置使用插件配置存储。
 
+## 外置渲染协议 v2
+
+外置模块必须提供 `mount(root, api)`、`update(message)` 和 `destroy()`。宿主不再传递完整上下文，也不兼容旧版 `mount(root, context, api)` 或 `update(context)`。
+
+iframe 加载后先收到 `{ type: 'init', protocolVersion: 2 }`，模块挂载完成后再按数据职责接收消息：
+
+| 消息 | 数据 | 发送时机 |
+| --- | --- | --- |
+| `track` | `trackKey`、`activeTrack` | 当前歌曲或当前封面变化 |
+| `lyrics` | `trackKey`、`lines` | 当前歌词变化；`trackKey` 用于丢弃切歌竞态产生的旧歌词 |
+| `queue` | `queueTracks` | 播放队列变化 |
+| `background` | `background` | 歌词页背景配置变化 |
+| `config` | `config` | 当前插件配置变化 |
+| `playback` | 时间、播放/收藏/音量/倍速/模式状态 | 对应播放状态变化 |
+| `lyrics-ui` | 当前歌词索引、偏移、字号、颜色和加载状态 | 对应歌词 UI 状态变化 |
+
+`activeTrack` 和 `queueTracks` 只包含渲染所需的歌曲元数据，不包含歌词或原始音源对象。歌曲时长只从 `activeTrack.duration` 读取；顶层 `duration` 已删除。当前歌曲可额外携带 `artworkDataUrl`，队列与歌词互不写入歌曲对象。
+
 ## 当前状态
 
 | 步骤 | 状态 | 验收方式 |

@@ -608,13 +608,17 @@ fn scan_folder(app: &AppHandle, params: Value) -> Result<Value, String> {
         .iter()
         .map(|track| track.path.clone())
         .collect::<HashSet<_>>();
-    let state = app.state::<AppState>();
-    let db = state.db.lock().map_err(|err| err.to_string())?;
-    for track in &scanned_tracks {
-        upsert_track(&db, track, None)?;
-    }
-    delete_missing_tracks_for_dir(&db, &root, &scanned_paths)?;
-    let library_track_count = read_tracks(&db)?.len();
+    let (library_track_count, removed_sources) = {
+        let state = app.state::<AppState>();
+        let db = state.db.lock().map_err(|err| err.to_string())?;
+        for track in &scanned_tracks {
+            upsert_track(&db, track, None, Some(&root))?;
+        }
+        let removed_sources = delete_missing_tracks_for_dir(&db, &root, &scanned_paths)?;
+        let library_track_count = read_tracks(&db)?.len();
+        (library_track_count, removed_sources)
+    };
+    crate::player::remove_library_queue_sources(app, removed_sources)?;
 
     Ok(json!({
         "ok": true,
@@ -812,6 +816,7 @@ fn download_track(app: &AppHandle, params: Value) -> Result<Value, String> {
         })?;
     let task_id =
         string_arg(&params, "taskId").unwrap_or_else(|| format!("mcp-download-{}", now_ms()));
+    let plugins = read_download_plugins(app, track.source_provider_id.as_deref())?;
     let request = DownloadTrackRequest {
         task_id: Some(task_id.clone()),
         download_dir,
@@ -824,7 +829,7 @@ fn download_track(app: &AppHandle, params: Value) -> Result<Value, String> {
         track_lyrics: params
             .get("trackLyrics")
             .and_then(|value| serde_json::from_value::<TrackLyrics>(value.clone()).ok()),
-        plugins: read_download_plugins(app)?,
+        plugins,
     };
 
     let response = crate::downloads::enqueue_download_online_track(app.clone(), request);
@@ -837,15 +842,13 @@ fn download_track(app: &AppHandle, params: Value) -> Result<Value, String> {
 
 fn read_download_plugins(
     app: &AppHandle,
+    provider_id: Option<&str>,
 ) -> Result<Vec<crate::plugins::PluginPlaybackPlanPlugin>, String> {
-    let store = read_store(app)?;
-    crate::plugins::playback_plugins_from_values(
-        store
-            .get("plugins.installed")
-            .cloned()
-            .unwrap_or_else(|| json!([])),
-        store.get("plugins.configs").cloned(),
-    )
+    let provider_id = provider_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "download track is missing a source provider".to_string())?;
+    crate::plugins::read_playback_plugin(app, provider_id)
 }
 
 fn list_resources() -> Result<Value, String> {

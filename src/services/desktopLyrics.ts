@@ -27,11 +27,24 @@ export interface DesktopLyricsState {
   lyricColor: string;
 }
 
+let desktopLyricsWindow: WebviewWindow | null = null;
+
+function trackDesktopLyricsWindow(window: WebviewWindow) {
+  desktopLyricsWindow = window;
+  void window.once('tauri://destroyed', () => {
+    if (desktopLyricsWindow === window) {
+      desktopLyricsWindow = null;
+    }
+  });
+  return window;
+}
+
 export async function openDesktopLyricsWindow() {
   if (!isTauriRuntime()) return null;
 
   const existingWindow = await WebviewWindow.getByLabel(DESKTOP_LYRICS_LABEL);
   if (existingWindow) {
+    trackDesktopLyricsWindow(existingWindow);
     await existingWindow.show();
     await existingWindow.setAlwaysOnTop(true);
     return existingWindow;
@@ -62,6 +75,7 @@ export async function openDesktopLyricsWindow() {
     shadow: false,
     focus: false,
   });
+  trackDesktopLyricsWindow(lyricsWindow);
 
   await new Promise<void>((resolve) => {
     const fallbackTimer = window.setTimeout(resolve, 300);
@@ -71,6 +85,9 @@ export async function openDesktopLyricsWindow() {
     });
     void lyricsWindow.once('tauri://error', () => {
       window.clearTimeout(fallbackTimer);
+      if (desktopLyricsWindow === lyricsWindow) {
+        desktopLyricsWindow = null;
+      }
       resolve();
     });
   });
@@ -83,6 +100,7 @@ export async function toggleDesktopLyricsWindow() {
 
   const existingWindow = await WebviewWindow.getByLabel(DESKTOP_LYRICS_LABEL);
   if (existingWindow) {
+    desktopLyricsWindow = null;
     await existingWindow.close();
     return null;
   }
@@ -91,6 +109,7 @@ export async function toggleDesktopLyricsWindow() {
 }
 
 export async function broadcastDesktopLyricsState(state: DesktopLyricsState) {
-  if (!isTauriRuntime()) return;
+  if (!isTauriRuntime() || !desktopLyricsWindow) return;
+
   await emit(DESKTOP_LYRICS_UPDATE_EVENT, state);
 }

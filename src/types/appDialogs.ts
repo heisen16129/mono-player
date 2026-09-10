@@ -35,6 +35,7 @@ export interface AppDialogsEmits {
   addTrackToPlaylist: [track: Track, playlist: UserPlaylist];
   cancelScanFolders: [];
   changePlaylistName: [value: string];
+  chooseTrackCoverImage: [];
   choosePlaylistCover: [];
   clearPlaylistCover: [];
   closeAddToPlaylistDialog: [];
@@ -48,8 +49,8 @@ export interface AppDialogsEmits {
   openCreatePlaylistFromAddDialog: [];
   removeScanFolder: [path: string];
   saveTrackMetadata: [value: TrackMetadataFormValue];
-  saveCoverCrop: [payload: { x: number; y: number; size: number }];
-  savePlaylistCoverCrop: [payload: { x: number; y: number; size: number }];
+  saveCoverCrop: [payload: { x: number; y: number; size: number; imageDataUrl?: string }];
+  savePlaylistCoverCrop: [payload: { x: number; y: number; size: number; imageDataUrl?: string }];
   updateScanFolderChecked: [path: string, checked: boolean];
 }
 
@@ -58,6 +59,7 @@ export interface AppDialogsListeners {
   onAddTrackToPlaylist: (...args: AppDialogsEmits['addTrackToPlaylist']) => void;
   onCancelScanFolders: () => void;
   onChangePlaylistName: (...args: AppDialogsEmits['changePlaylistName']) => void;
+  onChooseTrackCoverImage: () => void;
   onChoosePlaylistCover: () => void;
   onClearPlaylistCover: () => void;
   onCloseAddToPlaylistDialog: () => void;

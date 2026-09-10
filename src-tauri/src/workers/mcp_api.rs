@@ -1,5 +1,5 @@
 use crate::workers::{
-    lifecycle::{RestartPolicy, WorkerChild, WorkerRuntimeStatus},
+    lifecycle::{WorkerChild, WorkerRuntimeStatus},
     MCP_API_WORKER_FLAG,
 };
 use serde_json::{json, Value};
@@ -20,10 +20,6 @@ pub(crate) struct McpApiWorkerState {
 }
 
 impl McpApiWorkerState {
-    pub(crate) fn restart_policy(&self) -> RestartPolicy {
-        RestartPolicy::NoRestart
-    }
-
     pub(crate) fn start(
         bridge_file: PathBuf,
         host: String,

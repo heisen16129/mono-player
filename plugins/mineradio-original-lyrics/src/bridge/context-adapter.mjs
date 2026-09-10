@@ -1,54 +1,75 @@
 const text = (value, fallback = '') => String(value ?? fallback).trim();
 
-export function mergeContext(current, next) {
-  const previous = current || {};
-  const incoming = next || {};
-  const hasTrack = Object.prototype.hasOwnProperty.call(incoming, 'activeTrack');
-  const oldTrack = previous.activeTrack;
-  const newTrack = incoming.activeTrack;
-  const sameTrack = oldTrack && newTrack
-    && text(oldTrack.id ?? oldTrack.path) === text(newTrack.id ?? newTrack.path);
+export function createContext() {
   return {
-    ...previous,
-    ...incoming,
-    activeTrack: hasTrack
-      ? (newTrack ? { ...(sameTrack ? oldTrack : {}), ...newTrack } : null)
-      : oldTrack,
-    config: { ...(previous.config || {}), ...(incoming.config || {}) },
+    activeTrack: null,
+    queueTracks: [],
+    lines: [],
+    background: {},
+    config: {},
+    playback: {
+      currentTime: 0,
+      isPlaying: false,
+      isFavorite: false,
+      volume: 0,
+      isMuted: false,
+      playbackRate: 1,
+      playbackMode: 'fixed',
+      playbackModeLabel: '',
+    },
+    lyricsUi: {
+      activeLyricIndex: -1,
+      lyricTimeOffset: 0,
+      fontSize: 17,
+      lyricColor: null,
+      useThemeLyricColor: true,
+      isLoading: false,
+      loadingText: '',
+      emptyMessage: '',
+      locale: 'zh-CN',
+    },
   };
 }
 
-export function artwork(track, fallback = '') {
+export function applyMessage(context, message) {
+  if (message?.type === 'track') context.activeTrack = message.activeTrack || null;
+  else if (message?.type === 'lyrics') context.lines = Array.isArray(message.lines) ? message.lines : [];
+  else if (message?.type === 'queue') context.queueTracks = Array.isArray(message.queueTracks) ? message.queueTracks : [];
+  else if (message?.type === 'background') context.background = message.background || {};
+  else if (message?.type === 'config') context.config = message.config || {};
+  else if (message?.type === 'playback') context.playback = { ...context.playback, ...(message.playback || {}) };
+  else if (message?.type === 'lyrics-ui') context.lyricsUi = { ...context.lyricsUi, ...(message.lyricsUi || {}) };
+  else return false;
+  return true;
+}
+
+export function artwork(track) {
   return text(
     track?.artworkDataUrl
       || track?.associatedArtwork
-      || track?.artwork
-      || track?.cover
-      || track?.picUrl
-      || fallback,
+      || track?.artwork,
   );
 }
 
-function artist(track, fallback = '') {
+function artist(track) {
   if (Array.isArray(track?.artist)) return track.artist.filter(Boolean).join(' / ');
-  return text(track?.artist, fallback);
+  return text(track?.artist);
 }
 
-function durationSeconds(track, fallback = 0) {
-  const value = Number(track?.duration ?? track?.durationMs ?? fallback) || 0;
-  return value > 1000 ? value / 1000 : value;
+function durationSeconds(track) {
+  return Math.max(0, Number(track?.duration) || 0);
 }
 
-export function toSong(track, fallback = {}) {
+export function toSong(track) {
   if (!track) return null;
   return {
     id: text(track.id ?? track.path ?? `${track.title || ''}|${track.artist || ''}`),
-    name: text(track.title ?? track.name, fallback.title || '未在播放'),
-    title: text(track.title ?? track.name, fallback.title || '未在播放'),
-    artist: artist(track, fallback.artist),
-    album: text(track.album, fallback.album),
-    cover: artwork(track, fallback.coverUrl),
-    duration: durationSeconds(track, fallback.duration),
+    name: text(track.title, '未在播放'),
+    title: text(track.title, '未在播放'),
+    artist: artist(track),
+    album: text(track.album),
+    cover: artwork(track),
+    duration: durationSeconds(track),
     source: 'local',
     provider: 'local',
     type: 'local',
@@ -56,9 +77,9 @@ export function toSong(track, fallback = {}) {
 }
 
 export function toRuntimeContext(context) {
-  const activeSong = toSong(context?.activeTrack, context || {});
+  const activeSong = toSong(context?.activeTrack);
   const queue = (Array.isArray(context?.queueTracks) ? context.queueTracks : [])
-    .map((track) => toSong(track, context || {}))
+    .map((track) => toSong(track))
     .filter(Boolean);
   if (activeSong && !queue.some((song) => song.id === activeSong.id)) queue.unshift(activeSong);
   const activeIndex = activeSong ? Math.max(0, queue.findIndex((song) => song.id === activeSong.id)) : -1;
@@ -66,14 +87,14 @@ export function toRuntimeContext(context) {
     track: activeSong,
     queue,
     activeIndex,
-    currentTime: Math.max(0, Number(context?.currentTime) || 0),
-    duration: Math.max(0, Number(context?.duration) || activeSong?.duration || 0),
-    playing: Boolean(context?.isPlaying),
-    favorite: Boolean(context?.isFavorite),
-    muted: Boolean(context?.isMuted),
-    volume: Math.min(1, Math.max(0, (Number(context?.volume) || 0) / 100)),
-    playbackRate: Math.max(0.25, Number(context?.playbackRate) || 1),
-    playbackMode: text(context?.playbackMode, 'fixed'),
+    currentTime: Math.max(0, Number(context?.playback?.currentTime) || 0),
+    duration: Math.max(0, Number(activeSong?.duration) || 0),
+    playing: Boolean(context?.playback?.isPlaying),
+    favorite: Boolean(context?.playback?.isFavorite),
+    muted: Boolean(context?.playback?.isMuted),
+    volume: Math.min(1, Math.max(0, (Number(context?.playback?.volume) || 0) / 100)),
+    playbackRate: Math.max(0.25, Number(context?.playback?.playbackRate) || 1),
+    playbackMode: text(context?.playback?.playbackMode, 'fixed'),
     background: {
       source: text(context?.background?.source, 'cover'),
       color: text(context?.background?.color, '#000000'),
@@ -126,5 +147,5 @@ export function toLyrics(lines) {
 
 export function contextKey(context) {
   const track = context?.activeTrack;
-  return [track?.id, track?.path, artwork(track, context?.coverUrl)].map((value) => text(value)).join('|');
+  return [track?.id, track?.path, artwork(track)].map((value) => text(value)).join('|');
 }

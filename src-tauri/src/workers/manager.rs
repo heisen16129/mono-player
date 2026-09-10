@@ -1,7 +1,4 @@
-use crate::workers::{
-    lifecycle::WorkerRuntimeStatus,
-    protocol::{decode_message, encode_line, WorkerMessage, WorkerRequest},
-};
+use crate::workers::protocol::{decode_message, encode_line, WorkerMessage, WorkerRequest};
 use std::{
     io::{BufRead, BufReader, Write},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
@@ -9,20 +6,15 @@ use std::{
 };
 
 pub(crate) struct WorkerProcess {
-    worker: &'static str,
     child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
-    started_at_ms: u128,
-    last_error: Option<String>,
 }
 
 pub(crate) struct WorkerProcessParts {
-    pub(crate) worker: &'static str,
     pub(crate) child: Child,
     pub(crate) stdin: ChildStdin,
     pub(crate) stdout: BufReader<ChildStdout>,
-    pub(crate) started_at_ms: u128,
 }
 
 impl WorkerProcess {
@@ -33,12 +25,9 @@ impl WorkerProcess {
     ) -> Result<Self, String> {
         let parts = Self::spawn_current_exe_parts(worker, worker_flag, args)?;
         Ok(Self {
-            worker: parts.worker,
             child: parts.child,
             stdin: parts.stdin,
             stdout: parts.stdout,
-            started_at_ms: parts.started_at_ms,
-            last_error: None,
         })
     }
 
@@ -89,11 +78,9 @@ impl WorkerProcess {
         }
 
         Ok(WorkerProcessParts {
-            worker,
             child,
             stdin,
             stdout: BufReader::new(stdout),
-            started_at_ms: crate::workers::worker_started_at_ms(),
         })
     }
 
@@ -122,7 +109,6 @@ impl WorkerProcess {
                 .read_line(&mut response)
                 .map_err(|err| err.to_string())?;
             if bytes_read == 0 {
-                self.last_error = Some("worker closed stdout".to_string());
                 return Err("worker closed stdout".to_string());
             }
 
@@ -136,28 +122,6 @@ impl WorkerProcess {
 
     pub(crate) fn id(&self) -> u32 {
         self.child.id()
-    }
-
-    pub(crate) fn is_running(&mut self) -> Result<bool, String> {
-        match self.child.try_wait().map_err(|err| err.to_string())? {
-            Some(status) => {
-                self.last_error = Some(format!("{} worker exited: {status}", self.worker));
-                Ok(false)
-            }
-            None => Ok(true),
-        }
-    }
-
-    pub(crate) fn status(&mut self) -> WorkerRuntimeStatus {
-        match self.is_running() {
-            Ok(true) => WorkerRuntimeStatus::running(
-                self.worker,
-                Some(self.child.id()),
-                Some(self.started_at_ms),
-            ),
-            Ok(false) => WorkerRuntimeStatus::stopped(self.worker, self.last_error.clone()),
-            Err(error) => WorkerRuntimeStatus::stopped(self.worker, Some(error)),
-        }
     }
 
     pub(crate) fn stop(&mut self) {

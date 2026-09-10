@@ -7,7 +7,6 @@ export interface McpServiceSnapshot {
   pid: number | null;
   startedAtMs: number | null;
   error: string | null;
-  restartPolicy: string | null;
   endpoint: string;
   healthEndpoint: string;
 }
@@ -18,7 +17,6 @@ const fallbackSnapshot: McpServiceSnapshot = {
   pid: null,
   startedAtMs: null,
   error: null,
-  restartPolicy: 'noRestart',
   endpoint: 'http://127.0.0.1:17331/mcp',
   healthEndpoint: 'http://127.0.0.1:17331/health',
 };

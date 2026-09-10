@@ -1,5 +1,5 @@
 import { computed, onMounted, onUnmounted, ref, watch, type ComputedRef } from 'vue';
-import { listInstalledPlugins } from '../services/plugins';
+import { listInstalledPluginManifests } from '../services/plugins';
 
 export const PLUGINS_CHANGED_EVENT = 'mono:plugins-changed';
 
@@ -12,7 +12,7 @@ export function useMusicSourcePluginAvailability(pluginsEnabled: ComputedRef<boo
       return;
     }
 
-    const plugins = await listInstalledPlugins().catch(() => []);
+    const plugins = await listInstalledPluginManifests().catch(() => []);
     hasInstalledMusicSourcePlugin.value = plugins.some((plugin) => (
       plugin.enabled
       && plugin.kind === 'music'

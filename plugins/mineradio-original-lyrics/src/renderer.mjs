@@ -9,12 +9,12 @@ import {
 import upstreamAdapterSource from './upstream-adapter.js.part';
 import pluginOverrides from './plugin-overrides.css';
 import skullAssetUrl from '../upstream/public/assets/skull-decimation-points.bin';
-import { mergeContext, toRuntimeContext } from './bridge/context-adapter.mjs';
+import { applyMessage, createContext, toRuntimeContext } from './bridge/context-adapter.mjs';
 import { createWallpaperSampler } from './bridge/wallpaper-sampler.mjs';
 
 let target = null;
 let rendererApi = null;
-let context = {};
+let context = createContext();
 let runtimeApi = null;
 let styleElement = null;
 let cleanupActions = null;
@@ -117,7 +117,7 @@ function bindHostActions() {
     if (action) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      dispatch(action, { observedPlaying: Boolean(context.isPlaying) });
+      dispatch(action, { observedPlaying: Boolean(context.playback.isPlaying) });
       return;
     }
     const queueItem = event.target?.closest?.('[data-queue-index]');
@@ -152,7 +152,7 @@ function bindHostActions() {
   document.getElementById('progress-bar')?.addEventListener('pointerup', (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(1, rect.width)));
-    dispatch('seekTime', { time: ratio * (Number(context.duration) || 0) });
+    dispatch('seekTime', { time: ratio * (Number(context.activeTrack?.duration) || 0) });
   }, { signal: abort.signal });
   document.getElementById('volume-slider')?.addEventListener('input', (event) => {
     const originalVolume = Math.min(1, Math.max(0, Number(event.currentTarget.value) || 0));
@@ -179,8 +179,7 @@ function runOriginalRuntime() {
   if (!runtimeApi) throw new Error('Mineradio original adapter did not initialize.');
 }
 
-function applyContext(nextContext) {
-  context = mergeContext(context, nextContext);
+function renderContext() {
   const runtimeContext = toRuntimeContext(context);
   const isNativeScene = runtimeContext.background?.source === 'wallpaper'
     && runtimeContext.background?.wallpaperProjectType === 'scene';
@@ -197,10 +196,15 @@ function applyContext(nextContext) {
   }
 }
 
-async function mount(nextTarget, initialContext, api) {
+function update(message) {
+  if (!applyMessage(context, message)) return;
+  renderContext();
+}
+
+async function mount(nextTarget, api) {
   target = nextTarget;
   rendererApi = api;
-  context = initialContext || {};
+  context = createContext();
   target.dataset.mineradioOriginalRoot = 'true';
   target.innerHTML = UPSTREAM_BODY_HTML;
   styleElement = document.createElement('style');
@@ -211,7 +215,7 @@ async function mount(nextTarget, initialContext, api) {
   cleanupActions = bindHostActions();
   runOriginalRuntime();
   wallpaperSampler = createWallpaperSampler(target);
-  applyContext(context);
+  renderContext();
   target.dataset.mineradioOriginalModules = String(UPSTREAM_MODULE_COUNT);
 }
 
@@ -239,7 +243,7 @@ function destroy() {
   }
   target = null;
   rendererApi = null;
-  context = {};
+  context = createContext();
   runtimeApi = null;
   styleElement = null;
   cleanupActions = null;
@@ -252,7 +256,7 @@ function destroy() {
 
 export default {
   mount,
-  update(nextContext) { applyContext(nextContext || {}); },
+  update,
   updateAudioFrame(frame) { runtimeApi?.setAudioFrame(frame || null); },
   destroy,
 };

@@ -1,6 +1,5 @@
 import type { ComputedRef } from 'vue';
 import { downloadCoverFile, downloadLyricsFile } from '../services/downloads';
-import { clearCoverThumbnailCache } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
 import type { Track, TrackLyrics } from '../types/music';
 import { artistLabel } from '../utils/artist';
@@ -14,7 +13,6 @@ interface LyricsDownloadOptions {
   activeLyrics: ComputedRef<TrackLyrics | null | undefined>;
   activeTrack: ComputedRef<Track | null>;
   closeMenu: () => void;
-  onCoverChanged: (artwork?: string | null) => void;
   onNotify: (message: string, variant?: 'success' | 'error') => void;
   player: PlayerStore;
 }
@@ -40,7 +38,7 @@ function lyricsDownloadTitle(track: Track) {
   return `${title} - ${artist}`;
 }
 
-export function useLyricsDownload({ activeLyricFormats, activeTrack, closeMenu, onCoverChanged, onNotify, player }: LyricsDownloadOptions) {
+export function useLyricsDownload({ activeLyricFormats, activeTrack, closeMenu, onNotify, player }: LyricsDownloadOptions) {
   function lyricsDownloadDir(track: Track) {
     return localTrackFolder(track.path) || player.settings.downloadDir;
   }
@@ -116,6 +114,7 @@ export function useLyricsDownload({ activeLyricFormats, activeTrack, closeMenu, 
     try {
       const result = await downloadCoverFile({
         downloadDir: player.settings.downloadDir,
+        trackId: track.id,
         trackPath: track.path,
         title: track.title,
         artist: artistLabel(track.artist, ''),
@@ -123,10 +122,6 @@ export function useLyricsDownload({ activeLyricFormats, activeTrack, closeMenu, 
         mimeType: null,
         data: null,
       });
-      if (result.artwork) {
-        await clearCoverThumbnailCache(track.path);
-        onCoverChanged(result.artwork);
-      }
       onNotify(result.embeddedInTrack ? '封面已写入歌曲文件' : '封面已保存为图片', 'success');
       closeMenu();
     } catch (error) {

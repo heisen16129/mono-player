@@ -19,7 +19,6 @@ export interface LyricsViewProps {
 
 export interface LyricsViewEmits {
   close: [];
-  coverChanged: [artwork?: string | null];
   lyricsCleared: [];
   lyricsFound: [
     lyrics: TrackLyrics,
@@ -42,7 +41,6 @@ export interface LyricsViewEmits {
 
 export interface LyricsViewListeners {
   onClose: () => void;
-  onCoverChanged: (artwork?: string | null) => void;
   onLyricsCleared: () => void;
   onLyricsFound: (...args: LyricsViewEmits['lyricsFound']) => void;
   onNotify: (...args: LyricsViewEmits['notify']) => void;

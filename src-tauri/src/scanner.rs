@@ -55,14 +55,18 @@ async fn scan_music_dir_inner(
         .map(|track| track.path.clone())
         .collect::<HashSet<_>>();
 
-    let db = state.db.lock().map_err(|err| err.to_string())?;
-    for track in scanned_tracks {
-        upsert_track(&db, &track, Some(&scan_id))?;
-    }
-    delete_missing_tracks_for_dir(&db, &root, &scanned_paths)?;
-    delete_tracks_without_files(&db)?;
-    let tracks = read_tracks(&db)?;
-    let added_tracks = read_latest_added_tracks(&db)?;
+    let (tracks, added_tracks, removed_sources) = {
+        let db = state.db.lock().map_err(|err| err.to_string())?;
+        for track in scanned_tracks {
+            upsert_track(&db, &track, Some(&scan_id), Some(&root))?;
+        }
+        let mut removed_sources = delete_missing_tracks_for_dir(&db, &root, &scanned_paths)?;
+        removed_sources.extend(delete_tracks_without_files(&db)?);
+        let tracks = read_tracks(&db)?;
+        let added_tracks = read_latest_added_tracks(&db)?;
+        (tracks, added_tracks, removed_sources)
+    };
+    crate::player::remove_library_queue_sources(&app, removed_sources)?;
     let added_track_ids = added_tracks
         .iter()
         .map(|track| track.id)
@@ -91,19 +95,17 @@ async fn scan_music_dir_in_worker(
     tauri::async_runtime::spawn_blocking(move || {
         let mut tracks = Vec::new();
         crate::workers::run_scan_worker(&scan_worker, path, |mut track| {
-            track.artwork = match crate::covers::cached_cover_original_file_url_in(
-                &cache_root,
-                Path::new(&track.path),
-            ) {
-                Ok(artwork) => artwork,
-                Err(error) => {
-                    eprintln!(
-                        "[scanner] read cover failed path={} error={}",
-                        track.path, error
-                    );
-                    None
-                }
-            };
+            track.artwork =
+                match crate::covers::cached_cover_files_in(&cache_root, Path::new(&track.path)) {
+                    Ok(cover_files) => cover_files.map(|files| files.thumbnail_url),
+                    Err(error) => {
+                        eprintln!(
+                            "[scanner] read cover failed path={} error={}",
+                            track.path, error
+                        );
+                        None
+                    }
+                };
             let _ = app.emit("scan://track", &track);
             tracks.push(track);
             Ok(())

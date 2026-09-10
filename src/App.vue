@@ -22,6 +22,7 @@ import { useAppMainContentSurfaceBindings } from './composables/useAppMainConten
 import { useAppPlayerSurfaceBindings } from './composables/useAppPlayerSurfaceBindings';
 import { useAppRustPlaybackRuntime } from './composables/useAppRustPlaybackRuntime';
 import { useContentNavigationActions } from './composables/useContentNavigationActions';
+import { useCurrentPlaybackCoverEvents } from './composables/useCurrentPlaybackCoverEvents';
 import { useDownloadController } from './composables/useDownloadController';
 import { useDownloadedTrackActions } from './composables/useDownloadedTrackActions';
 import { useExternalPlaybackEventBridge } from './composables/useExternalPlaybackEventBridge';
@@ -30,9 +31,10 @@ import { useLibraryCatalog } from './composables/useLibraryCatalog';
 import { useLibraryNavigation } from './composables/useLibraryNavigation';
 import { useLibraryPanelResize } from './composables/useLibraryPanelResize';
 import { useLocalPlaybackActions } from './composables/useLocalPlaybackActions';
-import { useLocalLibraryQueuePruning } from './composables/useLocalLibraryQueuePruning';
+import { useLocalLibraryPlaybackCleanup } from './composables/useLocalLibraryPlaybackCleanup';
 import { useLyricsDockAutoHide } from './composables/useLyricsDockAutoHide';
 import { useLyricsRendererSettings } from './composables/useLyricsRendererSettings';
+import { useLyricsRendererPreload } from './composables/useLyricsRendererPreload';
 import { useLyricsViewVisibility } from './composables/useLyricsViewVisibility';
 import { useLyricsWindowTransparency } from './composables/useLyricsWindowTransparency';
 import { wallpaperEngineRuntime } from './composables/useWallpaperEngineBackground';
@@ -71,6 +73,7 @@ const isAppReady = ref(false);
 const appPlayerSurfaceRef = ref<{ getController: () => PlayerDockController | null } | null>(null);
 const {
   activeRenderer: activeLyricsRenderer,
+  hydrateLyricsRendererSettings,
 } = useLyricsRendererSettings();
 const lyricsRendererOwnsSurface = computed(() => Boolean(activeLyricsRenderer.value?.ownsSurface));
 type AppRustPlaybackRuntime = ReturnType<typeof useAppRustPlaybackRuntime>;
@@ -93,6 +96,7 @@ const {
   isLibraryVisible,
   isLyricsOpen,
   isLyricsTransitioning,
+  preloadLyricsView,
   showLibraryAfterLyricsLeave,
   toggleLyricsView,
 } = useLyricsViewVisibility();
@@ -292,6 +296,19 @@ const {
   visibleTracks,
 });
 
+useCurrentPlaybackCoverEvents({
+  currentPlaybackTrack,
+  player,
+});
+
+useLyricsRendererPreload({
+  activeTrack,
+  hasMountedLyrics: hasOpenedLyrics,
+  hydrateRendererSettings: hydrateLyricsRendererSettings,
+  isAppReady,
+  mountLyrics: preloadLyricsView,
+});
+
 const {
   handleOnlineSearchStarted,
   openDiscoverMusicView,
@@ -486,8 +503,8 @@ const {
 });
 
 const {
-  applyTrackCoverRefresh,
   changeTrackCover,
+  chooseTrackCoverImage,
   closeCoverCropDialog,
   closeTrackMetadataDialog,
   coverCropImagePath,
@@ -583,14 +600,11 @@ const {
   setPlaybackMode,
 });
 
-useLocalLibraryQueuePruning({
+useLocalLibraryPlaybackCleanup({
   currentPlaybackTrack,
   libraryTracks: computed(() => player.tracks),
   onRemovedActiveLocalTrack: rustQueueSnapshotController.clearActivePlaybackState,
-  onRustQueueSnapshot: handleRustQueueSnapshot,
-  rustPlaybackQueue,
   selectedTrack,
-  showToast: showOnlineToast,
 });
 
 useAppBootstrap({
@@ -784,7 +798,6 @@ const {
     togglePlaybackRequestId,
   },
   actions: {
-    applyTrackCoverRefresh,
     changeLyricFormat,
     changeOnlinePlaybackQuality,
     clearActiveTrackLyrics,
@@ -851,6 +864,7 @@ const { appDialogsListeners, appDialogsProps } = useAppDialogsBindings({
     onChangePlaylistName: (value) => {
       newPlaylistName.value = value;
     },
+    onChooseTrackCoverImage: chooseTrackCoverImage,
     onChoosePlaylistCover: choosePlaylistCover,
     onClearPlaylistCover: clearPlaylistCover,
     onCloseAddToPlaylistDialog: closeAddToPlaylistDialog,
@@ -944,6 +958,7 @@ const {
           <LyricsView
             v-if="activeTrack && hasOpenedLyrics"
             v-show="isLyricsOpen && isLyricsSurfaceReady"
+            :class="{ 'lyrics-view-preloaded': !isLyricsOpen && !isLyricsTransitioning }"
             v-bind="{ ...lyricsViewPropsWithPlayerDock, ...lyricsViewListeners }"
           />
         </Transition>

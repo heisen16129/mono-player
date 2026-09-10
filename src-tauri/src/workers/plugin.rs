@@ -1,7 +1,6 @@
 use crate::{
     plugins::PluginHttpResponse,
     workers::{
-        lifecycle::{RestartPolicy, WorkerRuntimeStatus},
         manager::WorkerProcess,
         protocol::{decode_request, encode_line, methods, WorkerMessage, WorkerRequest},
         PLUGIN_WORKER_FLAG,
@@ -91,10 +90,6 @@ impl PluginWorkerState {
             download_worker: Mutex::new(start_plugin_worker(&cache_dir)?),
             cache_dir,
         })
-    }
-
-    pub(crate) fn restart_policy(&self) -> RestartPolicy {
-        RestartPolicy::RestartOnceAndRetry
     }
 
     pub(crate) fn fetch_plugin_catalog(&self, url: String) -> Result<String, String> {
@@ -323,27 +318,6 @@ impl PluginWorkerState {
                 Err(TryLockError::Poisoned(error)) => return Err(error.to_string()),
             }
         }
-    }
-
-    pub(crate) fn status(&self) -> WorkerRuntimeStatus {
-        match self.worker.lock() {
-            Ok(mut worker) => worker.status(),
-            Err(error) => WorkerRuntimeStatus::stopped("plugin", Some(error.to_string())),
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn restart_process(&self) -> Result<(), String> {
-        let mut worker = self.worker.lock().map_err(|err| err.to_string())?;
-        worker.stop();
-        *worker = start_plugin_worker(&self.cache_dir)?;
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn stop_process(&self) -> Result<(), String> {
-        self.worker.lock().map_err(|err| err.to_string())?.stop();
-        Ok(())
     }
 
     fn request(&self, request: &WorkerRequest) -> Result<WorkerMessage, String> {

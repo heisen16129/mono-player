@@ -8,9 +8,9 @@ export function useTrackCoverThumbUrl(track: MaybeRefOrGetter<Track>) {
   const coverUrl = ref('');
 
   watch(
-    () => trackArtworkSource(toValue(track)),
-    (artwork) => {
-      coverUrl.value = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
+    () => [trackArtworkSource(toValue(track)), toValue(track).coverVersion] as const,
+    ([artwork, coverVersion]) => {
+      coverUrl.value = usableArtworkDisplaySrc(artwork, failedArtworkUrls, coverVersion);
     },
     { immediate: true },
   );

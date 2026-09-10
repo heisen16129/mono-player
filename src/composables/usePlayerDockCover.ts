@@ -1,5 +1,4 @@
 import { computed, ref, watch, type ComputedRef } from 'vue';
-import { playerCoverCacheKey, setPlayerArtworkCoverCache } from '../services/playerCoverCache';
 import { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 import { trackArtworkSource, usableArtworkDisplaySrc } from '../utils/artwork';
@@ -22,16 +21,15 @@ export function usePlayerDockCover({ activeTrack }: PlayerDockCoverOptions) {
 
   watch(
     () => [
-      trackArtworkSource(activeTrack.value),
+      activeTrack.value?.associatedArtwork ?? trackArtworkSource(activeTrack.value),
       activeTrack.value?.coverVersion,
     ] as const,
     ([artwork]) => {
       coverUrl.value = '';
 
-      const artworkUrl = usableArtworkDisplaySrc(artwork, failedArtworkUrls);
+      const artworkUrl = usableArtworkDisplaySrc(artwork, failedArtworkUrls, activeTrack.value?.coverVersion);
       if (artworkUrl) {
         coverUrl.value = artworkUrl;
-        setPlayerArtworkCoverCache(playerCoverCacheKey(activeTrack.value), artworkUrl);
       }
     },
     { immediate: true },

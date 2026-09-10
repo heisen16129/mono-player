@@ -1,6 +1,6 @@
 import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
-import { listInstalledPlugins } from './plugins';
+import { getInstalledPlugin } from './plugins';
 import type { Track, TrackLyrics } from '../types/music';
 import type { PluginManifest } from '../types/plugin';
 
@@ -29,6 +29,7 @@ export interface DownloadLyricsFileResult {
 
 export interface DownloadCoverFileRequest {
   downloadDir: string;
+  trackId: number;
   trackPath?: string | null;
   title: string;
   artist: string | null;
@@ -65,9 +66,14 @@ export interface DownloadQueueEvent {
 }
 
 async function withInstalledPlugins(request: DownloadOnlineTrackRequest): Promise<DownloadOnlineTrackRequest> {
+  const providerId = request.track.sourceProviderId?.trim();
+  if (!providerId) throw new Error('在线歌曲缺少来源插件。');
+  const plugin = request.plugins?.find((item) => item.id === providerId)
+    ?? await getInstalledPlugin(providerId);
+  if (!plugin) throw new Error('歌曲来源插件未安装。');
   return {
     ...request,
-    plugins: request.plugins ?? await listInstalledPlugins(),
+    plugins: [plugin],
   };
 }
 

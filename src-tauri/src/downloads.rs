@@ -14,7 +14,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct DownloadTrackRequest {
@@ -81,6 +81,8 @@ pub(crate) struct DownloadLyricsRequest {
 pub(crate) struct DownloadCoverRequest {
     #[serde(rename = "downloadDir")]
     pub(crate) download_dir: String,
+    #[serde(rename = "trackId")]
+    pub(crate) track_id: i64,
     #[serde(rename = "trackPath")]
     pub(crate) track_path: Option<String>,
     pub(crate) title: String,
@@ -253,16 +255,34 @@ pub(crate) fn download_lyrics_file(
 
 #[tauri::command]
 pub(crate) fn download_cover_file(
+    app: AppHandle,
     state: State<'_, AppState>,
     player_state: State<'_, crate::player::PlayerState>,
     request: DownloadCoverRequest,
 ) -> ApiResponse<DownloadCoverResult> {
-    ApiResponse::from_result(download_cover_file_inner(state, player_state, request))
+    let event_id = request.track_id;
+    let event_path = request.track_path.clone().unwrap_or_default();
+    let associated_artwork = request.artwork_url.clone();
+    let result = download_cover_file_inner(&state, &player_state, request);
+
+    if let Ok(downloaded) = &result {
+        if let Some(artwork) = downloaded.artwork.clone() {
+            player_state.publish_track_cover_change(
+                &app,
+                event_id,
+                &event_path,
+                Some(artwork),
+                associated_artwork,
+            );
+        }
+    }
+
+    ApiResponse::from_result(result)
 }
 
 fn download_cover_file_inner(
-    state: State<'_, AppState>,
-    player_state: State<'_, crate::player::PlayerState>,
+    state: &State<'_, AppState>,
+    player_state: &State<'_, crate::player::PlayerState>,
     request: DownloadCoverRequest,
 ) -> Result<DownloadCoverResult, String> {
     eprintln!(
@@ -373,11 +393,15 @@ fn download_cover_file_inner(
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            if let Some(artwork) = write_track_sidecar_cover_file_url(
-                Path::new(track_path),
-                &data,
-                mime_type.as_ref(),
-            )? {
+            if write_track_sidecar_cover_file_url(Path::new(track_path), &data, mime_type.as_ref())?
+                .is_some()
+            {
+                let artwork = crate::covers::refresh_cached_cover_files_from_data_in(
+                    &player_state.cache_dir()?,
+                    Path::new(track_path),
+                    &data,
+                )?
+                .map(|files| files.thumbnail_url);
                 let db = state.db.lock().map_err(|err| err.to_string())?;
                 db.execute(
                     "UPDATE tracks SET artwork = ?1, updated_at = CURRENT_TIMESTAMP WHERE path = ?2",
@@ -387,7 +411,7 @@ fn download_cover_file_inner(
                 return Ok(DownloadCoverResult {
                     path: None,
                     embedded_in_track,
-                    artwork: Some(artwork),
+                    artwork,
                 });
             }
         }
@@ -400,10 +424,11 @@ fn download_cover_file_inner(
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            if let Some(artwork) = crate::covers::refresh_cached_cover_original_file_url_in(
+            if let Some(cover_files) = crate::covers::refresh_cached_cover_files_in(
                 &player_state.cache_dir()?,
                 Path::new(track_path),
             )? {
+                let artwork = cover_files.thumbnail_url;
                 let db = state.db.lock().map_err(|err| err.to_string())?;
                 db.execute(
                     "UPDATE tracks SET artwork = ?1, updated_at = CURRENT_TIMESTAMP WHERE path = ?2",

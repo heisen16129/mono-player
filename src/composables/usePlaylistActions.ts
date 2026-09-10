@@ -134,7 +134,7 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
     playlistCoverCropTargetId.value = null;
   }
 
-  async function savePlaylistCoverCrop(payload: { x: number; y: number; size: number }) {
+  async function savePlaylistCoverCrop(payload: { x: number; y: number; size: number; imageDataUrl?: string }) {
     if (!playlistCoverCropImagePath.value) return;
 
     isSavingPlaylistCoverCrop.value = true;

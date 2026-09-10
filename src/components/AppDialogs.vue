@@ -24,8 +24,10 @@ defineEmits<AppDialogsEmits>();
 
   <CoverCropDialog
     v-if="coverCropTrack && coverCropImagePath"
+    can-choose-image
     :image-path="coverCropImagePath"
     :saving="isSavingCoverCrop"
+    @choose-image="$emit('chooseTrackCoverImage')"
     @close="$emit('closeCoverCropDialog')"
     @confirm="$emit('saveCoverCrop', $event)"
   />

@@ -19,7 +19,6 @@ export function useRustPlaybackTransport({
   showToast,
 }: UseRustPlaybackTransportOptions) {
   async function playPreviousTrack() {
-    isAudioPlaying.value = false;
     try {
       handleRustQueueSnapshot(await playRustBackendPrevious());
     } catch (error) {
@@ -31,7 +30,6 @@ export function useRustPlaybackTransport({
   }
 
   async function playNextTrack() {
-    isAudioPlaying.value = false;
     try {
       handleRustQueueSnapshot(await playRustBackendNext());
     } catch (error) {
@@ -45,8 +43,12 @@ export function useRustPlaybackTransport({
   async function handlePlaybackFailure(message: string) {
     clearPreparingPlaybackState();
     player.error = null;
-    await stopRustBackend(false);
     isAudioPlaying.value = false;
+    try {
+      await stopRustBackend(false);
+    } catch {
+      // The playback state must remain stopped even if the failed worker cannot respond.
+    }
 
     showToast(message);
   }

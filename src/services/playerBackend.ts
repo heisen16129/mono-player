@@ -46,6 +46,14 @@ export interface RustPlaybackAdvancedEvent {
   position: number;
 }
 
+export interface RustCoverChangedEvent {
+  id: number;
+  path: string;
+  artwork: string | null;
+  associatedArtwork: string | null;
+  coverVersion: number;
+}
+
 function emptyQueueSnapshot(playbackMode = 'repeat'): RustQueueSnapshot {
   return { tracks: [], sources: [], currentSource: null, currentIndex: null, playbackMode };
 }
@@ -332,6 +340,14 @@ export function listenRustBackendAdvanced(callback: (event: RustPlaybackAdvanced
     console.log('[player://advanced]', event.payload);
     callback(event.payload);
   });
+}
+
+export function listenRustBackendCoverChanged(callback: (event: RustCoverChangedEvent) => void): Promise<() => void> {
+  if (!isTauriRuntime()) {
+    return Promise.resolve(() => {});
+  }
+
+  return listen<RustCoverChangedEvent>('player://cover-changed', (event) => callback(event.payload));
 }
 
 export function listenRustBackendQueue(callback: (snapshot: RustQueueSnapshot) => void): Promise<() => void> {
