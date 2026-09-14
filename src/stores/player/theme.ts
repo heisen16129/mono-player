@@ -14,9 +14,9 @@ interface PlayerThemeControllerOptions {
 export function createPlayerThemeController({ settings, customThemes }: PlayerThemeControllerOptions) {
   const appliedCustomThemeVariables = new Set<string>();
 
-  function persistSettings() {
+  function persistSettings(refreshTheme = true) {
     void writePersistentValue(SETTINGS_KEY, settings.value);
-    applySettingsSideEffects();
+    if (refreshTheme) applySettingsSideEffects();
   }
 
   function persistCustomThemes() {
@@ -38,11 +38,6 @@ export function createPlayerThemeController({ settings, customThemes }: PlayerTh
         void writePersistentValue(STARTUP_BG_KEY, startupBg);
       }
     });
-  }
-
-  function toggleTheme() {
-    settings.value.theme = 'blueWhite';
-    persistSettings();
   }
 
   function setTheme(theme: PlayerSettings['theme']) {
@@ -109,6 +104,5 @@ export function createPlayerThemeController({ settings, customThemes }: PlayerTh
     persistSettings,
     removeCustomTheme,
     setTheme,
-    toggleTheme,
   };
 }

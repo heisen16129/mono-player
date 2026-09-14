@@ -62,7 +62,7 @@ function captureShortcut(event: KeyboardEvent) {
 <style scoped>
 .shortcut-recorder {
   display: grid;
-  grid-template-columns: 168px 28px 28px;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
   gap: 6px;
   align-items: center;
   min-width: 0;

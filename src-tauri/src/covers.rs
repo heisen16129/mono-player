@@ -102,54 +102,70 @@ pub(crate) fn crop_cover_image(
     state: State<'_, PlayerState>,
     request: CropCoverImageRequest,
 ) -> ApiResponse<CropCoverImageResult> {
-    ApiResponse::from_result((|| {
-        let output_dir = mono_cache_dir(&state.cache_dir()?).join("cover-edits");
-        fs::create_dir_all(&output_dir).map_err(|err| err.to_string())?;
-        let output_path = output_dir.join(format!("{}.jpg", uuid::Uuid::new_v4()));
-        if let Some(image_data_url) = request.image_data_url.as_deref() {
-            let encoded = image_data_url
-                .strip_prefix("data:image/jpeg;base64,")
-                .ok_or_else(|| "Invalid edited cover image.".to_string())?;
-            if encoded.len() > 16 * 1024 * 1024 {
-                return Err("Edited cover image is too large.".to_string());
-            }
-            let data = STANDARD.decode(encoded).map_err(|err| err.to_string())?;
-            fs::write(&output_path, data).map_err(|err| err.to_string())?;
-        } else {
-            let image_path = PathBuf::from(request.image_path.trim());
-            let image = image::open(&image_path).map_err(|err| err.to_string())?;
-            let image_width = image.width();
-            let image_height = image.height();
-            if image_width == 0 || image_height == 0 {
-                return Err("Invalid cover image.".to_string());
-            }
+    ApiResponse::from_result(
+        state
+            .cache_dir()
+            .and_then(|root| crop_cover_image_in(&root, request)),
+    )
+}
 
-            let max_size = image_width.min(image_height);
-            let crop_size = request.size.clamp(1, max_size);
-            let x = request.x.min(image_width.saturating_sub(crop_size));
-            let y = request.y.min(image_height.saturating_sub(crop_size));
-            let cropped = image.crop_imm(x, y, crop_size, crop_size).to_rgb8();
-            let output = if crop_size > MAX_EDITED_COVER_SIZE {
-                image::imageops::resize(
-                    &cropped,
-                    MAX_EDITED_COVER_SIZE,
-                    MAX_EDITED_COVER_SIZE,
-                    FilterType::Triangle,
-                )
-            } else {
-                cropped
-            };
-            let file = fs::File::create(&output_path).map_err(|err| err.to_string())?;
-            let mut encoder = JpegEncoder::new_with_quality(file, 92);
-            encoder
-                .encode_image(&output)
-                .map_err(|err| err.to_string())?;
+fn crop_cover_image_in(
+    root: &Path,
+    request: CropCoverImageRequest,
+) -> Result<CropCoverImageResult, String> {
+    let cache_root = mono_cache_dir(root);
+    let output_dir = cache_root.join("cover-originals");
+    fs::create_dir_all(&output_dir).map_err(|err| err.to_string())?;
+    let filename = format!("custom-{}.jpg", uuid::Uuid::new_v4());
+    let output_path = output_dir.join(&filename);
+    if let Some(image_data_url) = request.image_data_url.as_deref() {
+        let encoded = image_data_url
+            .strip_prefix("data:image/jpeg;base64,")
+            .ok_or_else(|| "Invalid edited cover image.".to_string())?;
+        if encoded.len() > 16 * 1024 * 1024 {
+            return Err("Edited cover image is too large.".to_string());
+        }
+        let data = STANDARD.decode(encoded).map_err(|err| err.to_string())?;
+        fs::write(&output_path, data).map_err(|err| err.to_string())?;
+    } else {
+        let image_path = PathBuf::from(request.image_path.trim());
+        let image = image::open(&image_path).map_err(|err| err.to_string())?;
+        let image_width = image.width();
+        let image_height = image.height();
+        if image_width == 0 || image_height == 0 {
+            return Err("Invalid cover image.".to_string());
         }
 
-        Ok(CropCoverImageResult {
-            path: output_path.to_string_lossy().to_string(),
-        })
-    })())
+        let max_size = image_width.min(image_height);
+        let crop_size = request.size.clamp(1, max_size);
+        let x = request.x.min(image_width.saturating_sub(crop_size));
+        let y = request.y.min(image_height.saturating_sub(crop_size));
+        let cropped = image.crop_imm(x, y, crop_size, crop_size).to_rgb8();
+        let output = if crop_size > MAX_EDITED_COVER_SIZE {
+            image::imageops::resize(
+                &cropped,
+                MAX_EDITED_COVER_SIZE,
+                MAX_EDITED_COVER_SIZE,
+                FilterType::Triangle,
+            )
+        } else {
+            cropped
+        };
+        let file = fs::File::create(&output_path).map_err(|err| err.to_string())?;
+        let mut encoder = JpegEncoder::new_with_quality(file, 92);
+        encoder
+            .encode_image(&output)
+            .map_err(|err| err.to_string())?;
+    }
+
+    let thumbnail_dir = cache_root.join("cover-thumbnails");
+    fs::create_dir_all(&thumbnail_dir).map_err(|err| err.to_string())?;
+    let thumbnail_path = thumbnail_dir.join(filename);
+    let data = fs::read(&output_path).map_err(|err| err.to_string())?;
+    fs::write(&thumbnail_path, create_cover_thumbnail(&data)?).map_err(|err| err.to_string())?;
+    Ok(CropCoverImageResult {
+        path: output_path.to_string_lossy().to_string(),
+    })
 }
 
 pub(crate) fn cached_cover_files_in(
@@ -454,5 +470,50 @@ fn cover_extension(mime_type: &str) -> &'static str {
         "image/png" => "png",
         "image/webp" => "webp",
         _ => "jpg",
+    }
+}
+
+#[cfg(test)]
+mod crop_storage_tests {
+    use super::*;
+
+    #[test]
+    fn crops_create_original_and_thumbnail_without_edit_directory() {
+        let root = std::env::temp_dir().join(format!("mono-cover-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.jpg");
+        image::RgbImage::new(240, 180).save(&source).unwrap();
+        for image_data_url in [
+            None,
+            Some(format!(
+                "data:image/jpeg;base64,{}",
+                STANDARD.encode(fs::read(&source).unwrap())
+            )),
+        ] {
+            let result = crop_cover_image_in(
+                &root,
+                CropCoverImageRequest {
+                    image_data_url,
+                    image_path: source.to_string_lossy().into_owned(),
+                    x: 10,
+                    y: 10,
+                    size: 120,
+                },
+            )
+            .unwrap();
+            let original = PathBuf::from(result.path);
+            assert_eq!(
+                original.parent().unwrap(),
+                mono_cache_dir(&root).join("cover-originals")
+            );
+            assert!(image::open(&original).is_ok());
+            let thumbnail = mono_cache_dir(&root)
+                .join("cover-thumbnails")
+                .join(original.file_name().unwrap());
+            let thumbnail = image::open(thumbnail).unwrap();
+            assert_eq!((thumbnail.width(), thumbnail.height()), (96, 96));
+        }
+        assert!(!mono_cache_dir(&root).join("cover-edits").exists());
+        fs::remove_dir_all(root).unwrap();
     }
 }

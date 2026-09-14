@@ -54,6 +54,11 @@ async function chooseDownloadDir() {
   font-size: 13px;
 }
 
+.field-row > span:first-child {
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .path-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

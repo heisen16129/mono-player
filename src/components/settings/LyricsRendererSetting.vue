@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
+import { ChevronDown } from '@lucide/vue';
+import SettingsOptionSelect from './SettingsOptionSelect.vue';
 import { useLyricsRendererSettings } from '../../composables/useLyricsRendererSettings';
 import { usePlayerStore } from '../../stores/player';
 
@@ -12,9 +14,11 @@ const {
   selectLyricsRenderer,
 } = useLyricsRendererSettings();
 
-function selectRenderer(event: Event) {
-  selectLyricsRenderer((event.target as HTMLSelectElement).value);
-}
+const options = computed(() => rendererPlugins.value.map(plugin => ({
+  id: plugin.id,
+  name: locale.value === 'en-US' ? (plugin.nameEn ?? plugin.name) : plugin.name,
+})));
+const selectedName = computed(() => options.value.find(option => option.id === activeRendererId.value)?.name ?? '');
 
 onMounted(() => {
   void hydrateLyricsRendererSettings();
@@ -22,31 +26,22 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="renderer-setting">
-    <p>{{ locale === 'en-US' ? 'Lyrics page' : '歌词页面' }}</p>
-    <label class="field-row">
+  <details class="renderer-setting" open>
+    <summary>{{ locale === 'en-US' ? 'Lyrics page' : '歌词页面' }}</summary>
+    <div class="field-row">
       <span>{{ locale === 'en-US' ? 'Renderer' : '页面样式' }}</span>
-      <select v-model="activeRendererId" @change="selectRenderer">
-        <option v-for="plugin in rendererPlugins" :key="plugin.id" :value="plugin.id">
-          {{ locale === 'en-US' ? (plugin.nameEn ?? plugin.name) : plugin.name }}
-        </option>
-      </select>
-    </label>
-  </div>
+      <SettingsOptionSelect :options="options" :locale="locale" :value="activeRendererId" :label="locale === 'en-US' ? 'Renderer' : '页面样式'" @change="selectLyricsRenderer">
+        <span class="renderer-choice"><span>{{ selectedName }}</span><ChevronDown :size="14" aria-hidden="true" /></span>
+      </SettingsOptionSelect>
+    </div>
+  </details>
 </template>
 
 <style scoped>
 .renderer-setting {
-  display: grid;
-  gap: 10px;
-  padding-top: 4px;
-}
-
-.renderer-setting > p {
-  margin: 0;
-  color: var(--smw-text-body);
-  font-size: 13px;
-  font-weight: 650;
+  min-width: 0;
+  border: 1px solid var(--smw-border);
+  border-radius: 8px;
 }
 
 .field-row {
@@ -59,7 +54,11 @@ onMounted(() => {
   font-size: 13px;
 }
 
-.field-row select {
+.renderer-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   height: 34px;
   min-width: 0;
   padding: 0 10px;
@@ -71,7 +70,7 @@ onMounted(() => {
   outline: none;
 }
 
-.field-row select:focus {
+.field-row :deep(.device-trigger:focus-visible) .renderer-choice {
   border-color: var(--smw-button-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
 }

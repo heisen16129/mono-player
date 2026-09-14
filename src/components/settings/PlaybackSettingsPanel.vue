@@ -4,9 +4,8 @@ import { t } from '../../i18n';
 import { usePlayerStore } from '../../stores/player';
 import PlaybackAudioCacheSettings from './PlaybackAudioCacheSettings.vue';
 import PlaybackAudioOutputSettings from './PlaybackAudioOutputSettings.vue';
-import PlaybackFallbackSettings from './PlaybackFallbackSettings.vue';
+import PlaybackBehaviorSettings from './PlaybackBehaviorSettings.vue';
 import PlaybackSleepTimerSettings from './PlaybackSleepTimerSettings.vue';
-import PlaybackTransitionsSettings from './PlaybackTransitionsSettings.vue';
 
 const player = usePlayerStore();
 const locale = computed(() => player.settings.locale);
@@ -16,17 +15,11 @@ const locale = computed(() => player.settings.locale);
   <section class="settings-section">
     <h2>{{ t(locale, 'playback') }}</h2>
 
-    <PlaybackTransitionsSettings
-      :crossfade-playback="player.settings.crossfadePlayback"
-      :fade-playback="player.settings.fadePlayback"
-      :locale="locale"
-      :seamless-playback="player.settings.seamlessPlayback"
-      @set-crossfade-playback="player.setCrossfadePlayback"
-      @set-fade-playback="player.setFadePlayback"
-      @set-seamless-playback="player.setSeamlessPlayback"
-    />
+    <PlaybackBehaviorSettings />
 
     <PlaybackAudioCacheSettings
+      :download-dir="player.settings.downloadDir"
+      :set-download-dir="player.setDownloadDir"
       :audio-cache-dir="player.settings.audioCacheDir"
       :audio-cache-max-mb="player.settings.audioCacheMaxMb"
       :locale="locale"
@@ -47,13 +40,7 @@ const locale = computed(() => player.settings.locale);
       @set-sleep-timer-minutes="player.setSleepTimerMinutes"
     />
 
-    <PlaybackFallbackSettings
-      :locale="locale"
-      :online-playback-failure-action="player.settings.onlinePlaybackFailureAction"
-      :quality-fallback="player.settings.qualityFallback"
-      @set-online-playback-failure-action="player.setOnlinePlaybackFailureAction"
-      @set-quality-fallback="player.setQualityFallback"
-    />
+
   </section>
 </template>
 

@@ -1,4 +1,4 @@
-﻿import { defineStore } from 'pinia';
+import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { resolveLocale } from '../i18n';
 import { listLatestAddedTracks, listTracks, removeMusicDir, scanMusicDir } from '../services/music';
@@ -49,7 +49,6 @@ export const usePlayerStore = defineStore('player', () => {
     persistSettings,
     removeCustomTheme,
     setTheme,
-    toggleTheme,
   } = createPlayerThemeController({ settings, customThemes });
 
   const { favoriteTracks, isFavorite, toggleFavorite } = createPlayerFavoriteActions({
@@ -159,12 +158,10 @@ export const usePlayerStore = defineStore('player', () => {
     setAudioCacheDir,
     setAudioCacheMaxMb,
     setAudioOutputDeviceId,
-    setAutoHideLyricsDock,
     setCloseAction,
     setCrossfadePlayback,
     setDownloadDir,
     setAppShortcut,
-    setEnableLocalMetadataEditing,
     setEnableAppShortcuts,
     setEnablePlugins,
     setEnableTrackCoverEdit,
@@ -173,6 +170,7 @@ export const usePlayerStore = defineStore('player', () => {
     setFadePlayback,
     setLocale,
     setLyricFontColor,
+    setLyricEffectColor,
     setLyricFontSize,
     setLyricsBackground,
     previewLyricsBackground,
@@ -337,10 +335,10 @@ export const usePlayerStore = defineStore('player', () => {
     setLocale,
     setSleepTimerAction,
     setSleepTimerMinutes,
-    setAutoHideLyricsDock,
     setLyricFontSize,
     setUseThemeLyricColor,
     setLyricFontColor,
+    setLyricEffectColor,
     setLyricsBackground,
     previewLyricsBackground,
     setDownloadDir,
@@ -350,7 +348,6 @@ export const usePlayerStore = defineStore('player', () => {
     setSearchHistoryLimit,
     setShowTrackNumbers,
     setShowTrackCovers,
-    setEnableLocalMetadataEditing,
     setEnableTrackMetadataEdit,
     setEnableTrackCoverEdit,
     setEnableTrackDurationRefresh,
@@ -366,7 +363,6 @@ export const usePlayerStore = defineStore('player', () => {
     setTheme,
     addCustomTheme,
     removeCustomTheme,
-    toggleTheme,
     toggleFavorite,
     togglePlaybackMode,
   };

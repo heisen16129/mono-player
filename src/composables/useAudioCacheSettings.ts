@@ -6,6 +6,7 @@ import {
   getRustBackendDefaultCacheDir,
   getRustBackendSystemTempCacheDir,
   pruneRustBackendCache,
+  type RustCacheStatusState,
 } from '../services/playerBackend';
 
 interface UseAudioCacheSettingsOptions {
@@ -15,7 +16,7 @@ interface UseAudioCacheSettingsOptions {
 
 export function useAudioCacheSettings({ getAudioCacheMaxMb, setAudioCacheDir }: UseAudioCacheSettingsOptions) {
   const cacheCleanupMessage = ref('');
-  const cacheStatus = ref({ files: 0, bytes: 0 });
+  const cacheStatus = ref<RustCacheStatusState>({ files: 0, bytes: 0, path: '', directories: [] });
   const cacheUsedLabel = computed(() => `${(cacheStatus.value.bytes / 1024 / 1024).toFixed(1)} MB`);
 
   async function chooseAudioCacheDir() {
@@ -30,20 +31,18 @@ export function useAudioCacheSettings({ getAudioCacheMaxMb, setAudioCacheDir }: 
     }
   }
 
-  async function useSystemTempCacheDir() {
-    const cacheDir = await getRustBackendSystemTempCacheDir();
-    setAudioCacheDir(cacheDir);
-  }
-
-  async function useDefaultCacheDir() {
-    const cacheDir = await getRustBackendDefaultCacheDir();
-    setAudioCacheDir(cacheDir);
-  }
-
   async function clearAudioCache() {
     const result = await clearRustBackendCache();
     await refreshCacheStatus();
     cacheCleanupMessage.value = `已清理 ${result.removedFiles} 个文件，释放 ${(result.removedBytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  async function useDefaultCacheDir() {
+    setAudioCacheDir(await getRustBackendDefaultCacheDir());
+  }
+
+  async function useSystemTempCacheDir() {
+    setAudioCacheDir(await getRustBackendSystemTempCacheDir());
   }
 
   async function pruneAudioCache() {
@@ -60,10 +59,10 @@ export function useAudioCacheSettings({ getAudioCacheMaxMb, setAudioCacheDir }: 
     cacheStatus,
     cacheUsedLabel,
     chooseAudioCacheDir,
+    useDefaultCacheDir,
+    useSystemTempCacheDir,
     clearAudioCache,
     pruneAudioCache,
     refreshCacheStatus,
-    useDefaultCacheDir,
-    useSystemTempCacheDir,
   };
 }

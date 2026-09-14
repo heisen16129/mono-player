@@ -53,6 +53,7 @@ export const marketCategories = [
   { id: 'all', label: '全部', description: '显示全部插件' },
   { id: 'music', label: '音源', description: '搜索和播放在线音乐' },
   { id: 'lyrics', label: '歌词', description: '搜索、匹配和处理歌词' },
+  { id: 'lyrics-renderer', label: '歌词页面', description: '扩展歌词页面样式和播放视觉' },
   { id: 'metadata', label: '元数据', description: '补全封面、专辑和曲目信息' },
   { id: 'playlist', label: '歌单', description: '导入和导出歌单' },
   { id: 'theme', label: '主题', description: '安装播放器主题资源包' },

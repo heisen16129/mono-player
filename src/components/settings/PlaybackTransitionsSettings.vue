@@ -18,7 +18,7 @@ const emit = defineEmits<{
 <template>
   <div class="setting-group">
     <p>{{ locale === 'en-US' ? 'Transitions' : '播放过渡' }}</p>
-    <div class="option-list">
+    <div class="option-list transition-options">
       <PlaybackTransitionOptionRow
         :checked="seamlessPlayback"
         :label="locale === 'en-US' ? 'Seamless playback' : '无缝播放'"
@@ -54,6 +54,21 @@ const emit = defineEmits<{
   display: flex;
   flex-wrap: wrap;
   gap: 14px 44px;
+}
+
+.setting-group .option-list.transition-options:has(input[type='checkbox']) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.setting-group .transition-options :deep(.option-row:has(input[type='checkbox'])) {
+  gap: 4px;
+  padding: 8px 6px;
+  font-size: 11px;
+}
+
+.setting-group .transition-options :deep(.option-row:has(input[type='checkbox']):last-child:nth-child(odd)) {
+  grid-column: auto;
 }
 
 </style>

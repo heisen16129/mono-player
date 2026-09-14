@@ -2428,14 +2428,6 @@ pub(crate) fn fetch_plugin_catalog_backend(url: String) -> Result<String, String
     response.text().map_err(|err| err.to_string())
 }
 
-#[tauri::command]
-pub fn read_plugin_wasm_bytes(
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
-    entry: String,
-) -> ApiResponse<Vec<u8>> {
-    ApiResponse::from_result(worker.read_plugin_wasm_bytes(entry))
-}
-
 pub(crate) fn read_plugin_wasm_bytes_backend(
     entry: String,
     cache_root: Option<&Path>,
@@ -2521,26 +2513,6 @@ fn resolve_local_plugin_wasm_path(entry: &str) -> PathBuf {
         .into_iter()
         .find(|candidate| candidate.exists())
         .unwrap_or_else(|| path.to_path_buf())
-}
-
-#[tauri::command]
-pub fn plugin_http_request(
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
-    method: String,
-    url: String,
-    headers: Option<HashMap<String, String>>,
-    data: Option<String>,
-    plugin_id: Option<String>,
-    permissions: Option<Vec<String>>,
-) -> ApiResponse<PluginHttpResponse> {
-    ApiResponse::from_result(worker.plugin_http_request(
-        method,
-        url,
-        headers,
-        data,
-        plugin_id,
-        permissions,
-    ))
 }
 
 pub(crate) fn plugin_http_request_backend(

@@ -147,6 +147,8 @@ export interface PlayerSettings {
   lyricFontSize: number;
   useThemeLyricColor: boolean;
   lyricFontColor: string;
+  lyricHighlightColor?: string;
+  lyricGlowColor?: string;
   lyricsBackground: LyricsBackgroundSettings;
   downloadDir: string;
   audioCacheDir: string;

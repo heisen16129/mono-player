@@ -73,7 +73,7 @@ p.can-seek:focus-visible {
   color: var(--lyrics-current-color, var(--smw-lyrics-current));
   font-weight: 680;
   opacity: 1;
-  text-shadow: 0 8px 24px color-mix(in srgb, var(--smw-lyrics-current) 18%, transparent);
+  text-shadow: 0 8px 24px color-mix(in srgb, var(--lyrics-glow-color, var(--smw-lyrics-current)) 35%, transparent);
   transform: scale(1.18);
 }
 
@@ -88,7 +88,7 @@ p.can-seek:focus-visible {
     );
   background-clip: text;
   -webkit-background-clip: text;
-  text-shadow: 0 8px 24px color-mix(in srgb, var(--smw-lyrics-current) 22%, transparent);
+  text-shadow: 0 8px 24px color-mix(in srgb, var(--lyrics-glow-color, var(--smw-lyrics-current)) 35%, transparent);
 }
 
 .previous {

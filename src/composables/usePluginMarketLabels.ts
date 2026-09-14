@@ -14,6 +14,7 @@ export function usePluginMarketLabels({ appLocale, installingPluginIds }: UsePlu
       search: '搜索歌曲',
       play: '在线播放',
       lyrics: '歌词获取',
+      'lyrics-renderer': '歌词页面',
       metadata: '元数据',
       cover: '封面',
       album: '专辑',

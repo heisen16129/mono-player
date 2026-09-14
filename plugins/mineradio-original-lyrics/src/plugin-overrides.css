@@ -110,3 +110,6 @@ body[data-mono-shared-background] #custom-bg::before,
     max-width: calc(100vw - 24px) !important;
   }
 }
+#fx-panel [data-fx-console-group="desktop"] {
+  display: none !important;
+}

@@ -1,4 +1,7 @@
 (function installMonoMineradioOriginalAdapter() {
+  // Mono owns desktop lyrics; the embedded renderer must not open its own overlay.
+  fx.desktopLyrics = false;
+  pushDesktopLyricsState = function () {};
   var state = {
     trackKey: '',
     coverKey: '',
@@ -223,6 +226,7 @@
   }
 
   function forcePlayerSurface() {
+    fx.desktopLyrics = false;
     if (state.surfaceReady) return;
     state.surfaceReady = true;
     try { if (typeof dismissSplash === 'function') dismissSplash({ instant: true }); } catch (error) {}
@@ -253,8 +257,11 @@
     }
     var nextCoverKey = String(song.cover || '');
     if (nextCoverKey !== state.coverKey) {
+      var hadCover = uniforms.uHasCover.value > 0.5;
+      // Invalidate URL/data callbacks from the previous host artwork update.
+      var coverTrackToken = ++trackSwitchToken;
       state.coverKey = nextCoverKey;
-      var coverOptions = { noCoverTransition: !state.coverKey, deferHeavy: false, coverKey: nextCoverKey };
+      var coverOptions = { noCoverTransition: !hadCover, deferHeavy: false, coverKey: nextCoverKey, trackToken: coverTrackToken };
       if (/^data:image\//i.test(nextCoverKey)) applyCoverDataUrl(nextCoverKey, coverOptions);
       else if (nextCoverKey) loadCoverFromUrl(nextCoverKey, coverOptions);
       else loadCoverFromUrl('', coverOptions);
@@ -420,7 +427,19 @@
       applyTrack(payload);
       applyLyrics(payload);
       applyPlayback(payload);
-      applySharedBackground(payload);
+        applySharedBackground(payload);
+        var colors = payload.lyricColors;
+        var colorKey = JSON.stringify(colors && [colors.lyricColor, colors.lyricHighlightColor, colors.lyricGlowColor]);
+        if (colors && colors.lyricColor && state.lyricColorKey !== colorKey) {
+          state.lyricColorKey = colorKey;
+          fx.lyricColorMode = 'custom';
+          fx.lyricColor = colors.lyricColor;
+          fx.lyricHighlightMode = 'custom';
+          fx.lyricHighlightColor = colors.lyricHighlightColor || colors.lyricColor;
+          fx.lyricGlowLinked = false;
+          fx.lyricGlowColor = colors.lyricGlowColor || fx.lyricHighlightColor;
+          setStageLyricPalette(lyricPaletteFromHex(fx.lyricColor), { immediate: true });
+        }
     },
     setAudioFrame: function (frame) {
       if (!frame || !frame.samples) return;

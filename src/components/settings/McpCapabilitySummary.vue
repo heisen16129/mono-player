@@ -143,7 +143,8 @@ const summary = computed(() => (props.locale === 'en-US' ? '25 tools, 5 resource
 
 .mcp-capability-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   max-width: 860px;
 }

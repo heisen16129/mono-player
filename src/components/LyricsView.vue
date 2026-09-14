@@ -234,9 +234,7 @@ const {
 
 const { lyricsViewStyle } = useLyricsViewStyle({
   backgroundCoverUrl,
-  lyricFontColor: () => player.settings.lyricFontColor,
   lyricFontSize,
-  useThemeLyricColor: () => player.settings.useThemeLyricColor,
 });
 const {
   albumLabel,

@@ -1,36 +1,33 @@
 <script setup lang="ts">
-import PlaybackAudioCacheDirectoryActions from './PlaybackAudioCacheDirectoryActions.vue';
 
 defineProps<{
   audioCacheDir: string;
   chooseAudioCacheDir: () => void;
-  locale: string;
-  setAudioCacheDir: (cacheDir: string) => void;
   useDefaultCacheDir: () => void;
   useSystemTempCacheDir: () => void;
+  locale: string;
+  setAudioCacheDir: (cacheDir: string) => void;
 }>();
 </script>
 
 <template>
-  <label class="field-row wide-field">
-    <span>{{ locale === 'en-US' ? 'Temp cache' : '临时缓存目录' }}</span>
+  <div class="field-row wide-field">
+
     <span class="path-field">
       <input
         type="text"
+        :aria-label="locale === 'en-US' ? 'Audio cache directory' : '音频缓存目录'"
         :value="audioCacheDir"
         :placeholder="locale === 'en-US' ? 'App cache directory' : '应用缓存目录'"
         @change="setAudioCacheDir(($event.target as HTMLInputElement).value)"
       />
-      <PlaybackAudioCacheDirectoryActions
-        :choose-label="locale === 'en-US' ? 'Choose' : '选择'"
-        :default-label="locale === 'en-US' ? 'Default' : '默认目录'"
-        :system-temp-label="locale === 'en-US' ? 'System temp' : '系统临时目录'"
-        @choose="chooseAudioCacheDir"
-        @use-default="useDefaultCacheDir"
-        @use-system-temp="useSystemTempCacheDir"
-      />
     </span>
-  </label>
+    <div class="directory-actions">
+      <button class="secondary-button compact" type="button" @click="useSystemTempCacheDir">{{ locale === 'en-US' ? 'System temp' : '系统临时目录' }}</button>
+      <button class="secondary-button compact" type="button" @click="useDefaultCacheDir">{{ locale === 'en-US' ? 'Default' : '默认目录' }}</button>
+      <button class="secondary-button compact" type="button" @click="chooseAudioCacheDir">{{ locale === 'en-US' ? 'Choose' : '选择' }}</button>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -60,9 +57,9 @@ defineProps<{
 }
 
 .path-field input {
-  height: 36px;
+  height: 28px;
   min-width: 0;
-  padding: 0 12px;
+  padding: 0 6px;
   border: 1px solid var(--smw-border);
   border-radius: 8px;
   color: var(--smw-text-body);
@@ -83,4 +80,10 @@ defineProps<{
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--smw-button-primary) 14%, transparent);
 }
 
+.directory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.directory-actions > button { flex: 1; font-size: 11px; }
 </style>

@@ -147,6 +147,10 @@ export function normalizeSettings(value: unknown): PlayerSettings {
     const enableAppShortcuts = parsed.enableAppShortcuts !== false;
     const appShortcuts = normalizeShortcutBindings(parsed.appShortcuts);
     const normalized: PlayerSettings = { ...parsed, musicDirs: dirs, lastAddedTrackIds, playlists, closeAction, locale, sleepTimerAction, sleepTimerMinutes, theme, autoHideLyricsDock, lyricFontSize, useThemeLyricColor, lyricFontColor, lyricsBackground, downloadDir, audioCacheDir, audioCacheMaxMb, audioOutputDeviceId, searchHistoryLimit, showTrackNumbers, showTrackCovers, enableLocalMetadataEditing, enableTrackMetadataEdit, enableTrackCoverEdit, enableTrackDurationRefresh, enablePlugins, qualityFallback, onlinePlaybackFailureAction, seamlessPlayback, fadePlayback, crossfadePlayback, mcpAutoStart, enableAppShortcuts, appShortcuts };
+    for (const key of ['lyricHighlightColor', 'lyricGlowColor'] as const) {
+      const color = parsed[key];
+      normalized[key] = typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color) ? color : '';
+    }
     delete (normalized as PlayerSettings & { recentPlayedTrackIds?: unknown }).recentPlayedTrackIds;
     return normalized;
   } catch {

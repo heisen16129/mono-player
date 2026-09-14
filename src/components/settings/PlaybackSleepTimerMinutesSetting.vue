@@ -14,7 +14,7 @@ function setMinutes(event: Event) {
 
 <template>
   <label class="field-row">
-    <span>定时关闭默认时间</span>
+    <span>默认时间</span>
     <span class="number-field">
       <input
         type="number"

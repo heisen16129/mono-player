@@ -12,8 +12,8 @@ export function useAudioOutputDevices({ setAudioOutputDeviceId }: UseAudioOutput
     outputDevices.value = await listRustBackendOutputDevices();
   }
 
-  function setAudioOutputDevice(event: Event) {
-    setAudioOutputDeviceId((event.target as HTMLSelectElement).value);
+  function setAudioOutputDevice(deviceId: string) {
+    setAudioOutputDeviceId(deviceId);
   }
 
   return {

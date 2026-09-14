@@ -1,5 +1,9 @@
+<script setup lang="ts">
+defineProps<{ kind: string; runtime: string }>();
+</script>
+
 <template>
-  <span class="runtime-badge">WASM</span>
+  <span class="runtime-badge">{{ kind === 'lyrics-renderer' ? '歌词页面' : runtime.toUpperCase() }}</span>
 </template>
 
 <style scoped>

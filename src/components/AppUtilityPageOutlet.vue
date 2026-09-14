@@ -1,6 +1,5 @@
 ﻿<script setup lang="ts">
 import PluginManagerView from './PluginManagerView.vue';
-import SettingsView from './SettingsView.vue';
 import ThemeView from './ThemeView.vue';
 import type { AppUtilityPageOutletEmits, AppUtilityPageOutletProps, PluginManagerViewListeners } from '../types/appPageOutlet';
 
@@ -17,7 +16,6 @@ const pluginManagerViewListeners: PluginManagerViewListeners = {
   <div class="utility-page-outlet">
     <ThemeView v-if="activeView === 'themes'" />
     <PluginManagerView v-else-if="activeView === 'plugins'" v-bind="pluginManagerViewListeners" />
-    <SettingsView v-else-if="activeView === 'settings'" />
   </div>
 </template>
 

@@ -109,6 +109,7 @@ export function toRuntimeContext(context) {
       scale: Math.min(2, Math.max(.5, Number(context?.background?.scale ?? 1))),
     },
     lines: toLyrics(context?.lines),
+    lyricColors: context.lyricsUi,
   };
 }
 

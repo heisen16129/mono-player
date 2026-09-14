@@ -111,6 +111,9 @@ button { color:inherit; }
 .lyric-line.past { color:rgba(255,255,255,.45); }
 .lyric-line .word { color:rgba(255,255,255,.32); background:linear-gradient(90deg,#fff var(--word-progress,0%),rgba(255,255,255,.32) var(--word-progress,0%)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
 .empty { height:100%; display:grid; place-items:center; color:rgba(255,255,255,.54); font-size:14px; }
+.lyrics .lyric-line { color:color-mix(in srgb,var(--lyric-base,#fff) 60%,transparent); }
+.lyrics .lyric-line.active { color:var(--lyric-highlight,#fff); text-shadow:0 4px 20px color-mix(in srgb,var(--lyric-glow,#fff) 35%,transparent); }
+.lyrics .lyric-line .word { background:linear-gradient(90deg,var(--lyric-highlight,#fff) var(--word-progress,0%),var(--lyric-base,#fff) var(--word-progress,0%)); background-clip:text; -webkit-background-clip:text; }
 .queue { inset:5% 2% 5% 0; padding:0 12px 18px; border:1px solid rgba(255,255,255,.13); border-radius:8px; background:rgba(22,22,24,.14); scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.52) transparent; -webkit-mask-image:none; mask-image:none; }
 .queue::-webkit-scrollbar { display:block; width:5px; }
 .queue::-webkit-scrollbar-track { background:transparent; }
@@ -750,6 +753,11 @@ function applyMessage(message) {
     context.playback = { ...context.playback, ...(message.playback || {}) };
   } else if (message.type === 'lyrics-ui') {
     context.lyricsUi = { ...context.lyricsUi, ...(message.lyricsUi || {}) };
+    if (elements.lyrics) {
+      elements.lyrics.style.setProperty('--lyric-base', context.lyricsUi.lyricColor || '#fff');
+      elements.lyrics.style.setProperty('--lyric-highlight', context.lyricsUi.lyricHighlightColor || context.lyricsUi.lyricColor || '#fff');
+      elements.lyrics.style.setProperty('--lyric-glow', context.lyricsUi.lyricGlowColor || context.lyricsUi.lyricColor || '#fff');
+    }
   } else {
     return false;
   }

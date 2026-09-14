@@ -233,8 +233,6 @@ MCP server 读取该文件后，使用本地 HTTP 请求转发工具调用。bri
 }
 ```
 
-当前 Trae 等 HTTP MCP 客户端使用上面的配置即可，不需要再配置或启动 stdio MCP server。
-
 HTTP MCP server 正常由主应用自动启动。特殊情况下也可单独启动：
 
 ```powershell

@@ -87,6 +87,8 @@ export interface LyricsRendererContext {
   fontSize: number;
   lyricColor: string | null;
   useThemeLyricColor: boolean;
+  lyricHighlightColor?: string;
+  lyricGlowColor?: string;
   coverUrl: string | null;
   background: LyricsRendererBackgroundContext;
   isLoading: boolean;
@@ -165,6 +167,8 @@ export interface ExternalLyricsRendererUiContext {
   fontSize: number;
   lyricColor: string | null;
   useThemeLyricColor: boolean;
+  lyricHighlightColor?: string;
+  lyricGlowColor?: string;
   isLoading: boolean;
   loadingText: string;
   emptyMessage: string;

@@ -148,7 +148,6 @@ export function useAppPlayerSurfaceBindings({
       onLyricsFound: actions.updateActiveTrackLyrics,
       onNotify: actions.showOnlineToast,
       onOpenSettings: () => {
-        actions.closeLyricsView();
         actions.openSettingsView();
       },
       onHidePlayerDock: actions.hideLyricsDock,

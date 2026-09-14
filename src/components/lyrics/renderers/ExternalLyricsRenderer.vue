@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useLyricsColors } from '../../../composables/useLyricsColors';
+const lyricColors = useLyricsColors();
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useWindowDrag } from '../../../composables/useWindowDrag';
 import { invokeApi } from '../../../services/api';
@@ -255,8 +257,10 @@ function postLyricsUiContext() {
       activeLyricIndex: props.context.activeLyricIndex,
       lyricTimeOffset: props.context.lyricTimeOffset,
       fontSize: props.context.fontSize,
-      lyricColor: props.context.lyricColor,
-      useThemeLyricColor: props.context.useThemeLyricColor,
+      lyricColor: lyricColors.base.value,
+      lyricHighlightColor: lyricColors.highlight.value,
+      lyricGlowColor: lyricColors.glow.value,
+      useThemeLyricColor: false,
       isLoading: props.context.isLoading,
       loadingText: props.context.loadingText,
       emptyMessage: props.context.emptyMessage,
@@ -447,6 +451,9 @@ watch(
     props.context.lyricTimeOffset,
     props.context.fontSize,
     props.context.lyricColor,
+    lyricColors.base.value,
+    lyricColors.highlight.value,
+    lyricColors.glow.value,
     props.context.useThemeLyricColor,
     props.context.isLoading,
     props.context.loadingText,

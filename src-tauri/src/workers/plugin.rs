@@ -1,5 +1,4 @@
 use crate::{
-    plugins::PluginHttpResponse,
     workers::{
         manager::WorkerProcess,
         protocol::{decode_request, encode_line, methods, WorkerMessage, WorkerRequest},
@@ -104,18 +103,6 @@ impl PluginWorkerState {
         })
     }
 
-    pub(crate) fn read_plugin_wasm_bytes(&self, entry: String) -> Result<Vec<u8>, String> {
-        log_plugin_args(
-            "PluginWorkerState::read_plugin_wasm_bytes",
-            json!({ "entry": entry }),
-        );
-        self.deserialize_response(WorkerRequest {
-            id: "plugin-read-wasm".to_string(),
-            method: methods::PLUGIN_READ_WASM_BYTES.to_string(),
-            payload: json!({ "entry": entry }),
-        })
-    }
-
     pub(crate) fn refresh_plugin_wasm_cache(&self, entry: String) -> Result<(), String> {
         if !entry.starts_with("http://") && !entry.starts_with("https://") {
             return Ok(());
@@ -131,40 +118,6 @@ impl PluginWorkerState {
             payload: json!({ "entry": entry, "refreshCache": true }),
         })?;
         Ok(())
-    }
-
-    pub(crate) fn plugin_http_request(
-        &self,
-        method: String,
-        url: String,
-        headers: Option<HashMap<String, String>>,
-        data: Option<String>,
-        plugin_id: Option<String>,
-        permissions: Option<Vec<String>>,
-    ) -> Result<PluginHttpResponse, String> {
-        log_plugin_args(
-            "PluginWorkerState::plugin_http_request",
-            json!({
-                "method": method,
-                "url": url,
-                "headers": headers,
-                "data": data,
-                "pluginId": plugin_id,
-                "permissions": permissions,
-            }),
-        );
-        self.deserialize_response(WorkerRequest {
-            id: "plugin-http-request".to_string(),
-            method: methods::PLUGIN_HTTP_REQUEST.to_string(),
-            payload: json!({
-                "method": method,
-                "url": url,
-                "headers": headers,
-                "data": data,
-                "pluginId": plugin_id,
-                "permissions": permissions,
-            }),
-        })
     }
 
     pub(crate) fn invoke_plugin(

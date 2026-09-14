@@ -81,9 +81,9 @@ defineExpose({ lyricsAnchorOffset });
 
 <style scoped>
 .lyrics-stage {
-  --lyrics-line-color: #fff;
-  --lyrics-current-color: #fff;
-  --lyrics-pending-color: rgb(255 255 255 / 72%);
+  --lyrics-line-color: var(--lyrics-base-color, #fff);
+  --lyrics-current-color: var(--lyrics-highlight-color, #fff);
+  --lyrics-pending-color: var(--lyrics-base-color, rgb(255 255 255 / 72%));
 
   display: grid;
   grid-template-columns: minmax(240px, 360px) minmax(520px, 1.7fr);

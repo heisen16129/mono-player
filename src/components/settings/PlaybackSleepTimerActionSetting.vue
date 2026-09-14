@@ -32,6 +32,15 @@ const emit = defineEmits<{
         />
         退出程序
       </label>
+      <label class="option-row">
+        <input
+          type="radio"
+          name="sleep-timer-action"
+          :checked="action === 'finishTrack'"
+          @change="emit('setAction', 'finishTrack')"
+        />
+        播完整首停止
+      </label>
     </div>
   </div>
 </template>

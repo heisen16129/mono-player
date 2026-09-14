@@ -16,7 +16,7 @@ import { normalizeLocalPathInput } from './normalizers';
 import { normalizeLyricsBackground } from './settingsNormalizers';
 
 interface PlayerSettingsActionsOptions {
-  persistSettings: () => void;
+  persistSettings: (refreshTheme?: boolean) => void;
   settings: Ref<PlayerSettings>;
 }
 
@@ -48,25 +48,30 @@ export function createPlayerSettingsActions({ persistSettings, settings }: Playe
     persistSettings();
   }
 
-  function setAutoHideLyricsDock(enabled: boolean) {
-    settings.value.autoHideLyricsDock = enabled;
-    persistSettings();
-  }
-
   function setLyricFontSize(size: number) {
     settings.value.lyricFontSize = Math.min(MAX_LYRIC_FONT_SIZE, Math.max(MIN_LYRIC_FONT_SIZE, Math.round(size)));
     persistSettings();
   }
 
   function setUseThemeLyricColor(enabled: boolean) {
+    if (settings.value.useThemeLyricColor === enabled) return;
     settings.value.useThemeLyricColor = enabled;
-    persistSettings();
+    persistSettings(false);
   }
 
   function setLyricFontColor(color: string) {
     if (!/^#[0-9a-fA-F]{6}$/.test(color)) return;
+    if (settings.value.lyricFontColor === color && !settings.value.useThemeLyricColor) return;
     settings.value.lyricFontColor = color;
-    persistSettings();
+    settings.value.useThemeLyricColor = false;
+    persistSettings(false);
+  }
+
+  function setLyricEffectColor(key: 'lyricHighlightColor' | 'lyricGlowColor', color: string) {
+    if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return;
+    if ((settings.value[key] || '') === color) return;
+    settings.value[key] = color;
+    persistSettings(false);
   }
 
   function setLyricsBackground(patch: Partial<LyricsBackgroundSettings>) {
@@ -110,11 +115,6 @@ export function createPlayerSettingsActions({ persistSettings, settings }: Playe
 
   function setShowTrackNumbers(enabled: boolean) {
     settings.value.showTrackNumbers = enabled;
-    persistSettings();
-  }
-
-  function setEnableLocalMetadataEditing(enabled: boolean) {
-    settings.value.enableLocalMetadataEditing = enabled;
     persistSettings();
   }
 
@@ -184,12 +184,10 @@ export function createPlayerSettingsActions({ persistSettings, settings }: Playe
     setAudioCacheDir,
     setAudioCacheMaxMb,
     setAudioOutputDeviceId,
-    setAutoHideLyricsDock,
     setCloseAction,
     setCrossfadePlayback,
     setDownloadDir,
     setAppShortcut,
-    setEnableLocalMetadataEditing,
     setEnableAppShortcuts,
     setEnablePlugins,
     setEnableTrackCoverEdit,
@@ -198,6 +196,7 @@ export function createPlayerSettingsActions({ persistSettings, settings }: Playe
     setFadePlayback,
     setLocale,
     setLyricFontColor,
+    setLyricEffectColor,
     setLyricFontSize,
     setLyricsBackground,
     previewLyricsBackground,

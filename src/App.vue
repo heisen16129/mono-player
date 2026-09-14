@@ -7,6 +7,7 @@ import AppOnlineToast from './components/AppOnlineToast.vue';
 import AppPlayerSurface from './components/AppPlayerSurface.vue';
 import AppShellLayout from './components/AppShellLayout.vue';
 import AppStartupLoading from './components/AppStartupLoading.vue';
+import SettingsDrawer from './components/settings/SettingsDrawer.vue';
 import PlaylistContextMenu from './components/PlaylistContextMenu.vue';
 import LyricsDockHotZone from './components/LyricsDockHotZone.vue';
 import LyricsView from './components/LyricsView.vue';
@@ -183,6 +184,7 @@ const {
   openSettingsView,
   openThemeView,
   selectArtist,
+  isSettingsOpen,
 } = useLibraryNavigation(() => getDefaultArtistName());
 
 const {
@@ -940,6 +942,8 @@ const {
       <AppStartupLoading v-if="!isAppReady" />
 
       <template v-else>
+        <SettingsDrawer :open="isSettingsOpen" @close="isSettingsOpen = false" />
+
         <PlaylistContextMenu
           v-if="playlistContextMenuProps"
           v-bind="{ ...playlistContextMenuProps, ...playlistContextMenuListeners }"

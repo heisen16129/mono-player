@@ -30,6 +30,17 @@ pub(crate) struct CacheCleanupSnapshot {
 pub(crate) struct CacheStatusSnapshot {
     pub(crate) files: usize,
     pub(crate) bytes: u64,
+    pub(crate) path: String,
+    pub(crate) directories: Vec<CacheDirectorySnapshot>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CacheDirectorySnapshot {
+    pub(crate) name: String,
+    pub(crate) path: String,
+    pub(crate) bytes: u64,
+    pub(crate) files: usize,
 }
 
 pub(crate) fn system_temp_cache_dir() -> PathBuf {
@@ -79,6 +90,9 @@ pub(crate) fn clear_cache_files(
     let mut removed_bytes = 0;
 
     for entry in cache_entries(&mono_cache_dir(cache_dir), active_cache_paths) {
+        if is_custom_cover(&entry.path) {
+            continue;
+        }
         if fs::remove_file(&entry.path).is_ok() {
             removed_files += 1;
             removed_bytes += entry.size;
@@ -110,6 +124,9 @@ pub(crate) fn prune_cache_files(
         if total_bytes <= max_bytes {
             break;
         }
+        if is_custom_cover(&entry.path) {
+            continue;
+        }
         if fs::remove_file(&entry.path).is_ok() {
             removed_files += 1;
             removed_bytes += entry.size;
@@ -128,11 +145,158 @@ pub(crate) fn cache_status(
     cache_dir: &PathBuf,
     active_cache_paths: &[PathBuf],
 ) -> CacheStatusSnapshot {
-    let entries = cache_entries(&mono_cache_dir(cache_dir), active_cache_paths);
+    let root = mono_cache_dir(cache_dir);
+    let entries = cache_entries(&root, active_cache_paths);
+    let mut groups = std::collections::BTreeMap::<String, (usize, u64)>::new();
+    for name in [
+        "online-audio-cache",
+        "plugin-lyrics",
+        "plugin-covers",
+        "cover-thumbnails",
+        "cover-originals",
+        "plugin-wasm",
+    ] {
+        groups.insert(name.to_string(), (0, 0));
+    }
+    if let Ok(children) = fs::read_dir(&root) {
+        for child in children.flatten() {
+            if child.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+                groups
+                    .entry(child.file_name().to_string_lossy().into_owned())
+                    .or_default();
+            }
+        }
+    }
+    if let Ok(canonical_root) = root.canonicalize() {
+        for entry in &entries {
+            if let Ok(relative) = entry.path.strip_prefix(&canonical_root) {
+                let name = if relative.components().count() > 1 {
+                    relative
+                        .components()
+                        .next()
+                        .unwrap()
+                        .as_os_str()
+                        .to_string_lossy()
+                        .into_owned()
+                } else {
+                    ".".to_string()
+                };
+                let group = groups.entry(name).or_default();
+                group.0 += 1;
+                group.1 += entry.size;
+            }
+        }
+    }
     CacheStatusSnapshot {
         files: entries.len(),
-        bytes: entries.into_iter().map(|entry| entry.size).sum(),
+        bytes: entries.iter().map(|entry| entry.size).sum(),
+        path: root.to_string_lossy().into_owned(),
+        directories: groups
+            .into_iter()
+            .map(|(name, (files, bytes))| CacheDirectorySnapshot {
+                path: if name == "." {
+                    root.clone()
+                } else {
+                    root.join(&name)
+                }
+                .to_string_lossy()
+                .into_owned(),
+                name,
+                files,
+                bytes,
+            })
+            .collect(),
     }
+}
+
+#[cfg(test)]
+mod breakdown_tests {
+    use super::*;
+
+    #[test]
+    fn cleaning_preserves_custom_covers_only() {
+        let root =
+            std::env::temp_dir().join(format!("mono-cover-clean-test-{}", uuid::Uuid::new_v4()));
+        let cache = mono_cache_dir(&root);
+        let protected = [
+            "cover-originals/custom-test.jpg",
+            "cover-thumbnails/custom-test.jpg",
+        ];
+        for relative in protected {
+            let path = cache.join(relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, b"cover").unwrap();
+        }
+        let disposable = cache.join("cover-edits/old.jpg");
+        fs::create_dir_all(disposable.parent().unwrap()).unwrap();
+        fs::write(&disposable, b"cache").unwrap();
+        assert_eq!(prune_cache_files(&root, &[], 0).removed_files, 1);
+        fs::write(&disposable, b"cache").unwrap();
+        assert_eq!(clear_cache_files(&root, &[]).removed_files, 1);
+        for relative in protected {
+            assert!(cache.join(relative).is_file());
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn directory_totals_include_nested_and_unknown_caches() {
+        let root = std::env::temp_dir().join(format!(
+            "mono-cache-breakdown-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let cache = mono_cache_dir(&root);
+        fs::create_dir_all(cache.join("plugin-lyrics/nested")).unwrap();
+        fs::create_dir_all(cache.join("extra-cache")).unwrap();
+        fs::write(cache.join("plugin-lyrics/nested/lyrics.txt"), b"hello").unwrap();
+        fs::write(cache.join("extra-cache/data"), b"1234567").unwrap();
+        fs::write(cache.join("other"), b"abc").unwrap();
+        let status = cache_status(&root, &[]);
+        assert_eq!(status.bytes, 15);
+        assert_eq!(status.files, 3);
+        assert_eq!(
+            status
+                .directories
+                .iter()
+                .map(|item| item.bytes)
+                .sum::<u64>(),
+            status.bytes
+        );
+        for (name, bytes) in [
+            ("plugin-lyrics", 5),
+            ("extra-cache", 7),
+            (".", 3),
+            ("cover-originals", 0),
+        ] {
+            assert_eq!(
+                status
+                    .directories
+                    .iter()
+                    .find(|item| item.name == name)
+                    .unwrap()
+                    .bytes,
+                bytes
+            );
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+fn is_custom_cover(path: &Path) -> bool {
+    let directory = path
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str());
+    matches!(directory, Some("cover-originals" | "cover-thumbnails"))
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.starts_with("custom-"))
+            .unwrap_or(false)
 }
 
 struct CacheEntry {

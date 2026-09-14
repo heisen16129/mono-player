@@ -71,6 +71,8 @@ export interface RustCacheCleanupState {
 export interface RustCacheStatusState {
   files: number;
   bytes: number;
+  path: string;
+  directories: { name: string; path: string; files: number; bytes: number }[];
 }
 
 export function canUseRustAudioBackend(path: string | null | undefined): path is string {
@@ -147,7 +149,7 @@ export function pruneRustBackendCache(maxBytes: number): Promise<RustCacheCleanu
 
 export function getRustBackendCacheStatus(): Promise<RustCacheStatusState> {
   if (!isTauriRuntime()) {
-    return Promise.resolve({ files: 0, bytes: 0 });
+    return Promise.resolve({ files: 0, bytes: 0, path: '', directories: [] });
   }
 
   return invokeApi<RustCacheStatusState>('player_cache_status');

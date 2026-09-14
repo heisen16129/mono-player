@@ -6,6 +6,7 @@ export type LibraryFilter = 'all' | 'recentAdded' | 'recentPlayed';
 
 export function useLibraryNavigation(getDefaultArtistName: () => string | null) {
   const activeView = ref<AppView>('library');
+  const isSettingsOpen = ref(false);
   const activeCollection = ref<LibraryCollection>('all');
   const activeLibraryFilter = ref<LibraryFilter>('all');
   const isLibraryPanelMode = ref(true);
@@ -94,12 +95,7 @@ export function useLibraryNavigation(getDefaultArtistName: () => string | null) 
   }
 
   function openSettingsView() {
-    activeView.value = 'settings';
-    activeLibraryFilter.value = 'all';
-    isLibraryPanelMode.value = false;
-    activeFolderPath.value = null;
-    activePlaylistId.value = null;
-    activeArtistName.value = null;
+    isSettingsOpen.value = true;
   }
 
   function openThemeView() {
@@ -163,6 +159,7 @@ export function useLibraryNavigation(getDefaultArtistName: () => string | null) 
     activePlaylistId,
     activeView,
     isLibraryPanelMode,
+    isSettingsOpen,
     openArtistFromTrack,
     openArtistsView,
     openDiscoverView,
