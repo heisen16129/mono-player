@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run miot:bundle && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -20,14 +20,21 @@
         "decorations": false,
         "shadow": false,
         "transparent": true,
-        "backgroundColor": [0, 0, 0, 0]
+        "backgroundColor": [
+          0,
+          0,
+          0,
+          0
+        ]
       }
     ],
     "security": {
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["**/*"]
+        "scope": [
+          "**/*"
+        ]
       }
     }
   },
@@ -42,6 +49,12 @@
       "icons/128x128.png",
       "icons/256x256.png",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "../plugins/miot/dist/service.mjs": "miot/service.mjs",
+      "../plugins/miot/dist/web/": "miot/web/",
+      "../plugins/miot/dist/node.exe": "miot/node.exe",
+      "../plugins/miot/dist/ffmpeg.exe": "miot/ffmpeg.exe"
+    }
   }
 }

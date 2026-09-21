@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useLyricsColors } from '../../../composables/useLyricsColors';
+import { useLyricsRendererSettings } from '../../../composables/useLyricsRendererSettings';
 const lyricColors = useLyricsColors();
+const { selectLyricsRenderer } = useLyricsRendererSettings();
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useWindowDrag } from '../../../composables/useWindowDrag';
 import { invokeApi } from '../../../services/api';
@@ -12,12 +14,14 @@ import type {
   LyricsRendererContext,
 } from '../../../types/lyricsRenderer';
 import type { Track } from '../../../types/music';
+import type { PluginPermission } from '../../../types/plugin';
 import type { PlayerDockController } from '../../../types/playerDockController';
 import { artworkBlobDataUrl, artworkDisplaySrc, artworkUrlDataUrl, trackArtworkSource } from '../../../utils/artwork';
 import LyricsRendererSearchOverlay from '../LyricsRendererSearchOverlay.vue';
 
 const props = defineProps<{
   entry: string;
+  wasmPlugin?: { id: string; permissions: PluginPermission[] };
   manifestPath?: string;
   context: LyricsRendererContext;
   playerDockController?: PlayerDockController | null;
@@ -124,25 +128,42 @@ async function loadSandboxEntry() {
   loadError.value = '';
   sandboxEntry.value = '';
   sandboxModuleSource.value = null;
-  if (/^(https?:|data:|blob:)/i.test(props.entry)) {
+  if (/^(data:|blob:)/i.test(props.entry)) {
     sandboxEntry.value = props.entry;
     return;
   }
-  if (!props.manifestPath) {
+  const remote = /^https?:/i.test(props.entry);
+  if (!remote && !props.manifestPath && !props.wasmPlugin) {
     loadError.value = '插件缺少本地 manifest 路径。';
+    selectLyricsRenderer('classic');
     return;
   }
   try {
-    const source = await invokeApi<string>('read_local_renderer_module', {
+    let wasmSource: string | undefined;
+    if (props.wasmPlugin) {
+      const payload = await invokeApi<{ apiVersion: number; source: string }>('plugin_invoke', {
+        entry: props.entry, request: { action: 'renderer' }, pluginId: props.wasmPlugin.id,
+        permissions: props.wasmPlugin.permissions,
+      });
+      if (payload.apiVersion !== 1 || typeof payload.source !== 'string' || !payload.source.trim()) {
+        throw new Error('WASM 歌词插件返回了无效的页面');
+      }
+      wasmSource = payload.source;
+    }
+    const source = wasmSource ?? (remote
+      ? await invokeApi<string>('read_remote_renderer_module', { url: props.entry })
+      : await invokeApi<string>('read_local_renderer_module', {
       manifestPath: props.manifestPath,
       modulePath: props.entry,
-    });
+    }));
     if (generation !== loadGeneration) return;
     sandboxModuleSource.value = source;
     sandboxEntry.value = 'local-module';
   } catch (error) {
     if (generation !== loadGeneration) return;
     loadError.value = error instanceof Error ? error.message : String(error);
+    console.error('[LyricsRenderer] 加载失败，回退经典歌词', error);
+    selectLyricsRenderer('classic');
   }
 }
 
@@ -317,6 +338,8 @@ async function handleMessage(event: MessageEvent) {
   const message = event.data || {};
   if (message.type === 'lyrics-renderer-error') {
     loadError.value = `歌词插件运行失败：${String(message.message || '未知错误')}`;
+    console.error(loadError.value);
+    selectLyricsRenderer('classic');
     return;
   }
   if (message.type === 'lyrics-renderer-audio-frame-subscribe') {
@@ -406,6 +429,7 @@ onMounted(() => {
   window.addEventListener('message', handleMessage);
 });
 onBeforeUnmount(() => {
+  loadGeneration += 1;
   audioFrameDisposed = true;
   window.removeEventListener('message', handleMessage);
   unlistenAudioFrame?.();

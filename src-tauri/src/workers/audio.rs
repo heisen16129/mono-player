@@ -24,6 +24,10 @@ use std::{
 };
 
 const CACHE_FILE_PREFIX: &str = "mono-stream-";
+mod karaoke;
+mod karaoke_mix;
+#[cfg(test)]
+mod karaoke_mix_tests;
 const CACHE_FILE_EXTENSION: &str = "audio";
 const REUSABLE_CACHE_TRACKS_DIR: &str = "tracks";
 const REUSABLE_CACHE_METADATA_DIR: &str = "metadata";
@@ -385,6 +389,28 @@ fn handle_request(runtime: &mut AudioWorkerRuntime, request: WorkerRequest) -> W
             runtime.cache_dir = payload.cache_dir.to_string_lossy().to_string();
             Ok(())
         }),
+        methods::PLAYER_KARAOKE_SOURCE => {
+            match runtime.backend.karaoke_source(request.payload["source"].as_str().unwrap_or("")) {
+                Ok(path) => WorkerMessage::Response { id: request.id, ok: true, payload: Some(json!(path)), error: None },
+                Err(error) => WorkerMessage::Response { id: request.id, ok: false, payload: None, error: Some(error) },
+            }
+        }
+        methods::PLAYER_KARAOKE_SWITCH => response_from_result(request.id, || {
+            let payload = serde_json::from_value(request.payload).map_err(|e| e.to_string())?;
+            runtime.backend.switch_karaoke(payload)
+        }),
+        methods::PLAYER_KARAOKE_VOCALS => response_from_result(request.id, || {
+            let source = request.payload["source"].as_str().ok_or("缺少歌曲")?;
+            runtime.backend.karaoke_source(source)?;
+            if runtime.backend.karaoke_original.is_none() { return Err("请先切换到 K歌".into()); }
+            if !runtime.backend.current_cache_path.as_ref().is_some_and(|path| path.with_file_name("vocals.wav").is_file()) {
+                return Err("未找到分离出的人声文件，请重新分离。".into());
+            }
+            let gain = request.payload["gain"].as_f64().ok_or("人声音量无效")?;
+            if !gain.is_finite() || !(0.0..=1.0).contains(&gain) { return Err("人声音量无效".into()); }
+            runtime.backend.karaoke_vocal_gain.store((gain as f32).to_bits(), Ordering::Relaxed);
+            Ok(())
+        }),
         methods::PLAYER_PLAY_PATH => response_from_result(request.id, || {
             let payload = serde_json::from_value::<PlayPathPayload>(request.payload)
                 .map_err(|err| err.to_string())?;
@@ -510,6 +536,8 @@ struct OutputDevicePayload {
 }
 
 struct AudioBackend {
+    karaoke_original: Option<PathBuf>,
+    karaoke_vocal_gain: Arc<AtomicU32>,
     stream: Option<OutputStream>,
     sink: Option<Arc<Sink>>,
     output_device_id: Option<String>,
@@ -529,6 +557,8 @@ struct AudioBackend {
 impl Default for AudioBackend {
     fn default() -> Self {
         Self {
+            karaoke_original: None,
+            karaoke_vocal_gain: Arc::new(AtomicU32::new(0.0f32.to_bits())),
             stream: None,
             sink: None,
             output_device_id: None,
@@ -610,6 +640,7 @@ impl AudioBackend {
 
         self.transition_to_sink(&sink, fade, fade_duration_ms);
 
+        self.karaoke_original = None;
         self.current_source = Some(source_id);
         self.current_duration = duration;
         self.current_cache_path = None;
@@ -693,6 +724,7 @@ impl AudioBackend {
 
         self.transition_to_sink(&sink, fade, fade_duration_ms);
 
+        self.karaoke_original = None;
         self.current_source = Some(url);
         self.current_duration = duration;
         self.current_cache_path = Some(cache_path);
@@ -721,6 +753,7 @@ impl AudioBackend {
     }
 
     fn stop(&mut self, fade: bool) {
+        self.karaoke_original = None;
         self.current_source = None;
         self.current_duration = None;
         self.current_cache_path = None;
@@ -836,6 +869,7 @@ impl AudioBackend {
         });
 
         crate::player::PlayerSnapshot {
+            is_karaoke: self.karaoke_original.is_some(),
             current_path,
             position,
             is_playing,

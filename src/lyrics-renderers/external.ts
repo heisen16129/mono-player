@@ -4,13 +4,17 @@ import type { PluginManifest } from '../types/plugin';
 import type { LyricsRendererContext } from '../types/lyricsRenderer';
 import type { PlayerDockController } from '../types/playerDockController';
 import ExternalLyricsRenderer from '../components/lyrics/renderers/ExternalLyricsRenderer.vue';
-import { registerLyricsRenderer } from './registry';
+import { getLyricsRenderer, registerLyricsRenderer, unregisterLyricsRenderer } from './registry';
 
-const loadedRendererIds = new Set<string>();
+const loadedRendererIds = new Map<string, string>();
 let externalRendererLoadRequest: Promise<void> | null = null;
+let reloadRequested = false;
 
 function registerExternalRenderer(manifest: PluginManifest) {
-  if (loadedRendererIds.has(manifest.id)) return;
+  const signature = JSON.stringify(manifest);
+  if (loadedRendererIds.get(manifest.id) === signature) return;
+  // External packages cannot replace a built-in renderer with the same id.
+  if (getLyricsRenderer(manifest.id) && !loadedRendererIds.has(manifest.id)) return;
   const component = defineComponent({
     name: `ExternalLyricsRenderer_${manifest.id.replace(/[^a-zA-Z0-9_$]/g, '_')}`,
     props: {
@@ -20,7 +24,12 @@ function registerExternalRenderer(manifest: PluginManifest) {
     setup(props) {
       return () => h(ExternalLyricsRenderer, {
         entry: manifest.entry,
-        manifestPath: manifest.sourceKind === 'local' ? manifest.sourceUrl : undefined,
+        wasmPlugin: manifest.runtime === 'wasm' ? { id: manifest.id, permissions: manifest.permissions } : undefined,
+        manifestPath: manifest.sourceKind === 'local'
+          ? manifest.sourceUrl
+          : !/^https?:/i.test(manifest.entry)
+            ? manifest.entry.replace(/[^/\\]+$/, 'manifest.json')
+            : undefined,
         context: props.context,
         playerDockController: props.playerDockController,
       });
@@ -34,22 +43,35 @@ function registerExternalRenderer(manifest: PluginManifest) {
     component,
     ownsSurface: true,
     configSchema: manifest.configSchema,
-  });
-  loadedRendererIds.add(manifest.id);
+  }, loadedRendererIds.has(manifest.id));
+  loadedRendererIds.set(manifest.id, signature);
 }
 
-export async function loadExternalLyricsRenderers() {
-  if (externalRendererLoadRequest) return externalRendererLoadRequest;
+export async function loadExternalLyricsRenderers(refresh = false) {
+  if (externalRendererLoadRequest) {
+    if (refresh) reloadRequested = true;
+    return externalRendererLoadRequest;
+  }
   externalRendererLoadRequest = (async () => {
-    try {
-      const manifests = await listInstalledPluginManifests();
-      manifests
-        .filter((manifest) => manifest.enabled && manifest.runtime === 'module' && manifest.kind === 'lyrics-renderer')
-        .filter((manifest) => manifest.capabilities.includes('lyrics-renderer'))
-        .forEach(registerExternalRenderer);
-    } catch (error) {
-      console.warn('[LyricsRenderer] external renderer discovery failed', error);
-    }
+    do {
+      reloadRequested = false;
+      try {
+        const manifests = await listInstalledPluginManifests();
+        const enabled = manifests
+          .filter((manifest) => manifest.enabled && ['module', 'wasm'].includes(manifest.runtime) && manifest.kind === 'lyrics-renderer')
+          .filter((manifest) => manifest.capabilities.includes('lyrics-renderer'));
+        const enabledIds = new Set(enabled.map(manifest => manifest.id));
+        for (const id of loadedRendererIds.keys()) {
+          if (!enabledIds.has(id)) {
+            loadedRendererIds.delete(id);
+            unregisterLyricsRenderer(id);
+          }
+        }
+        enabled.forEach(registerExternalRenderer);
+      } catch (error) {
+        console.warn('[LyricsRenderer] external renderer discovery failed', error);
+      }
+    } while (reloadRequested);
   })().finally(() => {
     externalRendererLoadRequest = null;
   });

@@ -1,5 +1,6 @@
 import { ref, type MaybeRefOrGetter, toValue, watch } from 'vue';
 import type { Track } from '../types/music';
+import { recoverTrackCover } from '../services/coverRecovery';
 import { trackArtworkSource, usableArtworkDisplaySrc } from '../utils/artwork';
 
 const failedArtworkUrls = new Set<string>();
@@ -18,6 +19,7 @@ export function useTrackCoverThumbUrl(track: MaybeRefOrGetter<Track>) {
   function handleImageError() {
     if (coverUrl.value) failedArtworkUrls.add(coverUrl.value);
     coverUrl.value = '';
+    void recoverTrackCover(toValue(track));
   }
 
   return {

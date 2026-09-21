@@ -18,7 +18,7 @@ const { isScrolling, showScrolling } = useScrollingState();
       <template #actions>
         <button class="secondary-button plugin-local-install-button" type="button" @click="emit('importLocalFile')">
           <FolderInput :size="16" />
-          从本地文件安装
+          导入插件
         </button>
       </template>
     </PluginSubscriptionForm>

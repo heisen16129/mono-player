@@ -291,18 +291,14 @@ export function usePlayerDockRuntime({
   );
 
   watch(
-    () => player.settings.audioCacheDir,
-    (cacheDir) => {
-      void setRustBackendCacheDir(cacheDir || null);
-      void pruneRustBackendCache(player.settings.audioCacheMaxMb * 1024 * 1024);
-    },
-    { immediate: true },
-  );
-
-  watch(
-    () => player.settings.audioCacheMaxMb,
-    (sizeMb) => {
-      void pruneRustBackendCache(sizeMb * 1024 * 1024);
+    () => [player.settings.audioCacheDir, player.settings.audioCacheMaxMb] as const,
+    async ([cacheDir, sizeMb]) => {
+      try {
+        await setRustBackendCacheDir(cacheDir || null);
+        await pruneRustBackendCache(sizeMb * 1024 * 1024);
+      } catch (error) {
+        console.warn('[Player] cache maintenance failed', error);
+      }
     },
     { immediate: true },
   );

@@ -174,6 +174,7 @@ fn handle_bridge_request(app: AppHandle, request: BridgeRequest) -> BridgeRespon
     let method = request.method.clone();
     log_bridge_request(&method, &request.params);
     let result = match request.method.as_str() {
+        method if method.starts_with("miot.") => crate::miot::bridge::request(&app, &method[5..], request.params),
         "library.summary" => library_summary(&app),
         "library.listTracks" => list_tracks(&app, request.params),
         "library.getTrack" => get_track(&app, request.params),

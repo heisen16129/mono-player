@@ -9,6 +9,9 @@ pub(crate) mod methods {
     pub(crate) const PLAYER_SET_CACHE_DIR: &str = "player.setCacheDir";
     pub(crate) const PLAYER_OUTPUT_DEVICES: &str = "player.outputDevices";
     pub(crate) const PLAYER_PLAY_PATH: &str = "player.playPath";
+    pub(crate) const PLAYER_KARAOKE_SOURCE: &str = "player.karaokeSource";
+    pub(crate) const PLAYER_KARAOKE_SWITCH: &str = "player.karaokeSwitch";
+    pub(crate) const PLAYER_KARAOKE_VOCALS: &str = "player.karaokeVocals";
     pub(crate) const PLAYER_PLAY_URL: &str = "player.playUrl";
     pub(crate) const PLAYER_RESUME: &str = "player.resume";
     pub(crate) const PLAYER_PAUSE: &str = "player.pause";

@@ -210,13 +210,14 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function loadLibrary() {
+    const previousQueue = queue.value;
     loading.value = true;
     error.value = null;
 
     try {
       tracks.value = dedupeTracksByPath(await listTracks());
       latestAddedTracks.value = dedupeTracksByPath(await listLatestAddedTracks());
-      queue.value = [...tracks.value];
+      if (queue.value === previousQueue) queue.value = [...tracks.value];
     } catch (err) {
       const message = getErrorMessage(err);
       if (message.includes('Scan canceled')) {
@@ -317,6 +318,10 @@ export const usePlayerStore = defineStore('player', () => {
     tracks,
     latestAddedTracks,
     hydratePersistedState,
+    refreshExternalFavorites(ids: number[], snapshots: Track[]) {
+      favoriteTrackIds.value = ids;
+      favoriteTrackSnapshots.value = snapshots;
+    },
     loadLibrary,
     isFavorite,
     setCurrentTrack,

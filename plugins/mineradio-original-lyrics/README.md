@@ -1,7 +1,6 @@
 # Mineradio 原版歌词
 
-这是一个与 `mineradio-lyrics` 并存的独立歌词渲染插件。插件保留
-Mineradio 2.1.0 的原版 DOM、CSS、Three.js 视觉引擎、360° 镜头交互、
+插件保留Mineradio 2.1.0 的原版 DOM、CSS、Three.js 视觉引擎、360° 镜头交互、
 底部播放栏、播放队列和视觉控制台；Mono 桥接层只负责提供歌曲、歌词、
 Base64 封面、队列、原始 PCM 和播放命令。
 

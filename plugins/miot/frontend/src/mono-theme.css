@@ -1,0 +1,17 @@
+:root {
+  --md-primary: #438dea; --md-on-primary: #fff;
+  --md-primary-container: #eaf3ff; --md-on-primary-container: #17467c;
+  --md-secondary-container: #edf2f8; --md-on-secondary-container: #334155;
+  --md-surface: #fafcff; --md-on-surface: #18212e; --md-on-surface-variant: #66758a;
+  --md-surface-container: #fff; --md-surface-container-low: #f5f8fc;
+  --md-surface-container-lowest: #fff; --md-surface-container-high: #edf3fa;
+  --md-surface-container-highest: #e6edf6; --md-surface-variant: #edf3fa;
+  --md-outline: #8995a4; --md-outline-variant: #dce7f4;
+  --md-inverse-surface: #283547; --md-inverse-on-surface: #fff; --md-on-inverse-surface: #fff;
+  --md-error: #b42318; --md-on-error: #fff; --md-error-container: #feeceb; --md-on-error-container: #7a271a;
+  --md-success: #18794e; --md-success-container: #e5f5ec;
+  --md-warning: #9a6700; --md-warning-container: #fff6d8;
+  --md-radius-sm: 4px; --md-radius-md: 8px; --md-radius-lg: 12px; --md-radius-xl: 16px; --md-radius-full: 999px;
+  --md-shadow-1: 0 2px 8px #1d355710; --md-shadow-2: 0 6px 24px #1d355720; --md-shadow-3: 0 12px 40px #1d355730;
+}
+.btn-filled { background: var(--md-primary); color: white; border: 0; padding: 8px 16px; border-radius: 8px; }

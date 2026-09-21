@@ -3,6 +3,7 @@ import { getRustBackendDefaultCacheDir, setRustBackendCacheDir } from '../servic
 import type { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
+import { traceStartup } from '../services/startup';
 
 type PlayerStore = ReturnType<typeof usePlayerStore>;
 
@@ -41,25 +42,37 @@ export function useAppBootstrap({
   startRustQueueEventListener,
 }: UseAppBootstrapOptions) {
   async function initializeApp() {
+    traceStartup('bootstrap-start');
     try {
       await player.hydratePersistedState();
+      traceStartup('preferences-ready');
+      await loadLibraryPanelWidth();
+      await startRustQueueEventListener();
+      // The shell only needs persisted preferences; library and queue restoration can follow.
+      isAppReady.value = true;
+      traceStartup('shell-ready');
       if (!player.settings.audioCacheDir) {
         const defaultCacheDir = await getRustBackendDefaultCacheDir();
         if (defaultCacheDir) {
           player.setAudioCacheDir(defaultCacheDir);
         }
       }
+      traceStartup('cache-dir-start');
       await setRustBackendCacheDir(player.settings.audioCacheDir || null);
-      await loadLibraryPanelWidth();
+      traceStartup('cache-dir-ready');
       await loadDownloadItems();
+      traceStartup('downloads-ready');
       await player.loadLibrary();
-      await startRustQueueEventListener();
-      const restored = restoreSavedPlaybackSession();
-      if (restored) {
-        await restoreRustPlaybackQueue(restored.track, restored.currentTime);
-      } else {
-        rustPlaybackQueue.value = dedupePlaybackQueue(player.queue.filter((track) => track.path));
+      traceStartup('library-ready');
+      if (!player.currentTrack) {
+        const restored = restoreSavedPlaybackSession();
+        if (restored) {
+          await restoreRustPlaybackQueue(restored.track, restored.currentTime);
+        } else {
+          rustPlaybackQueue.value = dedupePlaybackQueue(player.queue.filter((track) => track.path));
+        }
       }
+      traceStartup('queue-ready');
     } finally {
       isAppReady.value = true;
     }

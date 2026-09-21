@@ -14,7 +14,7 @@ use std::fs;
 use std::fs::File;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct UpdateTrackMetadataRequest {
@@ -102,7 +102,8 @@ pub(crate) struct TrackAudioInfo {
 //鏉╂瑤閲滅€瑰繐鐨㈢拠銉ュ毐閺佺増姣氶棁鑼舶閸撳秶顏?#[tauri::command]
 #[allow(unused_doc_comments)]
 #[tauri::command]
-pub(crate) fn list_tracks(state: State<'_, AppState>) -> ApiResponse<Vec<Track>> {
+pub(crate) async fn list_tracks(app: AppHandle) -> ApiResponse<Vec<Track>> {
+    let state = app.state::<AppState>();
     eprintln!("[library:list_tracks] request");
     //  /瑜版挷缍橀崷銊ょ娑擃亣绻戦崶?Result 閻ㄥ嫬鍤遍弫棰佽厬娴ｈ法鏁?? 閺冭绱濈€瑰啰娈戦柅鏄忕帆缁涘鐜禍搴濅簰娑?match 鐞涖劏鎻蹇ョ窗
     //  let db = match state.db.lock().map_err(|err| err.to_string()) {
@@ -126,7 +127,8 @@ pub(crate) fn list_tracks(state: State<'_, AppState>) -> ApiResponse<Vec<Track>>
 }
 
 #[tauri::command]
-pub(crate) fn list_latest_added_tracks(state: State<'_, AppState>) -> ApiResponse<Vec<Track>> {
+pub(crate) async fn list_latest_added_tracks(app: AppHandle) -> ApiResponse<Vec<Track>> {
+    let state = app.state::<AppState>();
     ApiResponse::from_result((|| {
         let db = state.db.lock().map_err(|err| err.to_string())?;
         read_latest_added_tracks(&db)

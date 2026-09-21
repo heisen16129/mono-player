@@ -58,6 +58,8 @@ export function usePluginSearchTableTracks(options: UsePluginSearchTableTracksOp
   }
 
   function isActivePluginTrack(track: PluginSearchTrack) {
+    const resolvingTrackKey = toValue(options.resolvingTrackKey);
+    if (resolvingTrackKey) return pluginSearchTrackKey(track) === resolvingTrackKey;
     const activeTrackKey = toValue(options.activeTrackKey);
     if (activeTrackKey && pluginSearchTrackKey(track) === activeTrackKey) return true;
 

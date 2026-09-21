@@ -29,6 +29,8 @@ export type PluginCapability =
   | 'batch-rename'
   | 'lyric-convert'
   | 'lyric-translate'
+  | 'stem-separation'
+  | 'speaker-control'
   | 'lyrics-renderer';
 
 export type PluginKind = 'music' | 'lyrics' | 'lyrics-renderer' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
@@ -40,7 +42,9 @@ export type PluginPermission =
   | 'credential-read'
   | 'cache-read'
   | 'cache-write'
-  | 'download-write';
+  | 'download-write'
+  | 'audio-process'
+  | 'speaker-service';
 
 export interface PluginManifest {
   id: string;

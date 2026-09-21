@@ -15,6 +15,7 @@ export function usePluginMarketLabels({ appLocale, installingPluginIds }: UsePlu
       play: '在线播放',
       lyrics: '歌词获取',
       'lyrics-renderer': '歌词页面',
+      'speaker-control': '智能音箱',
       metadata: '元数据',
       cover: '封面',
       album: '专辑',
@@ -26,6 +27,7 @@ export function usePluginMarketLabels({ appLocale, installingPluginIds }: UsePlu
       'batch-rename': '批量重命名',
       'lyric-convert': '歌词转换',
       'lyric-translate': '歌词翻译',
+      'stem-separation': '人声 / 伴奏分离',
     };
     return labels[capability] ?? capability;
   }
@@ -38,6 +40,8 @@ export function usePluginMarketLabels({ appLocale, installingPluginIds }: UsePlu
       'cache-read': '读取缓存',
       'cache-write': '写入缓存',
       'download-write': '写入下载目录',
+      'audio-process': '处理所选本地音频并导出',
+      'speaker-service': '运行音箱服务并向音箱提供音乐',
     };
     return labels[permission] ?? permission;
   }

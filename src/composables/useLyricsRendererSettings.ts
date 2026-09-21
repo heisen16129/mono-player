@@ -1,4 +1,5 @@
-import { computed, ref } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { PLUGINS_CHANGED_EVENT } from './useMusicSourcePluginAvailability';
 import { isTauriRuntime } from '../services/music';
 import { getPluginConfig, savePluginConfig } from '../services/plugins';
 import type { PluginConfig } from '../types/plugin';
@@ -42,6 +43,7 @@ export function useLyricsRendererSettings() {
     return listLyricsRenderers();
   });
   const activeRenderer = computed(() => {
+    lyricsRendererRegistryVersion.value;
     return getLyricsRenderer(activeRendererId.value)
       ?? getLyricsRenderer(DEFAULT_LYRICS_RENDERER_ID)
       ?? rendererPlugins.value[0]
@@ -95,6 +97,20 @@ export function useLyricsRendererSettings() {
     }
     return true;
   }
+
+  async function refreshAvailableRenderers() {
+    if (isTauriRuntime()) await loadExternalLyricsRenderers(true);
+
+  }
+
+  watch(lyricsRendererRegistryVersion, () => {
+    if (!getLyricsRenderer(activeRendererId.value)) selectLyricsRenderer(DEFAULT_LYRICS_RENDERER_ID);
+  });
+  onMounted(() => {
+    window.addEventListener(PLUGINS_CHANGED_EVENT, refreshAvailableRenderers);
+    if (isHydrated.value) void refreshAvailableRenderers();
+  });
+  onBeforeUnmount(() => window.removeEventListener(PLUGINS_CHANGED_EVENT, refreshAvailableRenderers));
 
   function saveLyricsRendererConfig(pluginId: string, config: PluginConfig) {
     if (!getLyricsRenderer(pluginId)) return false;

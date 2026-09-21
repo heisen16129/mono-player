@@ -81,6 +81,14 @@ export async function saveInstalledPlugins(plugins: PluginManifest[]): Promise<v
     INSTALLED_PLUGINS_KEY,
     (await normalizeManifests(plugins.map(withoutPluginConfig))).map(withoutPluginConfig),
   );
+  if (isTauriRuntime()) {
+    const sync = invokeApi<void>('miot_sync');
+    if (plugins.some(plugin => plugin.id === 'mono-wasm-miot' && plugin.enabled)) {
+      void sync.catch(error => console.warn('[Miot] 后台启动失败', error));
+    } else {
+      await sync;
+    }
+  }
 }
 
 function withoutPluginConfig(plugin: PluginManifest): PluginManifest {
@@ -141,7 +149,7 @@ export async function getInstalledPlugin(pluginId: string): Promise<PluginManife
 }
 
 async function withPluginConfig(plugin: PluginManifest): Promise<PluginManifest> {
-  const config = await getPluginConfig(plugin.id);
+  const config = await getPluginConfig(plugin.kind === 'lyrics-renderer' ? `lyrics-renderer.${plugin.id}` : plugin.id);
   return {
     ...plugin,
     config: { ...defaultPluginConfig(plugin), ...config },
@@ -191,8 +199,9 @@ export async function installCatalogPlugin(item: PluginCatalogItem): Promise<Plu
 }
 
 export async function installLocalPlugin(filePath: string): Promise<PluginManifest[]> {
+  if (filePath.toLowerCase().endsWith('.json')) return installLocalLyricsRendererManifest(filePath);
   if (!filePath.toLowerCase().endsWith('.wasm')) {
-    throw new Error('只支持导入 WASM 插件。');
+    throw new Error('请选择插件文件（.wasm）或插件说明文件（.json）。');
   }
 
   return runPluginMutation(async () => {
@@ -209,7 +218,7 @@ export async function installLocalPlugin(filePath: string): Promise<PluginManife
   });
 }
 
-export async function installLocalLyricsRendererManifest(filePath: string): Promise<PluginManifest[]> {
+async function installLocalLyricsRendererManifest(filePath: string): Promise<PluginManifest[]> {
   if (!filePath.toLowerCase().endsWith('.json')) throw new Error('歌词渲染插件 manifest 必须是 JSON 文件。');
   const raw = await invokeApi<string>('read_local_plugin_manifest', { filePath });
   const value = JSON.parse(raw) as Partial<PluginManifest>;

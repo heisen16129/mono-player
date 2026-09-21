@@ -280,3 +280,13 @@ Host 规则：
 - 有 `play` 能力时，`qualities` 返回非空音质列表，`play` 返回可播放 `url`。
 - 有 `lyrics` 能力时，`lyrics` 返回 `defaultFormat` 和非空 `lyrics[]`。
 - 需要网络时，metadata 声明 `network`，所有请求都通过 `hostRequest`。
+
+## 音源分离工具插件
+
+`kind: "tool"` 可声明 `stem-separation` 能力和 `audio-process` 权限。该权限只允许 Host 内置的本地音源分离流程，不授予 WASM 任意文件读写、进程执行或系统访问。首次模型下载另需 `network` 权限。
+
+Host 调用已安装且启用的插件 `separate` action，输入包含用户保存的 `config`。插件使用标准 ApiResponse 返回 `{ engine: "demucs", model: "htdemucs_6s", device: "auto" | "cpu" | "cuda" | "mps" }`。Host 验证白名单后，在独立 Python 进程中执行内置推理脚本。Python 可执行文件路径来自用户配置，插件不得提供脚本或命令参数。
+
+前端使用 `stem_separation_start/status/cancel` 管理单个后台任务，从本地文件选择器获取源文件和输出目录。安装插件后，已安装列表显示「分离」入口。详见 [插件说明](../plugins/stem-separation/README.md)。
+
+`stem_environment_check/prepare/status/cancel` 提供环境自动识别、一键准备和取消。Host 复用已有环境或在应用目录内安装独立 Python、分离依赖、音频解码器及模型，并保存检测通过的 Python 路径。准备与分离任务互斥，不允许 WASM 自定义安装命令。

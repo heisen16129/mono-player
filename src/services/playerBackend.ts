@@ -6,6 +6,7 @@ import type { Track } from '../types/music';
 const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 export interface RustPlayerState {
+  isKaraoke?: boolean;
   currentPath: string | null;
   position: number;
   isPlaying: boolean;

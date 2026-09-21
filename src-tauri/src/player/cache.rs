@@ -115,6 +115,18 @@ pub(crate) fn prune_cache_files(
     max_bytes: u64,
 ) -> CacheCleanupSnapshot {
     let mut entries = cache_entries(&mono_cache_dir(cache_dir), active_cache_paths);
+    // Separation results are expensive to regenerate and survive automatic eviction.
+    // Explicit cache clearing still removes them.
+    let karaoke_root = mono_cache_dir(cache_dir).join("karaoke").canonicalize().ok();
+    let mut preserved_bytes = 0;
+    entries.retain(|entry| {
+        if karaoke_root.as_ref().is_some_and(|root| entry.path.starts_with(root)) {
+            preserved_bytes += entry.size;
+            false
+        } else {
+            true
+        }
+    });
     let mut total_bytes = entries.iter().map(|entry| entry.size).sum::<u64>();
     let mut removed_files = 0;
     let mut removed_bytes = 0;
@@ -137,7 +149,7 @@ pub(crate) fn prune_cache_files(
     CacheCleanupSnapshot {
         removed_files,
         removed_bytes,
-        remaining_bytes: total_bytes,
+        remaining_bytes: total_bytes + preserved_bytes,
     }
 }
 
@@ -212,6 +224,26 @@ pub(crate) fn cache_status(
 #[cfg(test)]
 mod breakdown_tests {
     use super::*;
+
+    #[test]
+    fn automatic_cleanup_preserves_separation_but_explicit_clear_removes_it() {
+        let root = std::env::temp_dir().join(format!("mono-karaoke-cache-test-{}", uuid::Uuid::new_v4()));
+        let cache = mono_cache_dir(&root);
+        let output = cache.join("karaoke/song/job");
+        fs::create_dir_all(&output).unwrap();
+        fs::write(output.join("vocals.wav"), b"vocals").unwrap();
+        fs::write(output.join("accompaniment.wav"), b"music").unwrap();
+        fs::write(output.parent().unwrap().join("ready.txt"), b"job").unwrap();
+        fs::write(cache.join("disposable"), b"data").unwrap();
+        let result = prune_cache_files(&root, &[], 4);
+        assert_eq!(result.removed_files, 0);
+        assert_eq!(result.remaining_bytes, 18);
+        assert_eq!(prune_cache_files(&root, &[], 0).removed_files, 1);
+        assert!(output.join("accompaniment.wav").is_file());
+        assert!(output.parent().unwrap().join("ready.txt").is_file());
+        assert_eq!(clear_cache_files(&root, &[]).removed_files, 3);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn cleaning_preserves_custom_covers_only() {

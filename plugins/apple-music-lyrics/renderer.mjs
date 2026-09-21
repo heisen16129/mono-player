@@ -111,6 +111,9 @@ button { color:inherit; }
 .lyric-line.past { color:rgba(255,255,255,.45); }
 .lyric-line .word { color:rgba(255,255,255,.32); background:linear-gradient(90deg,#fff var(--word-progress,0%),rgba(255,255,255,.32) var(--word-progress,0%)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
 .empty { height:100%; display:grid; place-items:center; color:rgba(255,255,255,.54); font-size:14px; }
+.lyrics-empty { display:none; position:absolute; left:50%; top:55%; transform:translate(-50%,-50%); color:rgba(255,255,255,.54); font-size:14px; pointer-events:none; }
+.chrome:has(.lyrics:not(.hidden) .empty) > .lyrics-empty { display:block; }
+.lyrics > .empty { visibility:hidden; }
 .lyrics .lyric-line { color:color-mix(in srgb,var(--lyric-base,#fff) 60%,transparent); }
 .lyrics .lyric-line.active { color:var(--lyric-highlight,#fff); text-shadow:0 4px 20px color-mix(in srgb,var(--lyric-glow,#fff) 35%,transparent); }
 .lyrics .lyric-line .word { background:linear-gradient(90deg,var(--lyric-highlight,#fff) var(--word-progress,0%),var(--lyric-base,#fff) var(--word-progress,0%)); background-clip:text; -webkit-background-clip:text; }
@@ -306,6 +309,7 @@ function createLayout() {
           <div class="view"><div class="lyrics"></div><div class="queue hidden"></div></div>
         </section>
       </main>
+      <div class="lyrics-empty"></div>
     </div><div class="settings-panel hidden"></div>
   </div>`;
 
@@ -315,7 +319,7 @@ function createLayout() {
     backdropGroup: app.querySelector('.backdrop-group'), backdropColor: app.querySelector('.backdrop-color'), backdrop: app.querySelector('.backdrop'), backdropVideo: app.querySelector('.backdrop-video'), cover: app.querySelector('.cover'), coverPlaceholder: app.querySelector('.cover-placeholder'), coverWrap: app.querySelector('.cover-wrap'),
     marquee: app.querySelector('.marquee'), titleA: app.querySelector('.title-a'), titleB: app.querySelector('.title-b'), subtitle: app.querySelector('.subtitle'),
     seek: app.querySelector('.seek-range'), elapsed: app.querySelector('.elapsed'), remaining: app.querySelector('.remaining'), volume: app.querySelector('.volume'), volumeValue: app.querySelector('.volume-value'),
-    lyrics: app.querySelector('.lyrics'), queue: app.querySelector('.queue'), settingsPanel: app.querySelector('.settings-panel'),
+    lyrics: app.querySelector('.lyrics'), lyricsEmpty: app.querySelector('.lyrics-empty'), queue: app.querySelector('.queue'), settingsPanel: app.querySelector('.settings-panel'),
     viewButtons: [...app.querySelectorAll('[data-view]')],
   };
 
@@ -470,7 +474,7 @@ function renderLines() {
   linesKey = nextKey;
   elements.lyrics.replaceChildren();
   if (!lines.length) {
-    const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = context.lyricsUi.isLoading ? (context.lyricsUi.loadingText || '正在载入歌词…') : (context.lyricsUi.emptyMessage || '暂无歌词'); elements.lyrics.append(empty); return;
+    const empty = document.createElement('div'); empty.className = 'empty'; elements.lyricsEmpty.textContent = context.lyricsUi.isLoading ? (context.lyricsUi.loadingText || '正在载入歌词…') : (context.lyricsUi.emptyMessage || '暂无歌词'); elements.lyrics.append(empty); return;
   }
   lines.forEach((line, index) => {
     const node = document.createElement('button'); node.type = 'button'; node.className = 'lyric-line'; node.dataset.index = String(index); node.dataset.time = String(Number(line.time) || 0); node.setAttribute('aria-label', `${formatTime(line.time)} ${line.text || ''}`);
@@ -497,6 +501,11 @@ function updateLyricState() {
     const distance = Math.abs(index - active);
     node.classList.toggle('active', index === active);
     node.classList.toggle('past', index < active);
+    if (active !== lastActiveIndex && index !== active) {
+      for (const word of node.querySelectorAll('.word')) {
+        word.style.setProperty('--word-progress', index < active ? '100%' : '0%');
+      }
+    }
     node.style.filter = bool('enableBlur') && distance > 1 ? `blur(${Math.min(5, (distance - 1) * .75)}px)` : '';
     node.style.transform = scaleByHierarchy && distance > 0 ? `scale(${Math.max(.88, 1 - distance * .018)})` : '';
     node.style.opacity = String(Math.max(.35, 1 - distance * .07));

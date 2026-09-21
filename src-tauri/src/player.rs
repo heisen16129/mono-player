@@ -13,6 +13,7 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod cache;
+pub(crate) mod karaoke_source;
 mod queue;
 
 use crate::workers::audio::OnlineAudioCacheIdentity;
@@ -116,6 +117,8 @@ struct PlayerCoverChangedEvent {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PlayerSnapshot {
+    #[serde(default)]
+    pub(crate) is_karaoke: bool,
     pub(crate) current_path: Option<String>,
     pub(crate) position: f64,
     pub(crate) is_playing: bool,
@@ -360,12 +363,13 @@ pub(crate) fn write_cached_plugin_lyrics_metadata(
 }
 
 #[tauri::command]
-pub(crate) fn player_set_cache_dir(
-    state: State<'_, PlayerState>,
-    audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
+pub(crate) async fn player_set_cache_dir(
+    app: AppHandle,
     cache_dir: Option<String>,
 ) -> ApiResponse<CacheDirSnapshot> {
-    ApiResponse::from_result((|| {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<PlayerState>();
+        let audio_worker = app.state::<crate::workers::audio::AudioWorkerState>();
         let next_cache_dir = match cache_dir
             .as_deref()
             .map(str::trim)
@@ -387,7 +391,8 @@ pub(crate) fn player_set_cache_dir(
         Ok(CacheDirSnapshot {
             cache_dir: next_cache_dir.to_string_lossy().to_string(),
         })
-    })())
+    }).await.map_err(|err| err.to_string()).and_then(|result| result);
+    ApiResponse::from_result(result)
 }
 
 #[tauri::command]
@@ -402,15 +407,17 @@ pub(crate) fn player_clear_cache(
 }
 
 #[tauri::command]
-pub(crate) fn player_prune_cache(
-    state: State<'_, PlayerState>,
+pub(crate) async fn player_prune_cache(
+    app: AppHandle,
     max_bytes: u64,
 ) -> ApiResponse<CacheCleanupSnapshot> {
-    ApiResponse::from_result((|| {
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<PlayerState>();
         let cache_dir = state.cache_dir()?;
         let active_paths = active_cache_paths();
         Ok(prune_cache_files(&cache_dir, &active_paths, max_bytes))
-    })())
+    }).await.map_err(|err| err.to_string()).and_then(|result| result);
+    ApiResponse::from_result(result)
 }
 
 #[tauri::command]

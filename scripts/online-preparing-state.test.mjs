@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { build } from 'esbuild';
+import { fileURLToPath } from 'node:url';
+
+test('pending song owns dock and list indicator until loading ends', async () => {
+  const result = await build({ stdin: { contents: `export {ref,computed} from 'vue'; export * from './src/composables/useActiveTrackState'; export * from './src/composables/usePluginSearchTableTracks';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false });
+  const { ref, computed, useActiveTrackState, usePluginSearchTableTracks } = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
+  const old = { id: 1, sourceProviderId: 'p', sourceId: 'a', title: 'Old' };
+  const next = { id: 2, sourceProviderId: 'p', sourceId: 'b', title: 'Next' };
+  const state = useActiveTrackState({ currentSource: computed(() => ''), isRemoteTrack: () => true, visibleTracks: computed(() => []) });
+  state.currentPlaybackTrack.value = old;
+  state.rustPlaybackQueue.value = [old, next];
+  state.onlineActiveTrackKey.value = 'p:a';
+  const rows = usePluginSearchTableTracks({ activePlaybackTrack: state.currentPlaybackTrack, activeTrackKey: state.onlineActiveTrackKey, resolvingTrackKey: state.onlineResolvingTrackKey, results: ref([{ id: 'a', providerId: 'p' }, { id: 'b', providerId: 'p' }]) });
+  state.onlineResolvingTrackKey.value = 'p:b';
+  assert.equal(state.activeTrack.value.title, 'Next');
+  assert.equal(state.isPreparingActiveTrack.value, true);
+  assert.equal(rows.activeTrack.value.sourceId, 'b');
+  assert.equal(rows.activeTrack.value.id, rows.preparingTrackId.value);
+  state.clearPreparingPlaybackState();
+  assert.equal(state.activeTrack.value.title, 'Old');
+  assert.equal(rows.activeTrack.value.sourceId, 'a');
+  assert.equal(state.isPreparingActiveTrack.value, false);
+  state.onlineResolvingTrackKey.value = 'p:b';
+  state.currentPlaybackTrack.value = next;
+  state.onlineActiveTrackKey.value = 'p:b';
+  state.clearPreparingPlaybackState();
+  assert.equal(state.activeTrack.value.title, 'Next');
+  assert.equal(rows.activeTrack.value.sourceId, 'b');
+});

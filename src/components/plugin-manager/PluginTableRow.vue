@@ -58,7 +58,7 @@ const emit = defineEmits<{
     </td>
     <td><PluginNameCell :name="plugin.name" /></td>
     <td><PluginVersionCell :version="plugin.version" /></td>
-    <td><PluginRuntimeBadge :kind="plugin.manifest?.kind ?? plugin.catalogItem?.kind ?? ''" :runtime="plugin.runtime" /></td>
+    <td><PluginRuntimeBadge :kind="plugin.manifest?.kind ?? plugin.catalogItem?.kind ?? ''" /></td>
     <td><PluginAuthorCell :author="plugin.author" /></td>
     <td>
       <PluginCapabilitiesCell

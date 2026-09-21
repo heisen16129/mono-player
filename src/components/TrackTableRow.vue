@@ -59,7 +59,7 @@ const displayArtistNames = computed(() => {
     <TrackIndexCell v-if="showTrackNumbers" :index="index" />
     <TrackTitleCell
       :active="active"
-      :loading="preparing && active"
+      :loading="preparing"
       :playing="isPlaying && active"
       :show-cover="showTrackCovers"
       :track="track"

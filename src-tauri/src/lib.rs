@@ -9,12 +9,15 @@ mod mcp_bridge;
 mod mcp_service;
 mod metadata;
 mod models;
+mod miot;
 mod player;
 mod plugins;
 mod scanner;
 mod shell;
 mod sleep_timer;
 mod state;
+mod startup;
+mod stem_separation;
 mod store;
 mod themes;
 mod tray;
@@ -51,12 +54,14 @@ fn mcp_auto_start_enabled(app: &tauri::AppHandle) -> bool {
 }
 
 pub fn run() {
+    let startup_started = std::time::Instant::now();
     tauri::Builder::default()
+        .manage(startup::StartupClock(startup_started))
         .register_uri_scheme_protocol("wallpaper-frame", |context, request| {
             wallpaper_engine::frame_response(context.app_handle(), request)
         })
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
+        .setup(move |app| {
             let app_data_dir = app.path().app_data_dir()?;
             let audio_cache_dir = app.path().app_cache_dir()?;
             fs::create_dir_all(&app_data_dir)?;
@@ -121,7 +126,13 @@ pub fn run() {
             app.manage(workers::plugin::PluginWorkerState::start(audio_cache_dir.clone())?);
             app.manage(workers::scanner::ScanWorkerState::default());
             app.manage(sleep_timer::SleepTimerState::default());
+            app.manage(miot::MiotState::default());
+            app.manage(stem_separation::EnvironmentState::default());
+            app.manage(stem_separation::SeparationState::default());
+            app.manage(stem_separation::BatchState::default());
             app.manage(wallpaper_engine::WallpaperEngineState::default());
+            let miot_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move { let _ = miot::miot_sync(miot_app).await; });
             themes::start_system_theme_watcher(app.handle().clone());
 
             if let Some(icon) = app.default_window_icon().cloned() {
@@ -153,9 +164,11 @@ pub fn run() {
                     .build(app)?;
             }
 
+            eprintln!("[startup] setup-complete app_ms={}", startup_started.elapsed().as_millis());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            startup::startup_trace,
             list_tracks,
             list_latest_added_tracks,
             remove_music_dir,
@@ -188,9 +201,28 @@ pub fn run() {
             plugins::remove_plugin_package,
             plugins::read_local_plugin_manifest,
             plugins::read_local_renderer_module,
+            plugins::read_remote_renderer_module,
             plugins::search_plugin,
             plugins::resolve_plugin_playback_qualities,
             plugins::resolve_plugin_lyrics_metadata,
+            miot::miot_open,
+            miot::miot_sync,
+            stem_separation::stem_separation_start,
+            stem_separation::batch::stem_batch_start,
+            stem_separation::batch::stem_batch_status,
+            stem_separation::batch::stem_batch_cancel,
+            stem_separation::batch::stem_output_directory,
+            stem_separation::karaoke::karaoke_prepare,
+            stem_separation::karaoke::karaoke_has_accompaniment,
+            player::karaoke_source::karaoke_playback_source,
+            stem_separation::karaoke::karaoke_switch,
+            stem_separation::karaoke::karaoke_set_vocals,
+            stem_separation::stem_separation_status,
+            stem_separation::stem_environment_check,
+            stem_separation::stem_environment_prepare,
+            stem_separation::stem_environment_status,
+            stem_separation::stem_environment_cancel,
+            stem_separation::stem_separation_cancel,
             plugins::plugin_invoke,            tray::hide_main_window_to_tray,
             player::player_default_cache_dir,
             player::player_system_temp_cache_dir,
@@ -237,6 +269,10 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<miot::MiotState>().shutdown();
+                app.state::<stem_separation::EnvironmentState>().shutdown();
+                let _ = app.state::<stem_separation::BatchState>().cancel(&app.state::<stem_separation::SeparationState>());
+                app.state::<stem_separation::SeparationState>().shutdown();
                 wallpaper_engine::shutdown(app);
             }
         });

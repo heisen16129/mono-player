@@ -17,6 +17,7 @@ import { useActivePlaybackSeekActions } from './composables/useActivePlaybackSee
 import { useActiveTrackState } from './composables/useActiveTrackState';
 import { useActiveTrackUiState } from './composables/useActiveTrackUiState';
 import { useAppBootstrap } from './composables/useAppBootstrap';
+import { useMiotLibrarySync } from './composables/useMiotLibrarySync';
 import { useAppContextMenuBindings } from './composables/useAppContextMenuBindings';
 import { useAppDialogsBindings } from './composables/useAppDialogsBindings';
 import { useAppMainContentSurfaceBindings } from './composables/useAppMainContentSurfaceBindings';
@@ -70,6 +71,7 @@ import {
 } from './utils/playback';
 
 const player = usePlayerStore();
+useMiotLibrarySync();
 const isAppReady = ref(false);
 const appPlayerSurfaceRef = ref<{ getController: () => PlayerDockController | null } | null>(null);
 const {

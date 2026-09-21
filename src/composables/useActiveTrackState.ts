@@ -20,8 +20,12 @@ export function useActiveTrackState({
   const onlineActiveTrackKey = ref<string | null>(null);
   const onlineResolvingTrackKey = ref<string | null>(null);
 
+  const preparingTrack = computed(() => onlineResolvingTrackKey.value
+    ? rustPlaybackQueue.value.find(track => `${track.sourceProviderId}:${track.sourceId}` === onlineResolvingTrackKey.value) ?? null
+    : null);
+
   const activeTrack = computed(() => {
-    return currentPlaybackTrack.value ?? selectedTrack.value ?? visibleTracks.value[0] ?? null;
+    return preparingTrack.value ?? currentPlaybackTrack.value ?? selectedTrack.value ?? visibleTracks.value[0] ?? null;
   });
 
   const currentPlaybackSource = computed(() => {
@@ -37,11 +41,7 @@ export function useActiveTrackState({
     );
   });
 
-  const isPreparingActiveTrack = computed(() => Boolean(
-    onlineActiveTrack.value
-    && onlineActiveTrackKey.value
-    && onlineActiveTrackKey.value === onlineResolvingTrackKey.value,
-  ));
+  const isPreparingActiveTrack = computed(() => Boolean(preparingTrack.value));
 
   const onlinePreparingTrackKey = computed(() => onlineResolvingTrackKey.value);
 

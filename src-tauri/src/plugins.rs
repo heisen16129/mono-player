@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 
 const PLUGIN_HTTP_TIMEOUT: Duration = Duration::from_secs(8);
 const OFFICIAL_PLUGIN_CATALOG_URL: &str = "https://raw.githubusercontent.com/heisen16129/mono-plugin-store/refs/heads/master/catalog.json";
@@ -301,18 +301,20 @@ pub struct PluginMetadata {
 }
 
 #[tauri::command]
-pub fn plugin_invoke(
-    worker: State<'_, crate::workers::plugin::PluginWorkerState>,
+pub async fn plugin_invoke(
+    app: AppHandle,
     entry: String,
     request: serde_json::Value,
     plugin_id: Option<String>,
     permissions: Option<Vec<String>>,
 ) -> ApiResponse<serde_json::Value> {
-    ApiResponse::from_result(
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
         worker
             .invoke_plugin(entry, request, plugin_id, permissions)
-            .and_then(unwrap_plugin_response_envelope),
-    )
+            .and_then(unwrap_plugin_response_envelope)
+    }).await.map_err(|err| err.to_string()).and_then(|result| result);
+    ApiResponse::from_result(result)
 }
 
 #[tauri::command]
@@ -385,6 +387,15 @@ fn build_plugin_manifest_from_catalog_inner(
     installed_at: String,
     enabled: bool,
 ) -> Result<PluginManifest, String> {
+    if item.runtime == "module" {
+        let mut manifest = build_module_manifest_from_catalog(item, installed_at, enabled)?;
+        let source = fetch_plugin_catalog_backend(manifest.entry.clone())?;
+        install_renderer_package(&plugin_package_dir(app, &manifest.id)?, &mut manifest, &source)?;
+        return Ok(manifest);
+    }
+    if item.runtime != "wasm" {
+        return Err("不支持的插件运行类型".to_string());
+    }
     worker.refresh_plugin_wasm_cache(item.entry.clone())?;
 
     let metadata =
@@ -410,6 +421,43 @@ fn build_plugin_manifest_from_catalog_inner(
         capabilities,
         permissions: metadata.permissions.unwrap_or_default(),
         config_schema: metadata.config_schema,
+        source_url: Some(item.source_url),
+        source_kind: item.source_kind,
+        installed_at,
+        enabled,
+    })
+}
+
+fn build_module_manifest_from_catalog(
+    item: PluginCatalogItem,
+    installed_at: String,
+    enabled: bool,
+) -> Result<PluginManifest, String> {
+    if item.runtime != "module"
+        || item.kind != "lyrics-renderer"
+        || !item.capabilities.iter().any(|capability| capability == "lyrics-renderer")
+        || !is_module_plugin_url(&item.entry)
+        || !(item.entry.starts_with("https://") || item.entry.starts_with("http://"))
+    {
+        return Err("歌词页面插件需要有效的模块地址和 lyrics-renderer 能力".to_string());
+    }
+    Ok(PluginManifest {
+        id: item.id,
+        name: item.name,
+        version: item.version,
+        kind: item.kind,
+        runtime: item.runtime,
+        entry: item.entry,
+        author: item.author,
+        description: item.description,
+        icon: item.icon,
+        updated_at: item.updated_at,
+        tags: plugin_capability_tags(&item.capabilities),
+        capabilities: item.capabilities,
+        highlights: item.highlights,
+        screenshots: item.screenshots,
+        permissions: item.permissions,
+        config_schema: item.config_schema,
         source_url: Some(item.source_url),
         source_kind: item.source_kind,
         installed_at,
@@ -495,6 +543,18 @@ pub fn read_local_plugin_manifest(file_path: String) -> ApiResponse<String> {
 }
 
 #[tauri::command]
+pub async fn read_remote_renderer_module(url: String) -> ApiResponse<String> {
+    if !is_module_plugin_url(&url) {
+        return ApiResponse::from_result(Err("歌词模块地址必须是 .js 或 .mjs".to_string()));
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || fetch_plugin_catalog_backend(url))
+        .await
+        .map_err(|err| err.to_string())
+        .and_then(|result| result);
+    ApiResponse::from_result(result)
+}
+
+#[tauri::command]
 pub fn read_local_renderer_module(
     manifest_path: String,
     module_path: String,
@@ -524,6 +584,25 @@ pub fn read_local_renderer_module(
         }
         fs::read_to_string(module).map_err(|err| err.to_string())
     })())
+}
+
+fn install_renderer_package(
+    package_dir: &Path,
+    manifest: &mut PluginManifest,
+    source: &str,
+) -> Result<(), String> {
+    if source.is_empty() || source.len() > 8 * 1024 * 1024 {
+        return Err("歌词渲染模块不能为空或超过 8 MB".to_string());
+    }
+    fs::create_dir_all(package_dir).map_err(|err| err.to_string())?;
+    let module_path = package_dir.join("renderer.mjs");
+    fs::write(&module_path, source).map_err(|err| err.to_string())?;
+    manifest.entry = module_path.to_string_lossy().to_string();
+    fs::write(
+        package_dir.join("manifest.json"),
+        serde_json::to_vec_pretty(manifest).map_err(|err| err.to_string())?,
+    ).map_err(|err| err.to_string())?;
+    Ok(())
 }
 
 fn install_plugin_wasm_package(
@@ -1494,8 +1573,13 @@ fn catalog_values(catalog: Value) -> Vec<Value> {
 fn catalog_item_source_url(value: &Value) -> Result<String, String> {
     let source_url = string_field(value, &["url", "entry"])
         .ok_or_else(|| "plugin catalog item missing url".to_string())?;
-    if !is_direct_plugin_url(&source_url) {
-        return Err("plugin catalog item url must point to a .wasm file".to_string());
+    let is_module = string_field(value, &["runtime"]).as_deref() == Some("module");
+    if if is_module {
+        !is_module_plugin_url(&source_url)
+    } else {
+        !is_direct_plugin_url(&source_url)
+    } {
+        return Err("plugin catalog item url does not match its runtime".to_string());
     }
     Ok(source_url)
 }
@@ -1923,7 +2007,7 @@ fn normalize_capability(capability: &str) -> Option<String> {
     match capability.trim() {
         "search" | "play" | "lyrics" | "metadata" | "cover" | "album" | "playlist-import"
         | "playlist-export" | "theme" | "scrobble" | "history-sync" | "batch-rename"
-        | "lyric-convert" | "lyric-translate" | "lyrics-renderer" => {
+        | "lyric-convert" | "lyric-translate" | "lyrics-renderer" | "stem-separation" | "speaker-control" => {
             Some(capability.trim().to_string())
         }
         _ => None,
@@ -1937,6 +2021,8 @@ fn plugin_capability_tags(capabilities: &[String]) -> Vec<String> {
             "search" => "搜索歌曲",
             "play" => "在线播放",
             "lyrics" => "歌词获取",
+            "stem-separation" => "人声 / 伴奏分离",
+            "speaker-control" => "智能音箱",
             _ => capability.as_str(),
         })
         .map(str::to_string)
@@ -1967,7 +2053,7 @@ fn normalize_permissions(permissions: Vec<String>) -> Result<Vec<String>, String
 
 fn normalize_permission(permission: &str) -> Option<String> {
     match permission.trim() {
-        "network" | "credential-read" | "cache-read" | "cache-write" | "download-write" => {
+        "network" | "credential-read" | "cache-read" | "cache-write" | "download-write" | "audio-process" | "speaker-service" => {
             Some(permission.trim().to_string())
         }
         _ => None,
@@ -2657,6 +2743,56 @@ fn is_sensitive_header(name: &str) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn catalog_lyrics_module_preserves_entry_and_metadata() {
+        let mut value: Value = serde_json::from_str(include_str!(
+            "../../plugins/apple-music-lyrics/manifest.json"
+        )).unwrap();
+        value["entry"] = json!("https://example.com/renderer.mjs");
+        value["sourceUrl"] = json!("https://example.com/catalog.json");
+        value["sourceKind"] = json!("subscription");
+        value["configSchema"] = json!({"fields": []});
+        let item = normalize_catalog_item_value(value).unwrap();
+        let manifest = build_module_manifest_from_catalog(item.clone(), "now".into(), true).unwrap();
+        assert_eq!(manifest.runtime, "module");
+        assert_eq!(manifest.entry, item.entry);
+        assert_eq!(manifest.id, item.id);
+        assert_eq!(manifest.version, item.version);
+        assert_eq!(manifest.source_url.as_deref(), Some(item.source_url.as_str()));
+        assert_eq!(manifest.config_schema, item.config_schema);
+        assert!(manifest.enabled);
+
+        let package_dir = std::env::temp_dir().join(format!(
+            "mono-renderer-test-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let mut local = manifest;
+        install_renderer_package(&package_dir, &mut local, "export default {mount(){},update(){}};").unwrap();
+        assert!(Path::new(&local.entry).is_file());
+        assert_eq!(local.source_url.as_deref(), Some(item.source_url.as_str()));
+        assert!(normalize_plugin_manifest_value(serde_json::to_value(&local).unwrap()).is_some());
+        let saved: PluginManifest = serde_json::from_slice(&fs::read(package_dir.join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(saved.entry, local.entry);
+        install_renderer_package(&package_dir, &mut local, "export default {version:2};").unwrap();
+        assert_eq!(fs::read_to_string(&local.entry).unwrap(), "export default {version:2};");
+        assert!(install_renderer_package(&package_dir, &mut local, "").is_err());
+        assert_eq!(fs::read_to_string(&local.entry).unwrap(), "export default {version:2};");
+        fs::remove_dir_all(package_dir).unwrap();
+
+        for (field, invalid) in [
+            ("runtime", json!("wasm")),
+            ("kind", json!("music")),
+            ("capabilities", json!(["lyrics"])),
+            ("entry", json!("https://example.com/plugin.wasm")),
+            ("entry", json!("./renderer.mjs")),
+        ] {
+            let mut invalid_item = serde_json::to_value(&item).unwrap();
+            invalid_item[field] = invalid;
+            let invalid_item = serde_json::from_value(invalid_item).unwrap();
+            assert!(build_module_manifest_from_catalog(invalid_item, "now".into(), true).is_err());
+        }
+    }
 
     #[test]
     fn json_year_value_ignores_non_ascii_text_without_panicking() {

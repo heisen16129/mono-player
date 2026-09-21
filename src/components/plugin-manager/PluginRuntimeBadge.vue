@@ -1,9 +1,10 @@
 <script setup lang="ts">
-defineProps<{ kind: string; runtime: string }>();
+import { marketCategories } from '../../composables/usePluginMarket';
+defineProps<{ kind: string }>();
 </script>
 
 <template>
-  <span class="runtime-badge">{{ kind === 'lyrics-renderer' ? '歌词页面' : runtime.toUpperCase() }}</span>
+  <span class="runtime-badge">{{ marketCategories.find(category => category.id === kind)?.label ?? '插件' }}</span>
 </template>
 
 <style scoped>

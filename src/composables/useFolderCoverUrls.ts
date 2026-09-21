@@ -1,5 +1,6 @@
 import { computed, ref, type Ref } from 'vue';
 import type { Track } from '../types/music';
+import { recoverTrackCover } from '../services/coverRecovery';
 import { trackArtworkSource, usableArtworkDisplaySrc } from '../utils/artwork';
 
 function coverCandidates(tracks: Track[]) {
@@ -26,6 +27,8 @@ export function useFolderCoverUrls(tracks: Ref<Track[]>) {
     const nextFailedUrls = new Set(failedArtworkUrls.value);
     nextFailedUrls.add(failedUrl);
     failedArtworkUrls.value = nextFailedUrls;
+    const track = coverCandidates(tracks.value)[index];
+    if (track) void recoverTrackCover(track);
   }
 
   return {

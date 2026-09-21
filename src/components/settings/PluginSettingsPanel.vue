@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
+import { useLyricsRendererSettings } from '../../composables/useLyricsRendererSettings';
+import { PLUGINS_CHANGED_EVENT } from '../../composables/useMusicSourcePluginAvailability';
+import { loadExternalLyricsRenderers } from '../../lyrics-renderers/external';
 import { t } from '../../i18n';
 import { listInstalledPlugins, savePluginConfig } from '../../services/plugins';
 import { usePlayerStore } from '../../stores/player';
@@ -7,17 +10,19 @@ import type { PluginConfig, PluginManifest } from '../../types/plugin';
 import PluginConfigFields from './PluginConfigFields.vue';
 
 const player = usePlayerStore();
+const { saveLyricsRendererConfig } = useLyricsRendererSettings();
 const locale = computed(() => player.settings.locale);
 const installedPlugins = ref<PluginManifest[]>([]);
 const pluginConfigs = ref<Record<string, PluginConfig>>({});
 const isLoadingPlugins = ref(false);
 const configurablePlugins = computed(() => installedPlugins.value.filter((plugin) => (
-  plugin.kind !== 'lyrics-renderer' && configFields(plugin).length > 0
+  configFields(plugin).length > 0
 )));
 
 async function loadPlugins() {
   isLoadingPlugins.value = true;
   try {
+    await loadExternalLyricsRenderers(true);
     const plugins = await listInstalledPlugins();
     installedPlugins.value = plugins;
     pluginConfigs.value = Object.fromEntries(plugins.map((plugin) => [plugin.id, plugin.config ?? {}]));
@@ -36,10 +41,18 @@ function configFields(plugin: PluginManifest) {
 
 function updatePluginConfig(plugin: PluginManifest, nextConfig: PluginConfig) {
   pluginConfigs.value = { ...pluginConfigs.value, [plugin.id]: nextConfig };
-  void savePluginConfig(plugin.id, nextConfig);
+  if (plugin.kind === 'lyrics-renderer') {
+    if (!saveLyricsRendererConfig(plugin.id, nextConfig)) {
+      void savePluginConfig(`lyrics-renderer.${plugin.id}`, nextConfig);
+    }
+  } else void savePluginConfig(plugin.id, nextConfig);
 }
 
-onMounted(loadPlugins);
+onMounted(() => {
+  void loadPlugins();
+  window.addEventListener(PLUGINS_CHANGED_EVENT, loadPlugins);
+});
+onBeforeUnmount(() => window.removeEventListener(PLUGINS_CHANGED_EVENT, loadPlugins));
 </script>
 
 <template>

@@ -9,6 +9,7 @@ import PlaybackQueuePopover from './PlaybackQueuePopover.vue';
 import PlaybackSpeedControl from './PlaybackSpeedControl.vue';
 import SleepTimerControl from './SleepTimerControl.vue';
 import VolumeControl from './VolumeControl.vue';
+import KaraokeControl from './KaraokeControl.vue';
 
 defineProps<{
   activeTrack: Track | null;
@@ -76,6 +77,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="playback-meta">
+    <KaraokeControl :track="activeTrack" />
     <DockDownloadButton
       v-if="showActiveTrackDownload"
       :is-downloaded="isActiveTrackDownloaded"

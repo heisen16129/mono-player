@@ -6,13 +6,17 @@ export const lyricsRendererRegistryVersion = ref(0);
 
 export const DEFAULT_LYRICS_RENDERER_ID = 'classic';
 
-export function registerLyricsRenderer(plugin: LyricsRendererPlugin) {
+export function registerLyricsRenderer(plugin: LyricsRendererPlugin, replaceExisting = false) {
   const id = plugin.id.trim();
   if (!id) throw new Error('歌词渲染插件必须提供 id。');
-  if (rendererPlugins.has(id)) throw new Error(`歌词渲染插件已注册：${id}`);
+  if (rendererPlugins.has(id) && !replaceExisting) throw new Error(`歌词渲染插件已注册：${id}`);
 
   rendererPlugins.set(id, { ...plugin, id });
   lyricsRendererRegistryVersion.value += 1;
+}
+
+export function unregisterLyricsRenderer(id: string) {
+  if (rendererPlugins.delete(id)) lyricsRendererRegistryVersion.value += 1;
 }
 
 export function listLyricsRenderers() {

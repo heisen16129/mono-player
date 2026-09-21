@@ -233,7 +233,7 @@ fn read_audio_duration(path: &Path) -> Option<u64> {
     crate::database::read_track_duration_seconds(path).ok()
 }
 
-fn is_audio_file(path: &Path) -> bool {
+pub(crate) fn is_audio_file(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .map(|extension| {
