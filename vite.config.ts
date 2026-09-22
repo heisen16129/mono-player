@@ -7,6 +7,17 @@ export default defineConfig({
   server: {
     strictPort: true,
     port: 1420,
+    watch: {
+      // Keep Rust build trees and reference projects out of the initial file scan.
+      ignored: [
+        '**/target/**',
+        '**/target-*/**',
+        '**/.cargo-check-target/**',
+        '**/.reference/**',
+        '**/.history/**',
+        '**/.uploads/**',
+      ],
+    },
   },
   envPrefix: ['VITE_', 'TAURI_'],
   build: {
