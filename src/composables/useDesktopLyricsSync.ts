@@ -61,6 +61,7 @@ export function useDesktopLyricsSync({
   watch(
     () => [
       activeTrack.value,
+      playbackLyricVariant.value,
       playbackTime.value,
       isAudioPlaying.value,
       settings.value.useThemeLyricColor,

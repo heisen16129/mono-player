@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, ref } from 'vue';
 import AppDialogs from './components/AppDialogs.vue';
 import AppMainContent from './components/AppMainContent.vue';
@@ -36,6 +36,7 @@ import { useLocalPlaybackActions } from './composables/useLocalPlaybackActions';
 import { useLocalLibraryPlaybackCleanup } from './composables/useLocalLibraryPlaybackCleanup';
 import { useLyricsDockAutoHide } from './composables/useLyricsDockAutoHide';
 import { useLyricsRendererSettings } from './composables/useLyricsRendererSettings';
+import { useLyricsEntry } from './composables/useLyricsEntry';
 import { useLyricsRendererPreload } from './composables/useLyricsRendererPreload';
 import { useLyricsViewVisibility } from './composables/useLyricsViewVisibility';
 import { useLyricsWindowTransparency } from './composables/useLyricsWindowTransparency';
@@ -76,6 +77,7 @@ const isAppReady = ref(false);
 const appPlayerSurfaceRef = ref<{ getController: () => PlayerDockController | null } | null>(null);
 const {
   activeRenderer: activeLyricsRenderer,
+  activeRendererConfig: activeLyricsRendererConfig,
   hydrateLyricsRendererSettings,
 } = useLyricsRendererSettings();
 const lyricsRendererOwnsSurface = computed(() => Boolean(activeLyricsRenderer.value?.ownsSurface));
@@ -601,6 +603,7 @@ const {
   openSettingsView,
   playNextTrack,
   playPreviousTrack,
+  seekToLyric,
   setPlaybackMode,
 });
 
@@ -766,6 +769,13 @@ const { appMainContentListeners, appMainContentProps } = useAppMainContentSurfac
   },
 });
 
+const { openSelectedLyrics } = useLyricsEntry({
+  renderer: activeLyricsRenderer,
+  config: activeLyricsRendererConfig,
+  toggleLyricsView,
+  notify: showOnlineToast,
+});
+
 const {
   lyricsViewListeners,
   lyricsViewProps,
@@ -823,7 +833,7 @@ const {
     showOnlineToast,
     toggleFavoriteTrack,
     requestPlaybackToggle,
-    toggleLyricsView,
+    toggleLyricsView: openSelectedLyrics,
     togglePlaybackMode,
     updateActiveTrackLyrics,
     updatePlaybackRunningState,

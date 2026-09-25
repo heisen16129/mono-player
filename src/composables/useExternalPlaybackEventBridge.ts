@@ -13,6 +13,7 @@ interface UseExternalPlaybackEventBridgeOptions {
   openSettingsView: () => void;
   playNextTrack: () => Promise<void>;
   playPreviousTrack: () => Promise<void>;
+  seekToLyric: (time: number) => Promise<void>;
   setPlaybackMode: (mode: PlaybackMode) => Promise<void> | void;
 }
 
@@ -24,6 +25,7 @@ export function useExternalPlaybackEventBridge({
   openSettingsView,
   playNextTrack,
   playPreviousTrack,
+  seekToLyric,
   setPlaybackMode,
 }: UseExternalPlaybackEventBridgeOptions) {
   const {
@@ -34,7 +36,8 @@ export function useExternalPlaybackEventBridge({
     openSettingsView,
     playNextTrack,
     playPreviousTrack,
-    setPlaybackMode,
+    seekToLyric,
+  setPlaybackMode,
   });
 
   const appEventListeners = useAppEventListeners({

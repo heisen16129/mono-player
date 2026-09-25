@@ -1,3 +1,4 @@
+import { broadcastDesktopCardState } from './desktopPlaybackCard';
 import { emit } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { Track } from '../types/music';
@@ -9,7 +10,7 @@ export const DESKTOP_LYRICS_ACTION_EVENT = 'desktop-lyrics://action';
 export const DESKTOP_LYRICS_READY_EVENT = 'desktop-lyrics://ready';
 export const DESKTOP_LYRICS_UPDATE_EVENT = 'desktop-lyrics://update';
 
-export type DesktopLyricsAction = 'previous' | 'toggle-play' | 'next' | 'close';
+export type DesktopLyricsAction = 'previous' | 'toggle-play' | 'next' | 'close' | { type: 'seek'; time: number };
 
 export const DESKTOP_LYRICS_POSITION_KEY = 'desktopLyrics.position';
 
@@ -109,7 +110,9 @@ export async function toggleDesktopLyricsWindow() {
 }
 
 export async function broadcastDesktopLyricsState(state: DesktopLyricsState) {
-  if (!isTauriRuntime() || !desktopLyricsWindow) return;
+  if (!isTauriRuntime()) return;
+  await broadcastDesktopCardState(state);
+  if (!desktopLyricsWindow) return;
 
   await emit(DESKTOP_LYRICS_UPDATE_EVENT, state);
 }

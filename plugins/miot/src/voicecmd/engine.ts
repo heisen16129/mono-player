@@ -312,6 +312,13 @@ export class VoiceEngine {
       return;
     }
 
+    // 歌手请求必须保留整个歌手队列，不能被旧的单曲记忆接管。
+    const result = await this.matchCommand(query, SEARCH_COMMAND_TYPES);
+    if (result?.command.type === 'play_artist') {
+      await this.executeCommand(result, accountId, msg.device_id);
+      return;
+    }
+
     let memoryEnabled = false;
     try {
       const pluginConfig = await this.configManager.getConfig();
@@ -332,13 +339,12 @@ export class VoiceEngine {
 
     // 歌曲/歌单规则匹配
     songloft.log.info(`[VoiceEngine] [Rule] Matching search query="${query}"`);
-    const result = await this.matchCommand(query, SEARCH_COMMAND_TYPES);
     if (result) {
       songloft.log.info(`[VoiceEngine] [Rule] → Matched search: type=${result.command.type} keyword="${result.keyword}" argument="${result.argument}"`);
 
       // 执行口令
       const playedSong = await this.executeCommand(result, accountId, msg.device_id);
-      if (memoryEnabled && (result.command.type === 'play_song' || result.command.type === 'play_artist') && playedSong) {
+      if (memoryEnabled && result.command.type === 'play_song' && playedSong) {
         this.queueMemorySuccess(query, playedSong);
       }
       return;
@@ -356,7 +362,7 @@ export class VoiceEngine {
         if (aiResult.confidence !== 'low' && aiResult.action !== 'unknown') {
           songloft.log.info(`[VoiceEngine] [AI] → Executing fallback (high confidence, action=${aiResult.action})`);
           const playedSong = await this.executeAIResult(aiResult, accountId, msg.device_id);
-          if (memoryEnabled && (aiResult.action === 'play_song' || aiResult.action === 'play_artist') && playedSong) {
+          if (memoryEnabled && aiResult.action === 'play_song' && playedSong) {
             this.queueMemorySuccess(query, playedSong);
           }
           return;

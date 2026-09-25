@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { createLyricsSandboxDocument } from '../../../utils/lyricsSandbox';
+import { openDesktopPlaybackCard, syncDesktopCardConfig } from '../../../services/desktopPlaybackCard';
 import { useLyricsColors } from '../../../composables/useLyricsColors';
 import { useLyricsRendererSettings } from '../../../composables/useLyricsRendererSettings';
 const lyricColors = useLyricsColors();
@@ -167,17 +169,6 @@ async function loadSandboxEntry() {
   }
 }
 
-function createSandboxDocument(entry: string) {
-  const serializedEntry = JSON.stringify(entry).replace(/</g, '\\u003c');
-  const serializedSource = JSON.stringify(sandboxModuleSource.value).replace(/</g, '\\u003c');
-  return `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent!important;color-scheme:normal!important}</style><script>
-const entry=${serializedEntry};const source=${serializedSource};const contextMessageTypes=new Set(['track','lyrics','queue','background','config','playback','lyrics-ui']);const pendingMessages=new Map();const pendingOrder=['track','lyrics','queue','background','config','playback','lyrics-ui'];let renderer=null;let rendererReady=false;let moduleUrl=entry;let latestAudioFrame=null;let currentTrackKey='';let api={post:(action,payload,requestId)=>parent.postMessage({type:'lyrics-renderer-action',action,payload,requestId},'*')};
-async function deliver(message){if(message.type==='track'){currentTrackKey=String(message.trackKey||'');const pendingLyrics=pendingMessages.get('lyrics');if(pendingLyrics&&String(pendingLyrics.trackKey||'')!==currentTrackKey)pendingMessages.delete('lyrics')}if(message.type==='lyrics'&&String(message.trackKey||'')!==currentTrackKey)return;if(rendererReady&&renderer?.update)await renderer.update(message);else pendingMessages.set(message.type,message)}
-async function deliverPending(){if(!rendererReady||!renderer?.update)return;for(const type of pendingOrder){const message=pendingMessages.get(type);if(!message)continue;pendingMessages.delete(type);await deliver(message)}}
-window.addEventListener('message',async(event)=>{if(event.source!==parent)return;const message=event.data||{};try{if(message.type==='init'){rendererReady=false;pendingMessages.clear();currentTrackKey='';if(source!==null)moduleUrl=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));const loaded=await import(moduleUrl);renderer=loaded.default||loaded;if(typeof renderer.mount!=='function'||typeof renderer.update!=='function')throw new Error('Renderer must export mount(root, api) and update(message)');await renderer.mount(document.body,api);rendererReady=true;if(typeof renderer.updateAudioFrame==='function')parent.postMessage({type:'lyrics-renderer-audio-frame-subscribe'},'*');await deliverPending();if(latestAudioFrame&&renderer.updateAudioFrame)renderer.updateAudioFrame(latestAudioFrame)}else if(contextMessageTypes.has(message.type)){await deliver(message)}else if(message.type==='audio-frame'){latestAudioFrame=message.frame||null;if(rendererReady&&renderer?.updateAudioFrame)renderer.updateAudioFrame(latestAudioFrame)}else if(message.type==='lyrics-renderer-action-result'&&String(message.requestId||'').includes('playback-')){console.log('[歌词插件通信桥][播放控制] 执行结果',{请求编号:message.requestId,是否成功:message.ok,错误信息:message.message||''})}}catch(error){parent.postMessage({type:'lyrics-renderer-error',message:String(error)},'*')}});
-window.addEventListener('pagehide',()=>{try{renderer?.destroy?.()}catch{}if(source!==null&&String(moduleUrl).startsWith('blob:'))URL.revokeObjectURL(moduleUrl)},{once:true});
-<\/script>`;
-}
 
 function lyricsPayload() {
   return props.context.lines.map((line) => ({
@@ -364,6 +355,7 @@ async function handleMessage(event: MessageEvent) {
       const line = props.context.lines[message.payload.lineIndex];
       if (line) await props.context.seek(line);
     } else if (message.action === 'openSearch') await props.context.openSearch();
+    else if (message.action === 'openDesktopCard') await openDesktopPlaybackCard(props.entry, props.manifestPath, configPayload(message.payload?.config) ?? props.context.config);
     else if (message.action === 'openSettings') await props.context.actionMenu.openSettings();
     else if (message.action === 'beginBrowse') await props.context.beginBrowse();
     else if (message.action === 'restoreRealtime') await props.context.restoreRealtime();
@@ -392,7 +384,10 @@ async function handleMessage(event: MessageEvent) {
       if (track) await props.playerDockController?.playQueueTrack(track);
     } else if (message.action === 'updateConfig') {
       const config = configPayload(message.payload?.config);
-      if (config) await props.context.updateConfig(config);
+      if (config) {
+        await props.context.updateConfig(config);
+        await syncDesktopCardConfig(props.manifestPath, config);
+      }
     }
     else return;
     if (isPlaybackToggle) {
@@ -511,7 +506,7 @@ watch(() => [props.entry, props.manifestPath], () => void loadSandboxEntry(), { 
       ref="frame"
       allowtransparency="true"
       sandbox="allow-scripts"
-      :srcdoc="createSandboxDocument(sandboxEntry)"
+      :srcdoc="createLyricsSandboxDocument(sandboxEntry, sandboxModuleSource)"
       @load="handleLoad"
     />
     <p v-if="loadError" class="external-lyrics-renderer-error">{{ loadError }}</p>

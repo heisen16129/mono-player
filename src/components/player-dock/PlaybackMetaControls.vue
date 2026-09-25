@@ -53,15 +53,12 @@ const emit = defineEmits<{
   closeSleepTimerDialog: [];
   closeSleepTimerStatus: [];
   downloadActiveTrack: [];
-  locateQueueTrack: [];
   lyricFormatChange: [format: string];
   onlineQualityChange: [quality: PluginPlaybackQuality];
   openDesktopLyrics: [];
   pauseSleepTimer: [];
-  playQueueTrack: [track: Track];
   resumeSleepTimer: [];
   setQueueControl: [element: unknown];
-  setQueueTrackRef: [trackId: number, element: unknown];
   setSleepTimerAction: [action: PlayerSettings['sleepTimerAction']];
   setSleepTimerHours: [value: number];
   setSleepTimerMinutes: [value: number];
@@ -132,18 +129,9 @@ const emit = defineEmits<{
       @toggle-mute="emit('toggleMute')"
     />
     <PlaybackQueuePopover
-      :active-track="activeTrack"
       :is-open="isQueueOpen"
-      :is-playing="isPlaying"
-      :is-preparing-active-track="isPreparingActiveTrack"
       :locale="locale"
-      :queue-tracks="queueTracks"
-      :show-track-covers="showTrackCovers"
-      :show-track-numbers="showTrackNumbers"
-      @locate="emit('locateQueueTrack')"
-      @play-track="emit('playQueueTrack', $event)"
       @set-control="emit('setQueueControl', $event)"
-      @set-track-ref="(trackId, element) => emit('setQueueTrackRef', trackId, element)"
       @toggle="emit('toggleQueuePanel')"
     />
   </div>

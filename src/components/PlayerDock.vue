@@ -17,6 +17,7 @@ import type { PlayerDockController } from '../types/playerDockController';
 import NowPlayingInfo from './player-dock/NowPlayingInfo.vue';
 import PlaybackErrorToast from './player-dock/PlaybackErrorToast.vue';
 import PlaybackMetaControls from './player-dock/PlaybackMetaControls.vue';
+import PlaybackQueuePanel from './player-dock/PlaybackQueuePanel.vue';
 import PlaybackProgressBar from './player-dock/PlaybackProgressBar.vue';
 import TransportControls from './player-dock/TransportControls.vue';
 
@@ -331,15 +332,12 @@ defineExpose({ getController: () => playerDockController });
       @close-sleep-timer-dialog="closeSleepTimerDialog"
       @close-sleep-timer-status="closeSleepTimerStatus"
       @download-active-track="emit('downloadActiveTrack')"
-      @locate-queue-track="locateQueueTrack"
       @lyric-format-change="emit('lyricFormatChange', $event)"
       @online-quality-change="emit('onlineQualityChange', $event)"
       @open-desktop-lyrics="emit('openDesktopLyrics')"
       @pause-sleep-timer="pauseSleepTimer"
-      @play-queue-track="playQueueTrack"
       @resume-sleep-timer="resumeSleepTimer"
       @set-queue-control="setQueueControlElement"
-      @set-queue-track-ref="setQueueTrackElement"
       @set-sleep-timer-action="player.setSleepTimerAction"
       @set-sleep-timer-hours="sleepTimerHours = $event"
       @set-sleep-timer-minutes="sleepTimerMinutes = $event"
@@ -352,6 +350,16 @@ defineExpose({ getController: () => playerDockController });
       @update-volume="changeVolume"
     />
 
+  <Teleport to=".mono-window">
+    <PlaybackQueuePanel
+      v-if="isQueueOpen"
+      v-bind="playbackMetaControlProps"
+      @locate="locateQueueTrack"
+      @play-track="playQueueTrack"
+      @set-control="setQueueControlElement"
+      @set-track-ref="setQueueTrackElement"
+    />
+  </Teleport>
   </footer>
 </template>
 

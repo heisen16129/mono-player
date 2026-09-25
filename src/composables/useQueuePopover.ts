@@ -75,9 +75,13 @@ export function useQueuePopover({ activeTrack, onPlayTrack }: QueuePopoverOption
     await nextTick();
     pruneDisconnectedQueueElements();
     const trackRows = [...(queueTrackRefs.get(activeTrack.value.id) ?? [])];
-    const trackRow = trackRows.find((element) => element.getClientRects().length > 0) ?? trackRows[0];
-    const queueList = trackRow?.closest<HTMLElement>('.queue-list');
-    if (!trackRow || !queueList) return;
+    const trackRow = trackRows.find((element) => element.getClientRects().length > 0);
+    if (trackRow) scrollToQueueTrack(trackRow);
+  }
+
+  function scrollToQueueTrack(trackRow: HTMLElement) {
+    const queueList = trackRow.closest<HTMLElement>('.queue-list');
+    if (!queueList) return;
 
     const trackRect = trackRow.getBoundingClientRect();
     const queueRect = queueList.getBoundingClientRect();

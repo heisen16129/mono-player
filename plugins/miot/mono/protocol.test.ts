@@ -130,6 +130,44 @@ test('natural artist requests respect disabled commands and explicit song names'
   assert.equal(await (engine as any).matchCommand('播放许嵩的歌'), null);
 });
 
+test('artist requests bypass old song memories on repeated requests; song requests retain memory', async () => {
+  const engine: any = new VoiceEngine(new ConfigManager(), {} as any, {} as any, {} as any, {} as any);
+  engine.enabled = true;
+  engine.extractQuery = (msg: any) => msg.query;
+  engine.findAccountForDevice = async () => 'account';
+  engine.configManager.getConfig = async () => ({ voice_memory_enabled: true, voice_memory_max_records: 100 });
+  engine.memoryService.setMaxRecords = async () => {};
+  let memoryCalls = 0;
+  engine.tryHandleMemory = async () => { memoryCalls++; return true; };
+  engine.queueMemorySuccess = () => assert.fail('Artist requests must not save a single-song memory');
+  const executed: any[] = [];
+  engine.executeCommand = async (match: any) => { executed.push(match); return { songName: '素颜', artist: '许嵩' }; };
+  for (let i = 0; i < 2; i++) await engine.handleMessage({ device_id: 'speaker', query: '播放许嵩的歌' });
+  assert.equal(memoryCalls, 0);
+  assert.deepEqual(executed.map(m => [m.command.type, m.argument]), [['play_artist', '许嵩'], ['play_artist', '许嵩']]);
+  await engine.handleMessage({ device_id: 'speaker', query: '播放歌曲素颜' });
+  assert.equal(memoryCalls, 1);
+  assert.equal(executed.length, 2);
+});
+
+test('AI artist requests do not create single-song memories', async () => {
+  const engine: any = new VoiceEngine(new ConfigManager(), {} as any, {} as any, {} as any, {} as any);
+  engine.enabled = true;
+  engine.extractQuery = () => '来几首许嵩';
+  engine.findAccountForDevice = async () => 'account';
+  engine.matchCommand = async () => null;
+  engine.configManager.getConfig = async () => ({ voice_memory_enabled: true, voice_memory_max_records: 100 });
+  engine.configManager.getAIConfig = async () => ({ enabled: true });
+  engine.memoryService.setMaxRecords = async () => {};
+  engine.tryHandleMemory = async () => false;
+  engine.aiAnalyzer.analyze = async () => ({ action: 'play_artist', confidence: 'high', params: { artist: '许嵩' } });
+  let executed = false;
+  engine.executeAIResult = async () => { executed = true; return { songName: '素颜', artist: '许嵩' }; };
+  engine.queueMemorySuccess = () => assert.fail('AI artist requests must not save a single-song memory');
+  await engine.handleMessage({ device_id: 'speaker' });
+  assert.equal(executed, true);
+});
+
 test('group commands reach the other speaker; one unavailable speaker does not block peers', async () => {
   const members = [{ account_id: 'a', device_id: 'pro' }, { account_id: 'a', device_id: 'gen2' }, { account_id: 'a', device_id: 'offline' }];
   const calls: string[] = [];

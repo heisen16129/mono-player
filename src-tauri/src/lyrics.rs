@@ -177,7 +177,7 @@ fn find_lyric_files(
 }
 
 fn push_exact_lyric_files(parent: &Path, stem: &str, files: &mut Vec<(String, PathBuf)>) {
-    for extension in ["yrc", "qrc", "krc", "lrc", "txt"] {
+    for extension in ["yrc", "qrc", "krc", "lrc", "trans", "txt"] {
         let lyric_path = parent.join(format!("{stem}.{extension}"));
         if lyric_path.is_file() {
             push_unique_lyric_file(files, extension.to_string(), lyric_path);
@@ -187,7 +187,7 @@ fn push_exact_lyric_files(parent: &Path, stem: &str, files: &mut Vec<(String, Pa
 
 fn lyric_file_format(path: &Path) -> Option<String> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
-    matches!(extension.as_str(), "yrc" | "qrc" | "krc" | "lrc" | "txt").then_some(extension)
+    matches!(extension.as_str(), "yrc" | "qrc" | "krc" | "lrc" | "trans" | "txt").then_some(extension)
 }
 
 fn push_unique_lyric_file(files: &mut Vec<(String, PathBuf)>, format: String, path: PathBuf) {
@@ -203,8 +203,9 @@ fn sort_lyric_files(files: &mut [(String, PathBuf)]) {
         "qrc" => 1,
         "krc" => 2,
         "lrc" => 3,
-        "txt" => 4,
-        _ => 5,
+        "trans" => 4,
+        "txt" => 5,
+        _ => 6,
     });
 }
 
@@ -410,6 +411,7 @@ fn parse_lyrics(content: &str, format: Option<&str>) -> Vec<LyricLine> {
                 })
                 .collect::<Vec<_>>()
         })
+        .filter(|line| line.text.trim() != "//")
         .collect::<Vec<_>>();
 
     lines.sort_by(|left, right| match (left.time, right.time) {
@@ -767,6 +769,63 @@ fn strip_inline_lyric_times(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::parse_lyrics_content_with_format;
+
+    #[test]
+    fn local_lyrics_bundle_includes_downloaded_translation() {
+        let directory = std::env::temp_dir().join(format!("mono-lyrics-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        for stem in ["Mr.Taxi - 少女时代", "Mr.Taxi - 少女时代 (1)"] {
+            let original = directory.join(format!("{stem}.lrc"));
+            let translation = directory.join(format!("{stem}.trans"));
+            std::fs::write(&original, "[00:01]Mr. Taxi").unwrap();
+            std::fs::write(&translation, "[00:01]出租车先生").unwrap();
+            let bundle = super::read_local_lyrics_bundle_for_track(
+                directory.join("audio.flac").to_str().unwrap(),
+                Some("Mr.Taxi"),
+                Some("少女时代"),
+            ).unwrap().unwrap();
+            assert_eq!(bundle.default_format.as_deref(), Some("lrc"));
+            assert_eq!(bundle.lyrics.len(), 2);
+            assert_eq!(bundle.lyrics[1].format, "trans");
+            assert_eq!(bundle.lyrics[1].content, "[00:01]出租车先生");
+            assert_eq!(bundle.lyrics[1].source_url.as_deref(), translation.to_str());
+            std::fs::remove_file(original).unwrap();
+            std::fs::remove_file(translation).unwrap();
+        }
+        std::fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn filters_translation_placeholders_after_parsing() {
+        for format in [None, Some("lrc"), Some("trans"), Some("txt")] {
+            let lines = parse_lyrics_content_with_format(
+                "//\n[00:01]  //  \n[00:12]너 때문에\n[00:12]你总是让我如此痛苦\n[00:15]原文 // 翻译",
+                format,
+            );
+            assert_eq!(lines.len(), 3);
+            assert_eq!(lines[0].text, "너 때문에");
+            assert_eq!(lines[1].text, "你总是让我如此痛苦");
+            assert_eq!(lines[0].time, Some(12.0));
+            assert_eq!(lines[1].time, Some(12.0));
+            assert_eq!(lines[2].text, "原文 // 翻译");
+            assert_eq!(lines[2].time, Some(15.0));
+        }
+    }
+
+    #[test]
+    fn filters_timed_word_placeholders_without_changing_real_words() {
+        let lines = parse_lyrics_content_with_format(
+            "[1000,2000](1000,300,0)/(1300,300,0)/\n[4000,2000](4000,300,0)你(4300,300,0)好",
+            Some("yrc"),
+        );
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].text, "你好");
+        assert_eq!(lines[0].time, Some(4.0));
+        let words = lines[0].words.as_ref().unwrap();
+        assert_eq!(words.len(), 2);
+        assert_eq!(words[1].time, 4.3);
+        assert_eq!(words[1].text, "好");
+    }
 
     #[test]
     fn parses_yrc_word_timing() {

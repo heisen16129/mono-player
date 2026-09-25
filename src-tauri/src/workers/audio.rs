@@ -686,7 +686,15 @@ impl AudioBackend {
         };
         let stream_state = reader.shared_state();
         let cache_path = reader.cache_path();
-        let decoder_builder = Decoder::builder().with_data(reader);
+        let byte_len = stream_state
+            .0
+            .lock()
+            .map_err(|_| "stream lock poisoned".to_string())?
+            .content_length;
+        let mut decoder_builder = Decoder::builder().with_data(reader);
+        if let Some(byte_len) = byte_len {
+            decoder_builder = decoder_builder.with_byte_len(byte_len);
+        }
         let decoder = match build_stream_decoder(decoder_builder) {
             Ok(decoder) => decoder,
             Err(error) => {

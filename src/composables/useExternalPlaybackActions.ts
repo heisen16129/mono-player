@@ -7,6 +7,7 @@ interface UseExternalPlaybackActionsOptions {
   openSettingsView: () => void;
   playNextTrack: () => Promise<void>;
   playPreviousTrack: () => Promise<void>;
+  seekToLyric: (time: number) => Promise<void>;
   setPlaybackMode: (mode: PlaybackMode) => Promise<void> | void;
 }
 
@@ -15,6 +16,7 @@ export function useExternalPlaybackActions({
   openSettingsView,
   playNextTrack,
   playPreviousTrack,
+  seekToLyric,
   setPlaybackMode,
 }: UseExternalPlaybackActionsOptions) {
   function requestTogglePlayback() {
@@ -58,6 +60,10 @@ export function useExternalPlaybackActions({
   }
 
   async function handleDesktopLyricsAction(action: DesktopLyricsAction) {
+    if (typeof action === 'object' && action?.type === 'seek') {
+      if (Number.isFinite(action.time)) await seekToLyric(Math.max(0, action.time));
+      return;
+    }
     if (action === 'previous') {
       await playPreviousTrack();
       return;

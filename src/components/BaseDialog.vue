@@ -215,10 +215,12 @@ function canScrollWheelTarget(target: HTMLElement, deltaY: number) {
   --smw-text-primary: rgba(255, 255, 255, 0.96);
   --smw-text-body: rgba(255, 255, 255, 0.9);
   --smw-text-secondary: rgba(255, 255, 255, 0.68);
+  --smw-text-muted: rgba(255, 255, 255, 0.68);
   --smw-icon-muted: rgba(255, 255, 255, 0.66);
   --smw-border: rgba(255, 255, 255, 0.18);
   --smw-border-soft: rgba(255, 255, 255, 0.18);
   --smw-bg-elevated: rgba(255, 255, 255, 0.08);
+  --smw-bg-input: rgba(22, 22, 24, 0.85);
   --smw-bg-hover: rgba(255, 255, 255, 0.1);
   --smw-bg-selected: rgba(255, 255, 255, 0.16);
   background: rgba(0, 0, 0, 0.08);

@@ -401,7 +401,7 @@ fn download_cover_file_inner(
                     Path::new(track_path),
                     &data,
                 )?
-                .map(|files| files.thumbnail_url);
+                .map(|files| files.original_url);
                 let db = state.db.lock().map_err(|err| err.to_string())?;
                 db.execute(
                     "UPDATE tracks SET artwork = ?1, updated_at = CURRENT_TIMESTAMP WHERE path = ?2",
@@ -428,7 +428,7 @@ fn download_cover_file_inner(
                 &player_state.cache_dir()?,
                 Path::new(track_path),
             )? {
-                let artwork = cover_files.thumbnail_url;
+                let artwork = cover_files.original_url;
                 let db = state.db.lock().map_err(|err| err.to_string())?;
                 db.execute(
                     "UPDATE tracks SET artwork = ?1, updated_at = CURRENT_TIMESTAMP WHERE path = ?2",

@@ -12,6 +12,7 @@ pub(crate) struct Track {
     )]
     pub(crate) artist: Option<String>,
     pub(crate) album: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_track_duration")]
     pub(crate) duration: Option<u64>,
     #[serde(rename = "addedAt")]
     pub(crate) added_at: Option<String>,
@@ -36,6 +37,24 @@ pub(crate) struct Track {
     pub(crate) source_provider_id: Option<String>,
     #[serde(rename = "sourceRaw")]
     pub(crate) source_raw: Option<serde_json::Value>,
+}
+
+fn deserialize_track_duration<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Some(number) = Option::<serde_json::Number>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    if let Some(seconds) = number.as_u64() {
+        return Ok(Some(seconds));
+    }
+    match number.as_f64() {
+        Some(seconds) if seconds.is_finite() && seconds >= 0.0 && seconds < u64::MAX as f64 => {
+            Ok(Some(seconds.trunc() as u64))
+        }
+        _ => Err(serde::de::Error::custom("expected non-negative duration in seconds")),
+    }
 }
 
 pub(crate) fn deserialize_artist_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -156,4 +175,27 @@ pub(crate) struct SystemThemeState {
     pub(crate) system_uses_light_theme: bool,
     #[serde(rename = "wallpaperColor")]
     pub(crate) wallpaper_color: Option<WallpaperThemeColor>,
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn download_request_accepts_playback_and_search_durations() {
+        for (duration, expected) in [
+            (serde_json::json!(194.4), Some(194)),
+            (serde_json::json!(194), Some(194)),
+            (serde_json::Value::Null, None),
+        ] {
+            let request: crate::downloads::DownloadTrackRequest = serde_json::from_value(serde_json::json!({
+                "downloadDir": "downloads", "plugins": [],
+                "track": { "id": 1, "path": "plugin://song", "title": "Love Me More", "duration": duration }
+            })).unwrap();
+            assert_eq!(request.track.duration, expected);
+        }
+        for duration in [serde_json::json!(-1), serde_json::json!("194.4")] {
+            assert!(serde_json::from_value::<super::Track>(serde_json::json!({
+                "id": 1, "path": "plugin://song", "title": "song", "duration": duration
+            })).is_err());
+        }
+    }
 }

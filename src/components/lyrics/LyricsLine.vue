@@ -36,9 +36,8 @@ const emit = defineEmits<{
         :key="`${word.time}-${word.text}-${wordIndex}`"
         class="lyric-word"
         :style="{ '--lyric-word-progress': lyricWordProgress(line, lineIndex, wordIndex) }"
-      >
-        {{ word.text }}
-      </span>
+        v-text="word.text"
+      ></span>
     </template>
     <template v-else>{{ line.text }}</template>
   </p>
@@ -79,6 +78,7 @@ p.can-seek:focus-visible {
 
 .current .lyric-word {
   display: inline-block;
+  white-space: pre-wrap;
   color: transparent;
   background:
     linear-gradient(

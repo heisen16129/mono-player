@@ -1,0 +1,83 @@
+{
+  "id": "playback-card",
+  "name": "Mono 播放卡片",
+  "version": "1.3.0",
+  "kind": "lyrics-renderer",
+  "runtime": "module",
+  "entry": "./renderer.mjs",
+  "author": "Mono contributors",
+  "description": "13 种歌词播放卡片：电影、杂志、票根、手账、便签、水墨、古籍、黑胶、CD、拍立得、收据、瑞士排版与极简。支持桌面右下角实时播放。",
+  "updatedAt": "2026-09-24",
+  "capabilities": [
+    "lyrics-renderer"
+  ],
+  "permissions": [],
+  "configSchema": {
+    "fields": [
+      {
+        "key": "cardStyle",
+        "label": "卡片样式",
+        "type": "select",
+        "defaultValue": "minimal",
+        "options": [
+          {
+            "label": "极简",
+            "value": "minimal"
+          },
+          {
+            "label": "电影",
+            "value": "cinematic"
+          },
+          {
+            "label": "杂志",
+            "value": "magazine"
+          },
+          {
+            "label": "票根",
+            "value": "ticket"
+          },
+          {
+            "label": "手账",
+            "value": "journal"
+          },
+          {
+            "label": "便签",
+            "value": "sticky"
+          },
+          {
+            "label": "水墨",
+            "value": "ink"
+          },
+          {
+            "label": "国风",
+            "value": "guofeng"
+          },
+          {
+            "label": "古籍",
+            "value": "ancient"
+          },
+          {
+            "label": "黑胶",
+            "value": "vinyl"
+          },
+          {
+            "label": "CD",
+            "value": "cd"
+          },
+          {
+            "label": "拍立得",
+            "value": "polaroid"
+          },
+          {
+            "label": "收据",
+            "value": "receipt"
+          },
+          {
+            "label": "瑞士排版",
+            "value": "swiss"
+          }
+        ]
+      }
+    ]
+  }
+}
