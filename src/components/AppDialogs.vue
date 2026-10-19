@@ -25,6 +25,7 @@ defineEmits<AppDialogsEmits>();
   <CoverCropDialog
     v-if="coverCropTrack && coverCropImagePath"
     can-choose-image
+    :search-query="[coverCropTrack.title, ...coverCropTrack.artist].join(' ')"
     :image-path="coverCropImagePath"
     :saving="isSavingCoverCrop"
     @choose-image="$emit('chooseTrackCoverImage')"

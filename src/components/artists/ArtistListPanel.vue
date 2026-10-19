@@ -17,6 +17,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  openLibrary: [];
   selectArtist: [artistName: string];
 }>();
 
@@ -29,11 +30,11 @@ const selectedArtist = computed(() => {
 });
 
 const totalTrackCount = computed(() => {
-  return props.artistGroups.reduce((sum, group) => sum + group.tracks.length, 0);
+  return player.libraryStatistics.artistTrackCount;
 });
 
 const artistSummary = computed(() => {
-  return `${props.artistGroups.length} 位 · ${songCount(player.settings.locale, totalTrackCount.value)}`;
+  return `${player.libraryStatistics.artistCount} 位 · ${songCount(player.settings.locale, totalTrackCount.value)}`;
 });
 
 function setArtistRowRef(name: string, element: Element | ComponentPublicInstance | null) {
@@ -77,7 +78,7 @@ watch(
 
 <template>
   <aside class="library-panel artists-panel">
-    <ArtistListHeader :title="t(player.settings.locale, 'artists')" :summary="artistSummary" />
+    <ArtistListHeader :title="t(player.settings.locale, 'artists')" :summary="artistSummary" @open-library="emit('openLibrary')" />
 
     <div
       class="artists-list transient-scrollbar"
@@ -91,7 +92,7 @@ watch(
         :ref="(element) => setArtistRowRef(group.name, element)"
         :name="group.name"
         :selected="selectedArtist?.name === group.name"
-        :song-count-label="songCount(player.settings.locale, group.tracks.length)"
+        :song-count-label="songCount(player.settings.locale, group.count)"
         @select="emit('selectArtist', group.name)"
       />
 

@@ -1,43 +1,27 @@
-import { computed, onBeforeUnmount, onMounted, watch, type ComputedRef, type Ref } from 'vue';
+import { onBeforeUnmount, onMounted } from 'vue';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { exitApp, hideMainWindowToTray, isTauriRuntime } from '../services/music';
-import { writePersistentValue } from '../services/persistentStore';
 import type { usePlayerStore } from '../stores/player';
-import type { Track } from '../types/music';
 
-const TRAY_STATE_KEY = 'mono-player-tray-state';
 
 type PlayerStore = ReturnType<typeof usePlayerStore>;
 
 interface TrayIntegrationOptions {
-  activeTrack: ComputedRef<Track | null>;
   handleTrayMenuAction: (action: string) => void | Promise<void>;
-  isAudioPlaying: Ref<boolean>;
   player: PlayerStore;
-  savePlaybackSessionNow: () => void;
 }
 
 export function useTrayIntegration({
-  activeTrack,
   handleTrayMenuAction,
-  isAudioPlaying,
   player,
-  savePlaybackSessionNow,
 }: TrayIntegrationOptions) {
   let unlistenCloseRequested: (() => void) | null = null;
   let unlistenTrayMenu: UnlistenFn | null = null;
 
-  const trayState = computed(() => ({
-    title: activeTrack.value?.title || 'Mono Player',
-    artist: activeTrack.value?.artist || '',
-    isPlaying: isAudioPlaying.value,
-  }));
-
   async function handleAppCloseRequest() {
     if (!isTauriRuntime()) return;
 
-    savePlaybackSessionNow();
     if (player.settings.closeAction === 'tray') {
       await hideMainWindowToTray();
       return;
@@ -65,14 +49,6 @@ export function useTrayIntegration({
     unlistenTrayMenu?.();
     unlistenTrayMenu = null;
   });
-
-  watch(
-    trayState,
-    (state) => {
-      void writePersistentValue(TRAY_STATE_KEY, state);
-    },
-    { immediate: true },
-  );
 
   return {
     handleAppCloseRequest,

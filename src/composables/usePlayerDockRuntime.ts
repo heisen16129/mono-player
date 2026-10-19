@@ -2,9 +2,7 @@ import { computed, onBeforeUnmount, ref, watch, type ComputedRef, type Ref } fro
 import { useRustPlaybackListeners } from './useRustPlaybackListeners';
 import {
   pauseRustBackend,
-  pruneRustBackendCache,
   resumeRustBackend,
-  setRustBackendCacheDir,
   setRustBackendOutputDevice,
   setRustBackendSpeed,
   setRustBackendVolume,
@@ -14,7 +12,6 @@ import {
 } from '../services/playerBackend';
 import { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
-import { getErrorMessage } from '../utils/error';
 
 interface PlayerDockProgressRuntime {
   setPlaybackTime: (value: number) => void;
@@ -26,7 +23,6 @@ interface PlayerDockProgressRuntime {
 
 interface PlayerDockRuntimeOptions {
   activeTrack: ComputedRef<Track | null>;
-  canControlPlayback: ComputedRef<boolean>;
   isPlaying: Ref<boolean>;
   isPreparingActiveTrack: ComputedRef<boolean>;
   playbackRate: Ref<number>;
@@ -41,7 +37,6 @@ interface PlayerDockRuntimeOptions {
   onPlaybackError: (error: unknown) => void;
   onPlaybackNotice: (message: string) => void;
   onPlaybackStateChange: (isPlaying: boolean) => void;
-  onRequestInitialPlayback: (startTime?: number) => void;
   onSeamlessAdvance: (track: Track) => void;
 }
 
@@ -50,7 +45,6 @@ const playbackRates = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 
 export function usePlayerDockRuntime({
   activeTrack,
-  canControlPlayback,
   isPlaying,
   isPreparingActiveTrack,
   playbackRate,
@@ -65,7 +59,6 @@ export function usePlayerDockRuntime({
   onPlaybackError,
   onPlaybackNotice,
   onPlaybackStateChange,
-  onRequestInitialPlayback,
   onSeamlessAdvance,
 }: PlayerDockRuntimeOptions) {
   const player = usePlayerStore();
@@ -120,10 +113,6 @@ export function usePlayerDockRuntime({
       rustBackendActive.value = false;
       isPlaying.value = false;
       onPlaybackStateChange(false);
-      if (getErrorMessage(error).includes('No active audio to resume.')) {
-        onRequestInitialPlayback();
-        return;
-      }
       onPlaybackError(error);
     }
   }
@@ -131,7 +120,6 @@ export function usePlayerDockRuntime({
   async function loadSource(startTime = 0) {
     if (!activeTrack.value?.path) return;
 
-    void stopRustBackend(false);
     progress.setPlaybackTime(0);
     isPlaying.value = false;
     rustBackendActive.value = false;
@@ -162,11 +150,6 @@ export function usePlayerDockRuntime({
     }
 
     if (isPreparingActiveTrack.value) return;
-    if (!canControlPlayback.value || !rustBackendActive.value) {
-      onRequestInitialPlayback();
-      return;
-    }
-
     await resumeAudio();
   }
 
@@ -249,10 +232,10 @@ export function usePlayerDockRuntime({
   watch(
     restoreRequestId,
     async () => {
-      if (!activeTrack.value?.path) return;
+      if (!restoreRequestId.value || !activeTrack.value?.path) return;
       await loadSource(restoreTime.value);
     },
-    { flush: 'post' },
+    { flush: 'post', immediate: true },
   );
 
   watch(
@@ -288,19 +271,6 @@ export function usePlayerDockRuntime({
         seamlessQueuedSource = '';
       }
     },
-  );
-
-  watch(
-    () => [player.settings.audioCacheDir, player.settings.audioCacheMaxMb] as const,
-    async ([cacheDir, sizeMb]) => {
-      try {
-        await setRustBackendCacheDir(cacheDir || null);
-        await pruneRustBackendCache(sizeMb * 1024 * 1024);
-      } catch (error) {
-        console.warn('[Player] cache maintenance failed', error);
-      }
-    },
-    { immediate: true },
   );
 
   watch(

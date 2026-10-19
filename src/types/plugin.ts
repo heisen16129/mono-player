@@ -31,9 +31,9 @@ export type PluginCapability =
   | 'lyric-translate'
   | 'stem-separation'
   | 'speaker-control'
-  | 'lyrics-renderer';
+  | 'lyrics-renderer' | 'desktop-lyrics';
 
-export type PluginKind = 'music' | 'lyrics' | 'lyrics-renderer' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
+export type PluginKind = 'music' | 'lyrics' | 'lyrics-renderer' | 'desktop-lyrics' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
 
 export type PluginSourceKind = 'official' | 'subscription' | 'local';
 
@@ -45,6 +45,17 @@ export type PluginPermission =
   | 'download-write'
   | 'audio-process'
   | 'speaker-service';
+
+export interface PluginSidebarEntry {
+  title?: string;
+  icon: 'speaker' | 'audio-lines' | 'plug';
+  page: { url: string } | { action: 'speaker-control' | 'stem-separation' };
+}
+
+export interface PluginPlaybackBarEntry {
+  action: PluginCapability;
+  icon: 'speaker' | 'audio-lines';
+}
 
 export interface PluginManifest {
   id: string;
@@ -68,6 +79,8 @@ export interface PluginManifest {
   enabled: boolean;
   config?: PluginConfig;
   configSchema?: PluginConfigSchema | null;
+  playbackBar?: PluginPlaybackBarEntry | null;
+  sidebar?: PluginSidebarEntry | null;
 }
 
 export type PluginConfigValue = string | number | boolean | string[] | null | undefined;
@@ -101,17 +114,8 @@ export interface PluginConfigSchema {
 
 export type PluginConfigMap = Record<string, PluginConfig>;
 
-export interface PluginThemePayload {
-  id?: string;
-  name?: string;
-  author?: string;
-  variables: Record<string, string>;
-  preview?: string | null;
-  background?: string | null;
-  backgroundOpacity?: number | null;
-}
-
 export interface PluginCatalogItem {
+  managementStatus?: 'available' | 'installed' | 'update';
   id: string;
   name: string;
   version: string;
@@ -130,6 +134,8 @@ export interface PluginCatalogItem {
   sourceUrl: string;
   sourceKind: PluginSourceKind;
   configSchema?: PluginConfigSchema | null;
+  playbackBar?: PluginPlaybackBarEntry | null;
+  sidebar?: PluginSidebarEntry | null;
 }
 
 export interface PluginSubscription {

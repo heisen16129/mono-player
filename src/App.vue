@@ -30,10 +30,10 @@ import { useDownloadedTrackActions } from './composables/useDownloadedTrackActio
 import { useExternalPlaybackEventBridge } from './composables/useExternalPlaybackEventBridge';
 import { useFavoriteTrackActions } from './composables/useFavoriteTrackActions';
 import { useLibraryCatalog } from './composables/useLibraryCatalog';
+import { providePluginNavigation } from './composables/usePluginNavigation';
 import { useLibraryNavigation } from './composables/useLibraryNavigation';
 import { useLibraryPanelResize } from './composables/useLibraryPanelResize';
 import { useLocalPlaybackActions } from './composables/useLocalPlaybackActions';
-import { useLocalLibraryPlaybackCleanup } from './composables/useLocalLibraryPlaybackCleanup';
 import { useLyricsDockAutoHide } from './composables/useLyricsDockAutoHide';
 import { useLyricsRendererSettings } from './composables/useLyricsRendererSettings';
 import { useLyricsEntry } from './composables/useLyricsEntry';
@@ -67,7 +67,6 @@ import type { AppDialogsListeners } from './types/appDialogs';
 import type { AppSidebarOutletListeners, AppSidebarOutletProps } from './types/sidebar';
 import type { PlayerDockController } from './types/playerDockController';
 import {
-  dedupePlaybackQueue,
   isRemoteTrack,
 } from './utils/playback';
 
@@ -90,7 +89,6 @@ const playNextTrack = () => appRustPlaybackRuntime.playNextTrack();
 const playPreviousTrack = () => appRustPlaybackRuntime.playPreviousTrack();
 const handlePlaybackFailure = (...args: Parameters<AppRustPlaybackRuntime['handlePlaybackFailure']>) => appRustPlaybackRuntime.handlePlaybackFailure(...args);
 const removeTrackFromRustQueue = (...args: Parameters<AppRustPlaybackRuntime['removeTrackFromRustQueue']>) => appRustPlaybackRuntime.removeTrackFromRustQueue(...args);
-const setPlaybackMode = (...args: Parameters<AppRustPlaybackRuntime['setPlaybackMode']>) => appRustPlaybackRuntime.setPlaybackMode(...args);
 const togglePlaybackMode = () => appRustPlaybackRuntime.togglePlaybackMode();
 const { isSidebarCollapsed } = useSidebarCollapse();
 const { startWindowDrag } = useWindowDrag();
@@ -184,12 +182,14 @@ const {
   openPluginsView,
   openRecentAdded,
   openRecentAddedInLibrary,
+  openRecentPlayedInLibrary,
   openRecentPlayed,
   openSettingsView,
   openThemeView,
   selectArtist,
   isSettingsOpen,
 } = useLibraryNavigation(() => getDefaultArtistName());
+providePluginNavigation(activeView, () => player.settings.enablePlugins);
 
 const {
   hasThemeBackground,
@@ -299,7 +299,6 @@ const {
 } = useActiveTrackState({
   currentSource: computed(() => player.currentSource),
   isRemoteTrack,
-  visibleTracks,
 });
 
 useCurrentPlaybackCoverEvents({
@@ -320,6 +319,7 @@ const {
   openDiscoverMusicView,
   openLocalFolderFromPanel,
   openRecentAddedFromPanel,
+  openRecentPlayedFromPanel,
   returnToLocalLibrary,
 } = useContentNavigationActions({
   hasMusicSourcePlugin,
@@ -329,6 +329,7 @@ const {
   openFolder,
   openLibraryView,
   openRecentAddedInLibrary,
+  openRecentPlayedInLibrary,
   resetOnlineSearchSnapshot,
 });
 
@@ -346,7 +347,6 @@ const {
   getOnlineTrackKey,
 } = useOnlinePlaybackLookup({
   activePluginTrack: onlineActivePluginTrack,
-  dedupeTracks: dedupePlaybackQueue,
   onlineSearchResults,
 });
 
@@ -400,6 +400,7 @@ const {
   onlinePlaybackQuality,
   onlinePlaybackQualityOptions,
 } = useOnlineQualityRefresh({
+  activePlaybackTrack: onlineActiveTrack,
   activePluginTrack: onlineActivePluginTrack,
 });
 
@@ -477,7 +478,6 @@ const {
   onlineActiveTrackKey,
   playbackTime,
   player,
-  rustPlaybackQueue,
   selectedTrack,
   showToast: showOnlineToast,
 });
@@ -541,10 +541,7 @@ const {
   restorePlaybackRequestId,
   restorePlaybackTime,
   restoreSavedPlaybackSession,
-  savePlaybackSessionNow,
 } = usePlaybackSessionRuntime({
-  activeTrack,
-  playbackQueue: rustPlaybackQueue,
   playbackTime,
   player,
   selectedTrack,
@@ -562,7 +559,6 @@ appRustPlaybackRuntime = useAppRustPlaybackRuntime({
   selectedTrack,
   player,
   clearPreparingPlaybackState,
-  dedupePlaybackQueue,
   findPluginTrackForQueueTrack,
   getOnlineTrackKey,
   loadLocalTrackLyricsInBackground,
@@ -604,18 +600,11 @@ const {
   playNextTrack,
   playPreviousTrack,
   seekToLyric,
-  setPlaybackMode,
 });
 
-useLocalLibraryPlaybackCleanup({
-  currentPlaybackTrack,
-  libraryTracks: computed(() => player.tracks),
-  onRemovedActiveLocalTrack: rustQueueSnapshotController.clearActivePlaybackState,
-  selectedTrack,
-});
+
 
 useAppBootstrap({
-  dedupePlaybackQueue,
   isAppReady,
   loadDownloadItems,
   loadLibraryPanelWidth,
@@ -651,11 +640,8 @@ const {
 
 
 const { handleAppCloseRequest } = useTrayIntegration({
-  activeTrack,
   handleTrayMenuAction,
-  isAudioPlaying,
   player,
-  savePlaybackSessionNow,
 });
 
 const appMenuSurfaceProps = computed<AppSidebarOutletProps>(() => ({
@@ -667,7 +653,7 @@ const appMenuSurfaceProps = computed<AppSidebarOutletProps>(() => ({
   enablePlugins: player.settings.enablePlugins,
   hasMusicSourcePlugin: hasMusicSourcePlugin.value,
   isLibraryPanelMode: isLibraryPanelMode.value,
-  playlists: player.settings.playlists ?? [],
+  playlists: player.playlists ?? [],
   showDownloads: shouldShowDownloadsMenu.value,
 }));
 
@@ -703,7 +689,6 @@ const { appMainContentListeners, appMainContentProps } = useAppMainContentSurfac
     appGridStyle,
     artistGroups,
     downloadedTrackKeys,
-    downloadItems,
     isAudioPlaying,
     isLibraryPanelMode,
     isLibraryVisible,
@@ -746,6 +731,7 @@ const { appMainContentListeners, appMainContentProps } = useAppMainContentSurfac
     openPluginsView,
     openRecentAdded,
     openRecentAddedFromPanel,
+    openRecentPlayedFromPanel,
     openRecentPlayed,
     openScanDialog,
     openSettingsView,
@@ -865,7 +851,7 @@ const { appDialogsListeners, appDialogsProps } = useAppDialogsBindings({
     newPlaylistCover: () => newPlaylistCover.value,
     newPlaylistName: () => newPlaylistName.value,
     playlistCoverCropImagePath: () => playlistCoverCropImagePath.value,
-    playlists: () => player.settings.playlists,
+    playlists: () => player.playlists,
     scanFolders: () => scanFolders.value,
     scanProgressText: () => scanProgressText.value,
     trackMetadataError: () => trackMetadataError.value,

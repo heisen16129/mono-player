@@ -1,3 +1,4 @@
+import type { Track } from '../types/music';
 import { onBeforeUnmount, ref, watch, type Ref } from 'vue';
 import { resolvePluginPlaybackQualitiesWithRust } from '../services/pluginSearch';
 import type { PluginPlaybackQualities, PluginPlaybackQuality, PluginPlaybackQualityOption, PluginSearchTrack } from '../types/plugin';
@@ -6,14 +7,14 @@ const qualityRequestsByProvider = new Map<string, Promise<PluginPlaybackQualitie
 
 interface OnlineQualityRefreshOptions {
   activePluginTrack: Ref<PluginSearchTrack | null>;
+  activePlaybackTrack: { readonly value: Track | null };
 }
 
-export function useOnlineQualityRefresh({ activePluginTrack }: OnlineQualityRefreshOptions) {
+export function useOnlineQualityRefresh({ activePluginTrack, activePlaybackTrack }: OnlineQualityRefreshOptions) {
   const onlinePlaybackQuality = ref<PluginPlaybackQuality>('');
   const onlinePlaybackQualityOptions = ref<PluginPlaybackQualityOption[]>([]);
   let onlineQualityRefreshTimer: number | null = null;
   let onlineQualityRefreshRequestId = 0;
-  let onlinePlaybackQualityTrackKey = '';
 
   function clearOnlinePlaybackQualitiesRefreshTimer() {
     if (onlineQualityRefreshTimer === null) return;
@@ -26,7 +27,6 @@ export function useOnlineQualityRefresh({ activePluginTrack }: OnlineQualityRefr
     clearOnlinePlaybackQualitiesRefreshTimer();
     const track = activePluginTrack.value;
     if (!track) {
-      onlinePlaybackQualityTrackKey = '';
       onlinePlaybackQuality.value = '';
       onlinePlaybackQualityOptions.value = [];
       return;
@@ -38,21 +38,6 @@ export function useOnlineQualityRefresh({ activePluginTrack }: OnlineQualityRefr
       onlineQualityRefreshTimer = null;
       void refreshOnlinePlaybackQualities(onlineQualityRefreshRequestId);
     }, 120);
-  }
-
-  function applyOnlinePlaybackQualities(result: PluginPlaybackQualities, qualityKey: string) {
-    onlinePlaybackQualityOptions.value = result.qualities;
-    const availableIds = result.qualities
-      .filter((quality) => quality.available)
-      .map((quality) => quality.id);
-    const currentQuality = onlinePlaybackQualityTrackKey === qualityKey ? onlinePlaybackQuality.value : '';
-    const nextQuality = currentQuality && availableIds.includes(currentQuality)
-      ? currentQuality
-      : result.defaultQuality && availableIds.includes(result.defaultQuality)
-        ? result.defaultQuality
-        : availableIds[0];
-    onlinePlaybackQualityTrackKey = qualityKey;
-    onlinePlaybackQuality.value = nextQuality ? nextQuality as PluginPlaybackQuality : '';
   }
 
   function requestOnlinePlaybackQualities(track: PluginSearchTrack) {
@@ -75,10 +60,9 @@ export function useOnlineQualityRefresh({ activePluginTrack }: OnlineQualityRefr
     try {
       const result = await requestOnlinePlaybackQualities(track);
       if (requestId !== onlineQualityRefreshRequestId) return;
-      applyOnlinePlaybackQualities(result, pluginQualityCacheKey(track));
+      onlinePlaybackQualityOptions.value = result.qualities;
     } catch {
       if (requestId !== onlineQualityRefreshRequestId) return;
-      onlinePlaybackQualityTrackKey = '';
       onlinePlaybackQualityOptions.value = [];
     }
   }
@@ -86,6 +70,17 @@ export function useOnlineQualityRefresh({ activePluginTrack }: OnlineQualityRefr
   watch(
     () => activePluginTrack.value ? pluginQualityCacheKey(activePluginTrack.value) : '',
     scheduleOnlinePlaybackQualitiesRefresh,
+  );
+
+  watch(
+    () => [activePluginTrack.value?.providerId, activePluginTrack.value?.id, activePlaybackTrack.value?.sourceProviderId, activePlaybackTrack.value?.sourceId, activePlaybackTrack.value?.actualQuality],
+    () => {
+      const source = activePluginTrack.value;
+      const playing = activePlaybackTrack.value;
+      onlinePlaybackQuality.value = source && playing?.sourceProviderId === source.providerId && playing.sourceId === source.id
+        ? playing.actualQuality ?? '' : '';
+    },
+    { immediate: true },
   );
 
   onBeforeUnmount(clearOnlinePlaybackQualitiesRefreshTimer);

@@ -4,16 +4,11 @@ import { artistNames } from '../utils/artist';
 import { invokeApi } from './api';
 
 export interface ScanMusicDirResult {
+  musicDirs: string[];
+  musicDir: string;
+  canceled: boolean;
   tracks: Track[];
-  addedTracks: Track[];
-  addedTrackIds: number[];
 }
-
-type RawScanMusicDirResult = Track[] | {
-  tracks?: Track[];
-  addedTracks?: Track[];
-  addedTrackIds?: number[];
-};
 
 export interface UpdateTrackMetadataRequest {
   id: number;
@@ -105,12 +100,17 @@ export function listLatestAddedTracks(): Promise<Track[]> {
   return invokeApi<Track[]>('list_latest_added_tracks').then(normalizeTracks);
 }
 
-export function removeMusicDir(path: string): Promise<Track[]> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve([]);
-  }
+export interface LibraryDirectorySnapshot {
+  musicDirs: string[];
+  musicDir: string;
+  tracks: Track[];
+  latestAddedTracks: Track[];
+  statistics: { count: number; totalSeconds: number };
+}
 
-  return invokeApi<Track[]>('remove_music_dir', { path }).then(normalizeTracks);
+export async function updateLibraryDirectories(paths: string[]): Promise<LibraryDirectorySnapshot> {
+  const result = await invokeApi<LibraryDirectorySnapshot>('update_library_directories', { paths });
+  return { ...result, tracks: normalizeTracks(result.tracks), latestAddedTracks: normalizeTracks(result.latestAddedTracks) };
 }
 
 export function updateTrackMetadata(request: UpdateTrackMetadataRequest): Promise<UpdateTrackMetadataResult> {
@@ -171,21 +171,13 @@ export function readTrackAudioInfo(request: ReadTrackAudioInfoRequest): Promise<
   return invokeApi<TrackAudioInfo>('read_track_audio_info', { request });
 }
 
-export async function scanMusicDir(path: string): Promise<ScanMusicDirResult> {
+export async function scanMusicDirs(paths: string[]): Promise<ScanMusicDirResult> {
   if (!isTauriRuntime()) {
     return Promise.reject(new Error('请在 Tauri 桌面窗口中扫描本地音乐目录。'));
   }
 
-  const result = await invokeApi<RawScanMusicDirResult>('scan_music_dir', { path });
-  if (Array.isArray(result)) {
-    return { tracks: normalizeTracks(result), addedTracks: [], addedTrackIds: [] };
-  }
-
-  return {
-    tracks: normalizeTracks(Array.isArray(result.tracks) ? result.tracks : []),
-    addedTracks: normalizeTracks(Array.isArray(result.addedTracks) ? result.addedTracks : []),
-    addedTrackIds: Array.isArray(result.addedTrackIds) ? result.addedTrackIds : [],
-  };
+  const result = await invokeApi<ScanMusicDirResult>('scan_music_dirs', { paths });
+  return { ...result, tracks: normalizeTracks(result.tracks) };
 }
 
 function normalizeTrack(track: Track): Track {

@@ -18,7 +18,8 @@ export function useLyricsSearch({ beforeOpen, defaultQuery }: LyricsSearchOption
   const lyricSearchStatus = ref('');
   const isSearchingPluginLyrics = ref(false);
   const isLoadingMorePluginLyrics = ref(false);
-  const lyricSearchPage = ref(1);
+  let sessionId: string | null = null;
+  let submittedQuery = '';
   const isLyricSearchEnd = ref(true);
   const resolvingLyricTrackKey = ref<string | null>(null);
   let lyricSearchRequestId = 0;
@@ -33,7 +34,8 @@ export function useLyricsSearch({ beforeOpen, defaultQuery }: LyricsSearchOption
   }
 
   function resetLyricSearchPaging() {
-    lyricSearchPage.value = 1;
+    sessionId = null;
+    submittedQuery = '';
     isLyricSearchEnd.value = true;
     isLoadingMorePluginLyrics.value = false;
   }
@@ -50,23 +52,29 @@ export function useLyricsSearch({ beforeOpen, defaultQuery }: LyricsSearchOption
     lyricSearchStatus.value = '';
     resetLyricSearchPaging();
     resolvingLyricTrackKey.value = null;
-    nextLyricSearchRequestId();
+    const requestId = nextLyricSearchRequestId();
+    isSearchingPluginLyrics.value = false;
     isSearchDialogOpen.value = true;
 
     try {
-      lyricSearchProviders.value = await listPluginLyricSearchProviders();
+      const providers = await listPluginLyricSearchProviders();
+      if (requestId !== lyricSearchRequestId) return;
+      lyricSearchProviders.value = providers;
       const enabledProvider = lyricSearchProviders.value.find((provider) => provider.enabled);
       lyricSearchProviderId.value = enabledProvider?.id ?? null;
       if (lyricSearchQuery.value) {
         await searchPluginLyrics();
       }
     } catch (error) {
+      if (requestId !== lyricSearchRequestId) return;
       lyricSearchStatus.value = getErrorMessage(error);
     }
   }
 
   function closeLyricSearchDialog() {
     isSearchDialogOpen.value = false;
+    isSearchingPluginLyrics.value = false;
+    sessionId = null;
     isLoadingMorePluginLyrics.value = false;
     resolvingLyricTrackKey.value = null;
     nextLyricSearchRequestId();
@@ -82,9 +90,10 @@ export function useLyricsSearch({ beforeOpen, defaultQuery }: LyricsSearchOption
     const query = lyricSearchQuery.value.trim();
     const providerId = lyricSearchProviderId.value;
     const requestId = nextLyricSearchRequestId();
-    if (!query) {
+    if (!query || !providerId) {
+      isSearchingPluginLyrics.value = false;
       lyricSearchResults.value = [];
-      lyricSearchStatus.value = '请输入歌曲名或歌手';
+      lyricSearchStatus.value = !query ? '请输入歌曲名或歌手' : '没有启用支持歌词搜索的插件';
       resetLyricSearchPaging();
       return;
     }
@@ -92,12 +101,15 @@ export function useLyricsSearch({ beforeOpen, defaultQuery }: LyricsSearchOption
     isSearchingPluginLyrics.value = true;
     lyricSearchStatus.value = '';
     lyricSearchResults.value = [];
-    lyricSearchPage.value = 1;
+    sessionId = null;
+    submittedQuery = '';
     isLyricSearchEnd.value = true;
     isLoadingMorePluginLyrics.value = false;
     try {
-      const result = await searchPluginLyricsFromProviders(query, providerId, 1, 30);
+      const result = await searchPluginLyricsFromProviders(query, providerId);
       if (requestId !== lyricSearchRequestId) return;
+      sessionId = result.sessionId;
+      submittedQuery = query;
       lyricSearchResults.value = result.tracks;
       isLyricSearchEnd.value = result.isEnd;
       if (result.tracks.length === 0) {
@@ -116,22 +128,17 @@ export function useLyricsSearch({ beforeOpen, defaultQuery }: LyricsSearchOption
   }
 
   async function loadMorePluginLyrics() {
-    const query = lyricSearchQuery.value.trim();
-    if (!query || isSearchingPluginLyrics.value || isLoadingMorePluginLyrics.value || isLyricSearchEnd.value) return;
+    const providerId = lyricSearchProviderId.value;
+    if (!sessionId || !providerId || isSearchingPluginLyrics.value || isLoadingMorePluginLyrics.value || isLyricSearchEnd.value) return;
 
     isLoadingMorePluginLyrics.value = true;
     lyricSearchStatus.value = '';
-    const providerId = lyricSearchProviderId.value;
     const requestId = lyricSearchRequestId;
     try {
-      const nextPage = lyricSearchPage.value + 1;
-      const result = await searchPluginLyricsFromProviders(query, providerId, nextPage, 30);
+      const result = await searchPluginLyricsFromProviders(submittedQuery, providerId, sessionId);
       if (requestId !== lyricSearchRequestId) return;
-      const existingKeys = new Set(lyricSearchResults.value.map(lyricTrackKey));
-      const nextTracks = result.tracks.filter((track) => !existingKeys.has(lyricTrackKey(track)));
-      lyricSearchResults.value = [...lyricSearchResults.value, ...nextTracks];
-      lyricSearchPage.value = nextPage;
-      isLyricSearchEnd.value = result.isEnd || nextTracks.length === 0;
+      lyricSearchResults.value = result.tracks;
+      isLyricSearchEnd.value = result.isEnd;
     } catch (error) {
       if (requestId !== lyricSearchRequestId) return;
       lyricSearchStatus.value = getErrorMessage(error);

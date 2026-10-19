@@ -21,6 +21,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  openLibrary: [];
   openTrackMenu: [track: Track, x: number, y: number];
   playTrack: [track: Track];
   selectArtist: [artistName: string];
@@ -40,7 +41,7 @@ const artistHeroTitle = computed(() => {
 });
 
 const artistHeroTrackCount = computed(() => {
-  return songCount(player.settings.locale, selectedArtist.value?.tracks.length || 0);
+  return songCount(player.settings.locale, selectedArtist.value?.count || 0);
 });
 
 const artistTrackListProps = computed<ArtistTrackListProps>(() => ({
@@ -64,6 +65,7 @@ const artistTrackListListeners: ArtistTrackListListeners = {
     <template #panel>
       <ArtistListPanel
         :active-artist-name="activeArtistName"
+        @open-library="emit('openLibrary')"
         :artist-groups="artistGroups"
         @select-artist="emit('selectArtist', $event)"
       />

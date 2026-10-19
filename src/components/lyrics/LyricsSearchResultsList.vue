@@ -3,6 +3,7 @@ import type { PluginSearchTrack } from '../../types/plugin';
 import LyricsSearchResultRow from './LyricsSearchResultRow.vue';
 
 defineProps<{
+  searchingText?: string;
   isLoadingMore: boolean;
   isSearching: boolean;
   resolvingTrackKey: string | null;
@@ -19,7 +20,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="lyrics-search-results" @scroll="emit('scroll', $event)">
-    <p v-if="isSearching" class="lyrics-search-state">正在搜索歌词...</p>
+    <p v-if="isSearching" class="lyrics-search-state">{{ searchingText || '正在搜索歌词...' }}</p>
     <template v-else>
       <LyricsSearchResultRow
         v-for="track in results"

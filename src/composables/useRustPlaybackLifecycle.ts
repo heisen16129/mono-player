@@ -15,7 +15,6 @@ interface UseRustPlaybackLifecycleOptions {
   rustPlaybackQueue: Ref<Track[]>;
   player: ReturnType<typeof usePlayerStore>;
   crossfadeDurationMs: number;
-  dedupePlaybackQueue: (tracks: Track[]) => Track[];
   handleRustPlaybackAdvanced: (event: RustPlaybackAdvancedEvent) => void;
   handleRustQueueSnapshot: (snapshot: RustQueueSnapshot) => void;
 }
@@ -25,13 +24,12 @@ export function useRustPlaybackLifecycle({
   rustPlaybackQueue,
   player,
   crossfadeDurationMs,
-  dedupePlaybackQueue,
   handleRustPlaybackAdvanced,
   handleRustQueueSnapshot,
 }: UseRustPlaybackLifecycleOptions) {
   async function startRustPlaybackQueue(tracks: Track[], requestedTrack: Track | null, startPosition = 0) {
     playbackTime.value = startPosition;
-    const playbackTracks = dedupePlaybackQueue(tracks);
+    const playbackTracks = tracks;
     try {
       const snapshot = await startRustBackendQueue(
         playbackTracks,
@@ -51,7 +49,7 @@ export function useRustPlaybackLifecycle({
   }
 
   async function restoreRustPlaybackQueue(track: Track, currentTime: number) {
-    const playbackTracks = dedupePlaybackQueue(player.queue.filter((item) => item.path));
+    const playbackTracks = player.queue;
     if (playbackTracks.length === 0) return;
 
     let stopAdvancedListener: (() => void) | null = null;

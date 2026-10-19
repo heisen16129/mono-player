@@ -527,6 +527,40 @@ export async function resumePlaylist(): Promise<void> {
   });
 }
 
+export async function playAllSpeakers(action: 'play' | 'pause' = 'play'): Promise<boolean> {
+  if (state.playerBusy) return false;
+  if (action === 'play' && !state.selectedPlaylistId) throw new Error('请先选择歌单');
+  const targets = state.devices.flatMap(account => account.devices
+    .filter(device => device.presence === 'online')
+    .map(device => ({ account_id: account.account_id, device_id: deviceId(device), name: deviceName(device) })));
+  if (!targets.length) throw new Error('暂无在线音响');
+  const playlistId = Number(state.selectedPlaylistId);
+  const song = state.songs.find(item => item.id === state.player.current_song?.id) || state.songs[0];
+  if (action === 'play' && !song) throw new Error('当前歌单没有可播放的歌曲');
+  const body = action === 'pause' ? {} : { playlist_id: playlistId, song_id: song!.id, start_index: Math.max(0, state.songs.indexOf(song!)), play_mode: state.player.play_mode || 'order' };
+  state.playerBusy = true;
+  try {
+    await loadGroups();
+    const seen = new Set<string>();
+    const unique = targets.filter(target => {
+      const group = state.groups.find(item => item.members.some(member => member.account_id === target.account_id && member.device_id === target.device_id));
+      const key = group ? `group:${group.id}` : JSON.stringify([target.account_id, target.device_id]);
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+    const results = await Promise.allSettled(unique.map(target => post(`/player/${action}`, { ...body, account_id: target.account_id, device_id: target.device_id })));
+    const failed = results.flatMap((result, index) => result.status === 'rejected' ? [`${unique[index].name}：${messageOf(result.reason)}`] : []);
+    requestStatusRefresh();
+    void refreshPlayerStatus();
+    if (failed.length) {
+      notify(`部分音响或分组操作失败：${failed.join('；')}`, 'error');
+      return false;
+    }
+    notify(action === 'play' ? '已向全部在线音响发送播放指令' : '已向全部在线音响发送暂停指令', 'success');
+    return true;
+  } finally { state.playerBusy = false; }
+}
+
 export async function playerCommand(path: string, body: Record<string, unknown> = {}): Promise<void> {
   if (state.playerBusy) return;
   state.playerBusy = true;
@@ -576,6 +610,8 @@ export async function refreshPlayerStatus(): Promise<void> {
   if (!state.currentAccountId || !state.currentDeviceId) return;
   if (statusRequestBusy) return;
   statusRequestBusy = true;
+  const revision = selectionRevision;
+  const socketGeneration = statusSocketGen;
   try {
     const status = await get<PlayerStatus>(
       `/player/status${query({
@@ -583,7 +619,7 @@ export async function refreshPlayerStatus(): Promise<void> {
         device_id: state.currentDeviceId,
       })}`,
     );
-    applyPlayerStatus(status);
+    if (revision === selectionRevision && socketGeneration === statusSocketGen) applyPlayerStatus(status);
   } catch (error) {
     if (!state.statusConnected) console.warn('[miot] status refresh failed', messageOf(error));
   } finally {
@@ -929,3 +965,4 @@ export function disposeStore(): void {
 }
 
 export { messageOf };
+

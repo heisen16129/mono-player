@@ -15,13 +15,12 @@ export interface AppPageOutletProps {
   activeView: AppView;
   artistGroups: ArtistGroup[];
   downloadedTrackKeys: string[];
-  downloadItems: DownloadItem[];
   favoriteTrackIds: number[];
   isAudioPlaying: boolean;
   isLibraryPanelMode: boolean;
   isOnlineSearchOpen: boolean;
   isPreparingActiveTrack: boolean;
-  libraryMeta: { count: number; minutes: number };
+  libraryMeta: { count: number; minutes: number; totalSeconds: number };
   libraryTitle: string;
   localFolderTrackCount: number;
   localFolders: LocalFolderItem[];
@@ -32,6 +31,7 @@ export interface AppPageOutletProps {
   playerError: string | null;
   playerQuery: string;
   recentAddedTrackCount: number;
+  showDownloads: boolean;
   visibleTracks: Track[];
 }
 
@@ -50,6 +50,9 @@ export interface AppPageOutletEmits {
   openLocalFolderFromPanel: [path: string];
   openOnlineTrackContextMenu: [track: PluginSearchTrack, x: number, y: number];
   openRecentAddedFromPanel: [];
+  openRecentPlayedFromPanel: [];
+  openDownloads: [];
+  openArtists: [];
   openScanDialog: [];
   openTrackContextMenu: [track: Track, x: number, y: number];
   pauseDownloadItem: [item: DownloadItem];
@@ -69,6 +72,7 @@ export interface AppPageOutletEmits {
 }
 
 export interface AppLibraryHomePageOutletProps {
+  downloadsActive?: boolean;
   activeCollection: LibraryCollection;
   activeFolderPath: string | null;
   activeLibraryFilter: LibraryFilter;
@@ -78,13 +82,14 @@ export interface AppLibraryHomePageOutletProps {
   isAudioPlaying: boolean;
   isOnlineSearchOpen: boolean;
   isPreparingActiveTrack: boolean;
-  libraryMeta: { count: number; minutes: number };
+  libraryMeta: { count: number; minutes: number; totalSeconds: number };
   libraryTitle: string;
   localFolderTrackCount: number;
   localFolders: LocalFolderItem[];
   playerError: string | null;
   playerQuery: string;
   recentAddedTrackCount: number;
+  showDownloads: boolean;
   visibleTracks: Track[];
 }
 
@@ -93,6 +98,9 @@ export interface AppLibraryHomePageOutletEmits {
   openArtistFromTrack: [artistName: string];
   openLocalFolderFromPanel: [path: string];
   openRecentAddedFromPanel: [];
+  openRecentPlayedFromPanel: [];
+  openDownloads: [];
+  openArtists: [];
   openScanDialog: [];
   openTrackContextMenu: [track: Track, x: number, y: number];
   playFavoriteTracks: [];
@@ -109,6 +117,9 @@ export interface AppLibraryHomePageOutletListeners {
   onOpenArtistFromTrack: (...args: AppLibraryHomePageOutletEmits['openArtistFromTrack']) => void;
   onOpenLocalFolderFromPanel: (...args: AppLibraryHomePageOutletEmits['openLocalFolderFromPanel']) => void;
   onOpenRecentAddedFromPanel: () => void;
+  onOpenRecentPlayedFromPanel: () => void;
+  onOpenDownloads: () => void;
+  onOpenArtists: () => void;
   onOpenScanDialog: () => void;
   onOpenTrackContextMenu: (...args: AppLibraryHomePageOutletEmits['openTrackContextMenu']) => void;
   onPlayFavoriteTracks: () => void;
@@ -168,7 +179,7 @@ export interface AppWorkspacePageOutletProps {
   isPlaying: boolean;
   isPreparingActiveTrack: boolean;
   libraryFilter: LibraryFilter;
-  libraryMeta: { count: number; minutes: number };
+  libraryMeta: { count: number; minutes: number; totalSeconds: number };
   libraryTitle: string;
   modelValue: string;
   tracks: Track[];
@@ -206,6 +217,7 @@ export interface AppArtistsPageOutletProps {
 }
 
 export interface AppArtistsPageOutletEmits {
+  openLibrary: [];
   'update:modelValue': [value: string];
   openTrackMenu: [track: Track, x: number, y: number];
   playTrack: [track: Track];
@@ -215,6 +227,7 @@ export interface AppArtistsPageOutletEmits {
 }
 
 export interface AppArtistsPageOutletListeners {
+  onOpenLibrary: () => void;
   'onUpdate:modelValue': (...args: AppArtistsPageOutletEmits['update:modelValue']) => void;
   onOpenTrackMenu: (...args: AppArtistsPageOutletEmits['openTrackMenu']) => void;
   onPlayTrack: (...args: AppArtistsPageOutletEmits['playTrack']) => void;

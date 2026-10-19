@@ -1,3 +1,13 @@
+pub(crate) mod library_directories;
+pub(crate) mod playback_session;
+pub(crate) mod favorites;
+pub(crate) mod playlists;
+pub(crate) mod recent_played;
+pub(crate) mod library_statistics;
+pub(crate) mod library_search;
+pub(crate) mod search_history;
+pub(crate) mod download_records;
+
 use crate::api_response::ApiResponse;
 use crate::models::{artist_names, Track};
 use crate::state::AppState;
@@ -132,25 +142,6 @@ pub(crate) async fn list_latest_added_tracks(app: AppHandle) -> ApiResponse<Vec<
     ApiResponse::from_result((|| {
         let db = state.db.lock().map_err(|err| err.to_string())?;
         read_latest_added_tracks(&db)
-    })())
-}
-
-#[tauri::command]
-pub(crate) fn remove_music_dir(
-    state: State<'_, AppState>,
-    app: AppHandle,
-    path: String,
-) -> ApiResponse<Vec<Track>> {
-    ApiResponse::from_result((|| {
-        let root = PathBuf::from(path.trim());
-        let (removed_sources, tracks) = {
-            let db = state.db.lock().map_err(|err| err.to_string())?;
-            let removed_sources = delete_tracks_for_music_dir(&db, &root)?;
-            let tracks = read_tracks(&db)?;
-            (removed_sources, tracks)
-        };
-        crate::player::remove_library_queue_sources(&app, removed_sources)?;
-        Ok(tracks)
     })())
 }
 
@@ -459,6 +450,7 @@ pub(crate) fn read_track_duration_seconds(path: &Path) -> Result<u64, String> {
 /**
 * id INTEGER PRIMARY KEY AUTOINCREMENT閿涙艾鐣炬稊澶夊瘜闁?id閿涘瞼琚崹瀣╄礋閺佸瓨鏆熼敍灞肩瑬閼奉亜濮╅柅鎺戭杻閵?   path TEXT NOT NULL UNIQUE閿涙艾鐡ㄩ崒銊╃叾娑旀劖鏋冩禒鍓佹畱鐠侯垰绶為妴渚糘T NULL 鐞涖劎銇氭稉宥堝厴娑撹櫣鈹栭敍瀛禢IQUE 鐞涖劎銇氱捄顖氱窞韫囧懘銆忛崬顖欑閿涘牓妲诲銏ゅ櫢婢跺秴缍嶉崗銉ユ倱娑撯偓妫ｆ牗鐡曢敍澶堚偓?   title TEXT NOT NULL閿涙艾鐡ㄩ崒銊︾摃閺囧弶鐖ｆ０姗堢礉娑撳秷鍏樻稉铏光敄閵?   artist TEXT閿涙艾鐡ㄩ崒銊ㄥ閺堫垰顔嶉崥宥囆為敍灞藉帒鐠侀晲璐熺粚鐚寸礄NULL閿涘鈧?   album TEXT閿涙艾鐡ㄩ崒銊ょ瑩鏉堟垵鎮曠粔甯礉閸忎浇顔忔稉铏光敄閵?   duration INTEGER閿涙艾鐡ㄩ崒銊︾摃閺囧弶妞傞梹鍖＄礄缁夋帪绱氶敍灞藉帒鐠侀晲璐熺粚鎭掆偓?   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP閿涙俺顔囪ぐ鏇熸付閸氬孩娲块弬鐗堟闂傝揪绱濇妯款吇娑撳搫缍嬮崜宥嗘闂傚瓨鍩戦妴?*/
 pub(crate) fn init_database(db: &Connection) -> rusqlite::Result<()> {
+    db.execute_batch("PRAGMA foreign_keys = ON;")?;
     db.execute(
         "CREATE TABLE IF NOT EXISTS tracks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -478,6 +470,14 @@ pub(crate) fn init_database(db: &Connection) -> rusqlite::Result<()> {
     ensure_track_column(db, "scan_id", "TEXT")?;
     ensure_track_column(db, "music_dir", "TEXT")?;
     ensure_track_column(db, "artwork", "TEXT")?;
+    ensure_track_column(db, "last_played_at", "INTEGER")?;
+    db.execute_batch("CREATE INDEX IF NOT EXISTS tracks_last_played ON tracks(last_played_at DESC, id DESC);")?;
+    library_directories::init_table(db)?;
+    download_records::init_table(db)?;
+    search_history::init_table(db)?;
+    playback_session::init_table(db)?;
+    favorites::init_table(db)?;
+    playlists::init_tables(db)?;
     db.execute(
         "UPDATE tracks SET added_at = COALESCE(added_at, updated_at, CURRENT_TIMESTAMP)",
         [],
@@ -507,36 +507,14 @@ fn ensure_track_column(db: &Connection, name: &str, definition: &str) -> rusqlit
 pub(crate) fn read_tracks(db: &Connection) -> Result<Vec<Track>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT id, path, title, artist, album, duration, added_at, scan_id, artwork
+            "SELECT id, path, title, artist, album, duration, added_at, scan_id, artwork, last_played_at
              FROM tracks
              ORDER BY added_at DESC, id DESC",
         )
         .map_err(|err| err.to_string())?;
 
     let rows = stmt
-        .query_map([], |row| {
-            Ok(Track {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                title: row.get(2)?,
-                artist: row.get(3)?,
-                album: row.get(4)?,
-                duration: row.get(5)?,
-                added_at: row.get(6)?,
-                scan_id: row.get(7)?,
-                year: None,
-                genre: None,
-                track_number: None,
-                artwork: row.get(8)?,
-                associated_artwork: None,
-                lyrics: None,
-                associated_lyrics: None,
-                source_id: None,
-                source_name: None,
-                source_provider_id: None,
-                source_raw: None,
-            })
-        })
+        .query_map([], track_from_row)
         .map_err(|err| err.to_string())?;
 
     rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -548,7 +526,7 @@ pub(crate) fn read_tracks(db: &Connection) -> Result<Vec<Track>, String> {
 pub(crate) fn read_latest_added_tracks(db: &Connection) -> Result<Vec<Track>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT id, path, title, artist, album, duration, added_at, scan_id, artwork
+            "SELECT id, path, title, artist, album, duration, added_at, scan_id, artwork, last_played_at
              FROM tracks
              WHERE scan_id IN (
                 SELECT DISTINCT scan_id
@@ -566,29 +544,7 @@ pub(crate) fn read_latest_added_tracks(db: &Connection) -> Result<Vec<Track>, St
         .map_err(|err| err.to_string())?;
 
     let rows = stmt
-        .query_map([], |row| {
-            Ok(Track {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                title: row.get(2)?,
-                artist: row.get(3)?,
-                album: row.get(4)?,
-                duration: row.get(5)?,
-                added_at: row.get(6)?,
-                scan_id: row.get(7)?,
-                year: None,
-                genre: None,
-                track_number: None,
-                artwork: row.get(8)?,
-                associated_artwork: None,
-                lyrics: None,
-                associated_lyrics: None,
-                source_id: None,
-                source_name: None,
-                source_provider_id: None,
-                source_raw: None,
-            })
-        })
+        .query_map([], track_from_row)
         .map_err(|err| err.to_string())?;
 
     rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -797,11 +753,21 @@ pub(crate) fn delete_missing_tracks_for_dir(
     Ok(removed_paths)
 }
 
-pub(crate) fn delete_tracks_for_music_dir(
+#[cfg(test)]
+pub(crate) fn delete_tracks_for_music_dir(db: &Connection, root: &Path) -> Result<Vec<String>, String> {
+    let tx = db.unchecked_transaction().map_err(|e| e.to_string())?;
+    let result = delete_tracks_for_music_dir_in_transaction(&tx, root)?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+pub(crate) fn delete_tracks_for_music_dir_in_transaction(
     db: &Connection,
     root: &Path,
 ) -> Result<Vec<String>, String> {
     let music_dir = normalized_music_dir(root);
+    favorites::delete_for_music_dir(db, root)?;
+    playlists::delete_for_music_dir(db, root)?;
     let mut statement = db
         .prepare("SELECT path FROM tracks WHERE music_dir = ?1")
         .map_err(|err| err.to_string())?;
@@ -848,7 +814,7 @@ fn normalized_music_dir(root: &Path) -> String {
         .to_string()
 }
 
-fn normalized_track_path(path: &str) -> String {
+pub(crate) fn normalized_track_path(path: &str) -> String {
     path.replace('\\', "/")
         .trim_start_matches("//?/")
         .to_ascii_lowercase()
@@ -883,6 +849,7 @@ mod tests {
             duration: Some(180),
             added_at: None,
             scan_id: None,
+            last_played_at: None,
             year: None,
             genre: None,
             track_number: None,
@@ -1060,3 +1027,31 @@ fn image_mime_type(path: &Path, data: &[u8]) -> Option<MimeType> {
         None
     }
 }
+
+fn track_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Track> {
+    Ok(Track {
+        id: row.get(0)?,
+        path: row.get(1)?,
+        title: row.get(2)?,
+        artist: row.get(3)?,
+        album: row.get(4)?,
+        duration: row.get(5)?,
+        added_at: row.get(6)?,
+        scan_id: row.get(7)?,
+        year: None,
+        genre: None,
+        track_number: None,
+        artwork: row.get(8)?,
+        last_played_at: row.get(9)?,
+        associated_artwork: None,
+        lyrics: None,
+        associated_lyrics: None,
+        source_id: None,
+        source_name: None,
+        source_provider_id: None,
+        source_raw: None,
+    })
+}
+
+#[cfg(test)]
+mod list_statistics_tests;

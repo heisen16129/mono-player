@@ -8,6 +8,8 @@ import { DESKTOP_LYRICS_ACTION_EVENT, DESKTOP_LYRICS_READY_EVENT, type DesktopLy
 import { useDesktopLyricsLoader } from './useDesktopLyricsLoader';
 import { createLyricsSandboxDocument } from '../utils/lyricsSandbox';
 import { artworkBlobDataUrl, artworkDisplaySrc, artworkUrlDataUrl } from '../utils/artwork';
+import { getPluginConfig, savePluginConfig } from '../services/plugins';
+import type { PluginConfig } from '../types/plugin';
 import type { Track } from '../types/music';
 
 export function useDesktopPlaybackCardBridge(frame: Ref<HTMLIFrameElement | null>) {
@@ -19,7 +21,8 @@ export function useDesktopPlaybackCardBridge(frame: Ref<HTMLIFrameElement | null
   let unlisten: UnlistenFn | undefined;
   let unlistenConfig: UnlistenFn | undefined;
   const query = new URLSearchParams(location.search);
-  let config = { desktop: true, cardStyle: query.get('cardStyle') || 'minimal' };
+  const rendererId = query.get('rendererId') || 'playback-card';
+  let config: PluginConfig = { desktop: true, cardStyle: query.get('cardStyle') || 'minimal' };
   let disposed = false, ready = false, artworkGeneration = 0, trackIdentity = '';
   let artworkDataUrl = '';
   let playback = { currentTime: 0, isPlaying: false };
@@ -70,10 +73,11 @@ export function useDesktopPlaybackCardBridge(frame: Ref<HTMLIFrameElement | null
         await emit(DESKTOP_LYRICS_ACTION_EVENT, { type: 'seek', time: Math.max(0, Math.min(activeTrack.value?.duration || 0, event.data.payload.time)) });
       }
       else if (action === 'dragWindow') await getCurrentWindow().startDragging();
-      else if (action === 'updateConfig' && typeof event.data.payload?.config?.cardStyle === 'string') {
-        config = { desktop: true, cardStyle: event.data.payload.config.cardStyle };
+      else if (action === 'updateConfig' && event.data.payload?.config && typeof event.data.payload.config === 'object' && !Array.isArray(event.data.payload.config)) {
+        config = { ...event.data.payload.config, desktop: true };
         send({ type: 'config', config });
-        await saveDesktopCardStyle(config.cardStyle);
+        if (rendererId === 'playback-card') await saveDesktopCardStyle(String(config.cardStyle || 'minimal'));
+        else await savePluginConfig(rendererId, config);
       }
       else {
         const actions: Record<string, string> = { togglePlayback: 'toggle-play', playPrevious: 'previous', playNext: 'next' };
@@ -93,7 +97,10 @@ export function useDesktopPlaybackCardBridge(frame: Ref<HTMLIFrameElement | null
       });
       if (disposed) { configListener(); return; }
       unlistenConfig = configListener;
-      const source = await invokeApi<string>('read_local_renderer_module', { manifestPath: query.get('manifestPath'), modulePath: query.get('entry') });
+      config = { ...config, ...await getPluginConfig(rendererId === 'playback-card' ? 'lyrics-renderer.playback-card' : rendererId), desktop: true };
+      const source = query.get('entry') === 'builtin:playback-card'
+        ? (await import('../../plugins/playback-card/renderer.mjs?raw')).default
+        : await invokeApi<string>('read_local_renderer_module', { manifestPath: query.get('manifestPath'), modulePath: query.get('entry') });
       if (disposed) return;
       documentSource.value = createLyricsSandboxDocument('local-module', source);
       await emit(DESKTOP_LYRICS_READY_EVENT);

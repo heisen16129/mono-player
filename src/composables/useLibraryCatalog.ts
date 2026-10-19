@@ -1,9 +1,7 @@
 import { computed } from 'vue';
 import { t } from '../i18n';
 import type { usePlayerStore } from '../stores/player';
-import type { Track } from '../types/music';
-import { artistNames } from '../utils/artist';
-import { folderTitle, normalizePath } from '../utils/path';
+import { normalizePath } from '../utils/path';
 import type { LibraryCollection, LibraryFilter } from './useLibraryNavigation';
 
 interface ReadonlyRefValue<T> {
@@ -29,65 +27,22 @@ export function useLibraryCatalog({
 }: UseLibraryCatalogOptions) {
   const allVisibleTracks = computed(() => player.filteredTracks);
 
-  const artistGroups = computed(() => {
-    const groups = new Map<string, Track[]>();
-    const artistNameCollator = new Intl.Collator('zh-Hans-CN', {
-      numeric: true,
-      sensitivity: 'base',
-    });
+  const artistGroups = computed(() => player.libraryStatistics.artists);
 
-    for (const track of allVisibleTracks.value) {
-      const names = artistNames(track.artist);
-      const artists = names.length > 0 ? names : [t(player.settings.locale, 'unknownArtist')];
+  const activeFolder = computed(() => player.libraryStatistics.folders.find(folder => (
+    normalizePath(folder.path) === normalizePath(activeFolderPath.value ?? '')
+  )));
+  const folderVisibleTracks = computed(() => activeFolderPath.value
+    ? activeFolder.value?.filteredTracks ?? []
+    : allVisibleTracks.value);
 
-      for (const artist of artists) {
-      const tracks = groups.get(artist) ?? [];
-      tracks.push(track);
-      groups.set(artist, tracks);
-      }
-    }
-
-    return [...groups.entries()]
-      .map(([name, tracks]) => ({
-        name,
-        tracks: tracks.sort((left, right) => left.title.localeCompare(right.title, 'zh-Hans-CN')),
-      }))
-      .sort((left, right) => {
-        const countDifference = right.tracks.length - left.tracks.length;
-        if (countDifference !== 0) return countDifference;
-        return artistNameCollator.compare(left.name, right.name);
-      });
-  });
-
-  const folderVisibleTracks = computed(() => {
-    if (!activeFolderPath.value) return allVisibleTracks.value;
-
-    const normalizedFolder = normalizePath(activeFolderPath.value);
-    return allVisibleTracks.value.filter((track) => {
-      return normalizePath(track.path).startsWith(`${normalizedFolder}/`);
-    });
-  });
-
-  const recentAddedVisibleTracks = computed(() => {
-    const visibleTrackIds = new Set(allVisibleTracks.value.map((track) => track.id));
-    return player.latestAddedTracks.filter((track) => visibleTrackIds.has(track.id));
-  });
-
-  const recentPlayedVisibleTracks = computed(() => {
-    const trackById = new Map(allVisibleTracks.value.map((track) => [track.id, track]));
-    return player.recentPlayedTrackIds
-      .map((id) => trackById.get(id))
-      .filter((track): track is Track => Boolean(track));
-  });
+  const recentAddedVisibleTracks = computed(() => player.filteredLatestAddedTracks);
+  const recentPlayedVisibleTracks = computed(() => player.filteredRecentPlayedTracks);
 
   const visibleTracks = computed(() => {
     if (activePlaylistId.value) {
-      const playlist = player.settings.playlists.find((item) => item.id === activePlaylistId.value);
-      const localTrackById = new Map(allVisibleTracks.value.map((track) => [track.id, track]));
-      const snapshotById = new Map((playlist?.tracks ?? []).map((track) => [track.id, track]));
-      return (playlist?.trackIds ?? [])
-        .map((id) => localTrackById.get(id) ?? snapshotById.get(id))
-        .filter((track): track is Track => Boolean(track));
+      const playlist = player.playlists.find((item) => item.id === activePlaylistId.value);
+      return playlist?.tracks ?? [];
     }
 
     if (activeCollection.value === 'favorites') {
@@ -106,45 +61,32 @@ export function useLibraryCatalog({
   });
 
   const libraryMeta = computed(() => {
-    const totalSeconds = visibleTracks.value.reduce((sum, track) => sum + (track.duration ?? 0), 0);
-    return {
-      count: visibleTracks.value.length,
-      minutes: Math.max(1, Math.round(totalSeconds / 60)),
-    };
+    let statistics = player.libraryListStatistics.tracks;
+    if (activePlaylistId.value) {
+      statistics = player.playlists.find(item => item.id === activePlaylistId.value)?.statistics ?? { count: 0, totalSeconds: 0 };
+    } else if (activeCollection.value === 'favorites') {
+      statistics = player.favoriteStatistics;
+    } else if (activeLibraryFilter.value === 'recentAdded') {
+      statistics = player.libraryListStatistics.latestAddedTracks;
+    } else if (activeLibraryFilter.value === 'recentPlayed') {
+      statistics = player.libraryListStatistics.recentPlayedTracks;
+    } else if (activeFolderPath.value) {
+      statistics = { count: activeFolder.value?.filteredCount ?? 0, totalSeconds: activeFolder.value?.filteredTotalSeconds ?? 0 };
+    }
+    return { ...statistics, minutes: Math.round(statistics.totalSeconds / 60) };
   });
 
-  const localFolders = computed(() => {
-    return player.settings.musicDirs
-      .map((path) => {
-        const normalizedFolder = normalizePath(path);
-        const tracks = player.tracks.filter((track) => {
-          const normalizedTrackPath = normalizePath(track.path);
-          return normalizedTrackPath.startsWith(`${normalizedFolder}/`);
-        });
+  const localFolders = computed(() => player.libraryStatistics.folders.map((folder, index) => ({
+    ...folder,
+    tone: folderTones[index % folderTones.length],
+  })));
+  const localFolderTrackCount = computed(() => player.libraryStatistics.folderTrackCount);
 
-        return {
-          path,
-          title: folderTitle(path),
-          count: tracks.length,
-          tracks,
-        };
-      })
-      .filter((folder) => folder.count > 0)
-      .map((folder, index) => ({
-        ...folder,
-        tone: folderTones[index % folderTones.length],
-      }));
-  });
-
-  const localFolderTrackCount = computed(() => {
-    return localFolders.value.reduce((sum, folder) => sum + folder.count, 0);
-  });
-
-  const recentAddedTrackCount = computed(() => recentAddedVisibleTracks.value.length);
+  const recentAddedTrackCount = computed(() => player.libraryListTotals.latestAddedTracks.count);
 
   const libraryTitle = computed(() => {
     if (activePlaylistId.value) {
-      return player.settings.playlists.find((playlist) => playlist.id === activePlaylistId.value)?.name ?? t(player.settings.locale, 'localLibrary');
+      return player.playlists.find((playlist) => playlist.id === activePlaylistId.value)?.name ?? t(player.settings.locale, 'localLibrary');
     }
     if (activeLibraryFilter.value === 'recentAdded') return t(player.settings.locale, 'recentAdded');
     if (activeLibraryFilter.value === 'recentPlayed') return t(player.settings.locale, 'recentPlayed');

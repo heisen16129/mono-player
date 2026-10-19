@@ -1,81 +1,38 @@
-import type { Ref } from 'vue';
-import type { PlayerSettings, Track } from '../../types/music';
-import {
-  addTrackToPlaylistEntry,
-  createPlaylistEntry,
-  deletePlaylistEntry,
-  removeTrackFromPlaylistEntry,
-  renamePlaylistEntry,
-  updatePlaylistCoverEntry,
-} from './playlists';
+import { computed, ref, type Ref } from 'vue';
+import type { Track, UserPlaylist } from '../../types/music';
+import * as service from '../../services/playlists';
+import { getErrorMessage } from '../../utils/error';
 
-interface PlayerPlaylistActionsOptions {
-  persistSettings: () => void;
-  settings: Ref<PlayerSettings>;
-  tracks: Ref<Track[]>;
-}
+export function createPlayerPlaylistActions({ error }: { error: Ref<string | null> }) {
+  const saved = ref<UserPlaylist[]>([]);
+  let pending: Promise<unknown> = Promise.resolve();
+  const playlists = computed(() => saved.value);
 
-export function createPlayerPlaylistActions({ persistSettings, settings, tracks }: PlayerPlaylistActionsOptions) {
-  function createPlaylist(name: string, initialTracks: Array<number | Track> = [], cover?: string | null) {
-    const result = createPlaylistEntry(settings.value.playlists, name, initialTracks, tracks.value, Date.now(), cover);
-    if (!result.created) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
+  function reloadPlaylists() {
+    const operation = pending.then(async () => { saved.value = await service.listPlaylists(); });
+    pending = operation.catch(() => {});
+    return operation;
   }
 
-  function renamePlaylist(playlistId: string, name: string) {
-    const result = renamePlaylistEntry(settings.value.playlists, playlistId, name);
-    if (!result.renamed) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
-  }
-
-  function updatePlaylistCover(playlistId: string, cover: string | null) {
-    const result = updatePlaylistCoverEntry(settings.value.playlists, playlistId, cover);
-    if (!result.updated) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
-  }
-
-  function deletePlaylist(playlistId: string) {
-    const result = deletePlaylistEntry(settings.value.playlists, playlistId);
-    if (!result.deleted) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
-  }
-
-  function addTrackToPlaylist(track: Track, playlistId: string) {
-    const result = addTrackToPlaylistEntry(settings.value.playlists, playlistId, track, tracks.value);
-    if (!result.added) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
-  }
-
-  function removeTrackFromPlaylist(track: Track, playlistId: string) {
-    const result = removeTrackFromPlaylistEntry(settings.value.playlists, playlistId, track);
-    if (!result.removed) return false;
-
-    settings.value.playlists = result.playlists;
-    persistSettings();
-    return true;
+  function mutate(action: () => Promise<UserPlaylist[]>) {
+    const operation = pending.then(async () => {
+      saved.value = await action();
+      return true;
+    }).catch(err => {
+      error.value = getErrorMessage(err);
+      return false;
+    });
+    pending = operation;
+    return operation;
   }
 
   return {
-    addTrackToPlaylist,
-    createPlaylist,
-    deletePlaylist,
-    removeTrackFromPlaylist,
-    renamePlaylist,
-    updatePlaylistCover,
+    playlists, reloadPlaylists,
+    createPlaylist: (name: string, initialTracks: Track[] = [], cover?: string | null) => mutate(() => service.createPlaylist(name, initialTracks, cover)),
+    renamePlaylist: (id: string, name: string) => mutate(() => service.renamePlaylist(id, name)),
+    updatePlaylistCover: (id: string, cover: string | null) => mutate(() => service.updatePlaylistCover(id, cover)),
+    deletePlaylist: (id: string) => mutate(() => service.deletePlaylist(id)),
+    addTrackToPlaylist: (track: Track, id: string) => mutate(() => service.editPlaylistTracks(id, [track], true)),
+    removeTrackFromPlaylist: (track: Track, id: string) => mutate(() => service.editPlaylistTracks(id, [track], false)),
   };
 }

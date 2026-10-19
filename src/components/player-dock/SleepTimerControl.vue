@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import SleepTimerDialog from './SleepTimerDialog.vue';
 import SleepTimerStatusPopover from './SleepTimerStatusPopover.vue';
 import SleepTimerTriggerButton from './SleepTimerTriggerButton.vue';
 
@@ -54,24 +53,6 @@ defineEmits<{
     />
   </div>
 
-  <SleepTimerDialog
-    :action="action"
-    :hours="hours"
-    :is-active="isActive"
-    :is-open="isDialogOpen"
-    :is-paused="isPaused"
-    :minutes="minutes"
-    :preset-minutes="presetMinutes"
-    @clear="$emit('clear')"
-    @close="$emit('closeDialog')"
-    @pause="$emit('pause')"
-    @resume="$emit('resume')"
-    @set-action="$emit('setAction', $event)"
-    @set-hours="$emit('setHours', $event)"
-    @set-minutes="$emit('setMinutes', $event)"
-    @set-preset="$emit('setPreset', $event)"
-    @start="$emit('start')"
-  />
 </template>
 
 <style scoped>

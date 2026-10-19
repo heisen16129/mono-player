@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref, type ComputedRef, type Ref } from 'vue';
-import { saveInstalledPlugins } from '../services/plugins';
+import { reorderPlugins } from '../services/plugins';
 import type { PluginManifest } from '../types/plugin';
 import type { PluginRow } from '../components/plugin-manager/types';
 
@@ -71,7 +71,7 @@ export function usePluginDragSort({ installedPlugins, notify, visiblePlugins }: 
 
   async function finishPluginPointerDrag() {
     if (hasPendingPluginOrderChange.value) {
-      await saveInstalledPlugins(installedPlugins.value);
+      installedPlugins.value = await reorderPlugins(installedPlugins.value.map(p => p.id));
       notify('插件排序已保存');
     }
 

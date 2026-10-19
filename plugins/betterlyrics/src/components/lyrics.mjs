@@ -134,6 +134,8 @@ export function createLyricsView(elements, state, post, signal) {
       scroll.scrollTop = scroll.scrollLeft = 0;
     }
     scroll.style.setProperty('--vertical-offset', `${state.config.verticalOffset}%`);
+    empty.style.setProperty('--size', state.config.fontSize + 'px');
+    empty.style.textAlign = state.config.alignment === 'center' ? 'center' : 'left';
     scroll.style.setProperty('--size', `${state.config.fontSize}px`);
     scroll.style.setProperty('--gap', String(state.config.lineGap));
     scroll.style.setProperty('--align', state.config.alignment === 'center' ? 'center' : 'left');

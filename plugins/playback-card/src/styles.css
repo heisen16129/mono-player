@@ -20,3 +20,5 @@
 .header-actions{display:flex;align-items:center;gap:2px}.style-toolbar[hidden]{display:none}
 
 .card-shell{position:relative;flex:none;width:300px;padding-top:40px}
+.desktop .settings-toggle,.desktop .style-toolbar{display:none}
+.desktop .card-shell{padding-top:0}

@@ -1,6 +1,6 @@
 import { removeRustBackendQueueSource, setRustBackendPlaybackMode, type RustQueueSnapshot } from '../services/playerBackend';
 import type { usePlayerStore } from '../stores/player';
-import type { PlaybackMode, Track } from '../types/music';
+import type { Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
 import { queueSourceKey } from '../utils/queueSource';
 
@@ -28,11 +28,6 @@ export function useRustQueueCommands({
     await syncRustPlaybackMode();
   }
 
-  async function setPlaybackMode(mode: PlaybackMode) {
-    player.playbackMode = mode;
-    await syncRustPlaybackMode();
-  }
-
   async function removeTrackFromRustQueue(track: Track) {
     try {
       handleRustQueueSnapshot(await removeRustBackendQueueSource(queueSourceKey(track)));
@@ -43,7 +38,6 @@ export function useRustQueueCommands({
 
   return {
     removeTrackFromRustQueue,
-    setPlaybackMode,
     syncRustPlaybackMode,
     togglePlaybackMode,
   };

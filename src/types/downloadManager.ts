@@ -36,7 +36,6 @@ export interface DownloadManagerViewProps {
   activeTrack: Track | null;
   favoriteTrackIds: number[];
   isPlaying: boolean;
-  items: DownloadItem[];
 }
 
 export interface DownloadManagerViewEmits extends DownloadItemContextMenuEmits {

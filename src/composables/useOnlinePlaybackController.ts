@@ -90,7 +90,6 @@ export function useOnlinePlaybackController({
       return;
     }
     const previousQuality = onlinePlaybackQuality.value;
-    onlinePlaybackQuality.value = quality;
 
     if (!onlineActivePluginTrack.value || !onlineActiveTrack.value) {
       console.warn('[plugin-playback] change online quality skipped', {

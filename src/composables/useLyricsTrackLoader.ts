@@ -3,12 +3,6 @@ import { isTauriRuntime, resolveLyricsSource } from '../services/music';
 import type { LyricLine, Track, TrackLyrics } from '../types/music';
 import { parseRawLyrics } from '../utils/lyrics';
 
-export function normalizeLyricLines(lines: LyricLine[]) {
-  return lines.filter((line) => {
-    const text = line.text.trim();
-    return text && text !== '...' && text !== '…';
-  });
-}
 
 export function useLyricsTrackLoader(options: {
   activeArtwork: ComputedRef<string | null | undefined>;
@@ -67,7 +61,7 @@ export function useLyricsTrackLoader(options: {
           })
           : parseRawLyrics(variant?.content ?? '');
         if (requestId !== lyricsLoadRequestId) return;
-        options.lines.value = normalizeLyricLines(lyrics);
+        options.lines.value = lyrics;
         await options.syncLyricsToCurrentTime();
       } finally {
         if (requestId !== lyricsLoadRequestId) return;

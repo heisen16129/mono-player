@@ -10,6 +10,7 @@ import PlaybackSpeedControl from './PlaybackSpeedControl.vue';
 import SleepTimerControl from './SleepTimerControl.vue';
 import VolumeControl from './VolumeControl.vue';
 import KaraokeControl from './KaraokeControl.vue';
+import PlaybackPluginSlot from './PlaybackPluginSlot.vue';
 
 defineProps<{
   activeTrack: Track | null;
@@ -93,6 +94,7 @@ const emit = defineEmits<{
       @lyric-format-change="emit('lyricFormatChange', $event)"
       @online-quality-change="emit('onlineQualityChange', $event)"
     />
+    <PlaybackPluginSlot />
     <DesktopLyricsEntryButton @open="emit('openDesktopLyrics')" />
     <SleepTimerControl
       :action="sleepTimerAction"

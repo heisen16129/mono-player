@@ -2,38 +2,18 @@ import { computed, type Ref } from 'vue';
 import { resolveLocale } from '../../i18n';
 import { toAudioSource } from '../../services/music';
 import type { PlaybackMode, PlayerSettings, Track } from '../../types/music';
-import { artistLabel } from '../../utils/artist';
 
 interface PlayerPlaybackStateActionsOptions {
   currentTrack: Ref<Track | null>;
-  persistRecentlyPlayed: () => void;
   playbackMode: Ref<PlaybackMode>;
-  query: Ref<string>;
-  recentPlayedTrackIds: Ref<number[]>;
   settings: Ref<PlayerSettings>;
-  tracks: Ref<Track[]>;
 }
 
 export function createPlayerPlaybackStateActions({
   currentTrack,
-  persistRecentlyPlayed,
   playbackMode,
-  query,
-  recentPlayedTrackIds,
   settings,
-  tracks,
 }: PlayerPlaybackStateActionsOptions) {
-  const filteredTracks = computed(() => {
-    const needle = query.value.trim().toLocaleLowerCase();
-    if (!needle) return tracks.value;
-
-    return tracks.value.filter((track) => {
-      return [track.title, artistLabel(track.artist, '')]
-        .filter(Boolean)
-        .some((value) => value!.toLocaleLowerCase().includes(needle));
-    });
-  });
-
   const currentSource = computed(() => {
     return currentTrack.value?.path ? toAudioSource(currentTrack.value.path) : '';
   });
@@ -62,21 +42,9 @@ export function createPlayerPlaybackStateActions({
     playbackMode.value = 'shuffle';
   }
 
-  function recordRecentlyPlayed(track: Track | null) {
-    if (!track?.path) return;
-
-    recentPlayedTrackIds.value = [
-      track.id,
-      ...recentPlayedTrackIds.value.filter((id) => id !== track.id),
-    ].slice(0, 100);
-    persistRecentlyPlayed();
-  }
-
   return {
     currentSource,
-    filteredTracks,
     playbackModeLabel,
-    recordRecentlyPlayed,
     setCurrentTrack,
     togglePlaybackMode,
   };

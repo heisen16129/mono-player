@@ -3,7 +3,6 @@ import { useAppEventListeners } from './useAppEventListeners';
 import { useExternalPlaybackActions } from './useExternalPlaybackActions';
 import type { DownloadQueueEvent } from '../services/downloads';
 import type { RustQueueSnapshot } from '../services/playerBackend';
-import type { PlaybackMode } from '../types/music';
 
 interface UseExternalPlaybackEventBridgeOptions {
   togglePlaybackRequestId: Ref<number>;
@@ -14,7 +13,6 @@ interface UseExternalPlaybackEventBridgeOptions {
   playNextTrack: () => Promise<void>;
   playPreviousTrack: () => Promise<void>;
   seekToLyric: (time: number) => Promise<void>;
-  setPlaybackMode: (mode: PlaybackMode) => Promise<void> | void;
 }
 
 export function useExternalPlaybackEventBridge({
@@ -26,7 +24,6 @@ export function useExternalPlaybackEventBridge({
   playNextTrack,
   playPreviousTrack,
   seekToLyric,
-  setPlaybackMode,
 }: UseExternalPlaybackEventBridgeOptions) {
   const {
     handleDesktopLyricsAction,
@@ -37,7 +34,6 @@ export function useExternalPlaybackEventBridge({
     playNextTrack,
     playPreviousTrack,
     seekToLyric,
-  setPlaybackMode,
   });
 
   const appEventListeners = useAppEventListeners({

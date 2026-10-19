@@ -5,11 +5,9 @@ import type { PluginSearchTrack } from '../types/plugin';
 export function useActiveTrackState({
   currentSource,
   isRemoteTrack,
-  visibleTracks,
 }: {
   currentSource: ComputedRef<string>;
   isRemoteTrack: (track: Track) => boolean;
-  visibleTracks: ComputedRef<Track[]>;
 }) {
   const selectedTrack = ref<Track | null>(null);
   const currentPlaybackTrack = ref<Track | null>(null);
@@ -25,7 +23,7 @@ export function useActiveTrackState({
     : null);
 
   const activeTrack = computed(() => {
-    return preparingTrack.value ?? currentPlaybackTrack.value ?? selectedTrack.value ?? visibleTracks.value[0] ?? null;
+    return preparingTrack.value ?? currentPlaybackTrack.value ?? selectedTrack.value ?? null;
   });
 
   const currentPlaybackSource = computed(() => {

@@ -7,10 +7,9 @@ interface OnlineSearchOptions {
   normalizeErrorMessage: (error: unknown, fallback: string) => string;
   onError: (message: string) => void;
   searchErrorFallback: () => string;
-  trackKey: (track: PluginSearchTrack) => string;
 }
 
-export function useOnlineSearch({ loadMoreErrorFallback, normalizeErrorMessage, onError, searchErrorFallback, trackKey }: OnlineSearchOptions) {
+export function useOnlineSearch({ loadMoreErrorFallback, normalizeErrorMessage, onError, searchErrorFallback }: OnlineSearchOptions) {
   const isOnlineSearchOpen = ref(false);
   const isOnlineSearching = ref(false);
   const isOnlineLoadingMore = ref(false);
@@ -20,10 +19,14 @@ export function useOnlineSearch({ loadMoreErrorFallback, normalizeErrorMessage, 
   const onlineSearchProviders = ref<PluginSearchProvider[]>([]);
   const onlineSearchResults = ref<PluginSearchTrack[]>([]);
   const activeOnlineProviderId = ref<string | null>(null);
-  const onlineSearchPage = ref(1);
+  let requestGeneration = 0;
+  let sessionId: string | null = null;
   const onlineSearchHasMore = ref(false);
 
   function closeOnlineSearchState() {
+    requestGeneration += 1;
+    sessionId = null;
+    isOnlineSearching.value = false;
     isOnlineSearchOpen.value = false;
     onlineSearchError.value = null;
     onlineLoadMoreError.value = null;
@@ -35,34 +38,40 @@ export function useOnlineSearch({ loadMoreErrorFallback, normalizeErrorMessage, 
     const query = keyword.trim();
     if (!query) return;
 
+    const generation = ++requestGeneration;
+    sessionId = null;
     onlineSearchQuery.value = query;
     isOnlineSearchOpen.value = true;
     isOnlineSearching.value = true;
     onlineSearchError.value = null;
     onlineLoadMoreError.value = null;
     onlineSearchResults.value = [];
-    onlineSearchPage.value = 1;
     onlineSearchHasMore.value = false;
     isOnlineLoadingMore.value = false;
 
     try {
-      onlineSearchProviders.value = await listPluginSearchProviders();
+      const providers = await listPluginSearchProviders();
+      if (generation !== requestGeneration) return;
+      onlineSearchProviders.value = providers;
       const enabledProviderIds = new Set(onlineSearchProviders.value.filter((provider) => provider.enabled).map((provider) => provider.id));
       const preferredProviderId = providerId ?? activeOnlineProviderId.value;
       const nextProviderId = preferredProviderId && enabledProviderIds.has(preferredProviderId)
         ? preferredProviderId
         : onlineSearchProviders.value.find((provider) => provider.enabled)?.id ?? null;
       activeOnlineProviderId.value = nextProviderId;
-      const result = await searchPluginMusic(query, nextProviderId, 1, 30);
+      if (!nextProviderId) throw new Error('没有启用支持音乐搜索的插件');
+      const result = await searchPluginMusic(query, nextProviderId);
+      if (generation !== requestGeneration) return;
+      sessionId = result.sessionId;
       onlineSearchResults.value = result.tracks;
       onlineSearchHasMore.value = !result.isEnd;
     } catch (error) {
-      onlineSearchProviders.value = await listPluginSearchProviders();
+      if (generation !== requestGeneration) return;
       const message = normalizeErrorMessage(error, searchErrorFallback());
       onlineSearchError.value = message;
       onError(message);
     } finally {
-      isOnlineSearching.value = false;
+      if (generation === requestGeneration) isOnlineSearching.value = false;
     }
   }
 
@@ -80,40 +89,21 @@ export function useOnlineSearch({ loadMoreErrorFallback, normalizeErrorMessage, 
 
     isOnlineLoadingMore.value = true;
     onlineLoadMoreError.value = null;
-    let nextPage = onlineSearchPage.value + 1;
+    const generation = requestGeneration;
 
     try {
-      const existingKeys = new Set(onlineSearchResults.value.map(trackKey));
-      let appendedTracks: PluginSearchTrack[] = [];
-      let reachedEnd = false;
-
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        const result = await searchPluginMusic(query, activeOnlineProviderId.value, nextPage, 30);
-        const nextTracks = result.tracks.filter((track) => !existingKeys.has(trackKey(track)));
-        reachedEnd = result.isEnd;
-
-        if (nextTracks.length > 0 || result.isEnd) {
-          appendedTracks = nextTracks;
-          break;
-        }
-
-        nextPage += 1;
-      }
-
-      if (appendedTracks.length > 0) {
-        onlineSearchResults.value = [...onlineSearchResults.value, ...appendedTracks];
-        onlineSearchPage.value = nextPage;
-        onlineSearchHasMore.value = !reachedEnd;
-      } else {
-        onlineSearchPage.value = nextPage;
-        onlineSearchHasMore.value = false;
-      }
+      if (!sessionId) return;
+      const result = await searchPluginMusic(query, activeOnlineProviderId.value, sessionId);
+      if (generation !== requestGeneration) return;
+      onlineSearchResults.value = result.tracks;
+      onlineSearchHasMore.value = !result.isEnd;
     } catch (error) {
+      if (generation !== requestGeneration) return;
       const message = normalizeErrorMessage(error, loadMoreErrorFallback());
       onlineLoadMoreError.value = message;
       onError(message);
     } finally {
-      isOnlineLoadingMore.value = false;
+      if (generation === requestGeneration) isOnlineLoadingMore.value = false;
     }
   }
 

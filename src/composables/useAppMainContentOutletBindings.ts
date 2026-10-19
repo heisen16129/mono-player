@@ -16,7 +16,6 @@ export function useAppMainContentOutletBindings(props: AppMainContentProps, emit
     activeView: props.activeView,
     artistGroups: props.artistGroups,
     downloadedTrackKeys: props.downloadedTrackKeys,
-    downloadItems: props.downloadItems,
     favoriteTrackIds: props.favoriteTrackIds,
     isAudioPlaying: props.isAudioPlaying,
     isLibraryPanelMode: props.isLibraryPanelMode,
@@ -33,6 +32,7 @@ export function useAppMainContentOutletBindings(props: AppMainContentProps, emit
     playerError: props.playerError,
     playerQuery: props.playerQuery,
     recentAddedTrackCount: props.recentAddedTrackCount,
+    showDownloads: props.shouldShowDownloadsMenu,
     visibleTracks: props.visibleTracks,
   }));
 
@@ -54,6 +54,8 @@ export function useAppMainContentOutletBindings(props: AppMainContentProps, emit
   };
 
   const pageOutletListeners = {
+    onOpenArtists: () => emit('openArtistsView'),
+    onOpenDownloads: () => emit('openDownloadsView'),
     onAddDownloadedTrackToPlaylist: (...args: AppMainContentEmits['addDownloadedTrackToPlaylist']) => emit('addDownloadedTrackToPlaylist', ...args),
     onChooseFolder: () => emit('chooseFolder'),
     onClearDownloadedItemRecord: (...args: AppMainContentEmits['clearDownloadedItemRecord']) => emit('clearDownloadedItemRecord', ...args),
@@ -68,6 +70,7 @@ export function useAppMainContentOutletBindings(props: AppMainContentProps, emit
     onOpenLocalFolderFromPanel: (...args: AppMainContentEmits['openLocalFolderFromPanel']) => emit('openLocalFolderFromPanel', ...args),
     onOpenOnlineTrackContextMenu: (...args: AppMainContentEmits['openOnlineTrackContextMenu']) => emit('openOnlineTrackContextMenu', ...args),
     onOpenRecentAddedFromPanel: () => emit('openRecentAddedFromPanel'),
+    onOpenRecentPlayedFromPanel: () => emit('openRecentPlayedFromPanel'),
     onOpenScanDialog: () => emit('openScanDialog'),
     onOpenTrackContextMenu: (...args: AppMainContentEmits['openTrackContextMenu']) => emit('openTrackContextMenu', ...args),
     onPauseDownloadItem: (...args: AppMainContentEmits['pauseDownloadItem']) => emit('pauseDownloadItem', ...args),

@@ -1,7 +1,14 @@
-const MAX_RECENT_PLAYED_TRACKS = 100;
+import { ref } from 'vue';
+import type { Track } from '../../types/music';
+import { listRecentlyPlayedTracks } from '../../services/recentPlayed';
 
-export function normalizeRecentPlayedTrackIds(value: unknown): number[] {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((id): id is number => Number.isSafeInteger(id)))]
-    .slice(0, MAX_RECENT_PLAYED_TRACKS);
+export function createRecentPlayedActions() {
+  const recentPlayedTracks = ref<Track[]>([]);
+  let pending: Promise<void> = Promise.resolve();
+  function reloadRecentlyPlayed() {
+    const operation = pending.then(async () => { recentPlayedTracks.value = await listRecentlyPlayedTracks(); });
+    pending = operation.catch(() => {});
+    return operation;
+  }
+  return { recentPlayedTracks, reloadRecentlyPlayed };
 }

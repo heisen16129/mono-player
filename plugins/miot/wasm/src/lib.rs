@@ -50,6 +50,7 @@ fn handle_request(request: &Value) -> Result<Value, String> {
             "id":"mono-wasm-miot", "name":"小爱音箱", "version":"1.0.0", "kind":"integration",
             "author":"Mono / hanxi", "description":"连接小爱音箱，支持扫码登录、音箱分组、语音点歌、定时播放和本地/在线音乐投放。",
             "updatedAt":"2026-09-20", "capabilities":["speaker-control"], "permissions":["network","speaker-service"],
+            "playbackBar":{"action":"speaker-control","icon":"speaker"},
             "highlights":["多音箱分组","语音点歌","定时与睡眠定时","本地曲库和在线音源"]
         })),
         Some("speaker_service") => Ok(json!({"engine":"mono-miot"})),

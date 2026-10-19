@@ -9,7 +9,7 @@ defineProps<{
 
 defineEmits<{
   closeContextMenus: [];
-  startWindowDrag: [event: PointerEvent];
+  startWindowDrag: [event: MouseEvent];
 }>();
 </script>
 
@@ -19,12 +19,13 @@ defineEmits<{
     :class="{
       'sidebar-collapsed': sidebarCollapsed,
       'lyrics-open': lyricsOpen || lyricsTransitioning,
+      'lyrics-closing': !lyricsOpen && lyricsTransitioning,
       'lyrics-desktop-transparent': lyricsDesktopTransparent,
       'has-theme-background': hasThemeBackground,
     }"
     @click="$emit('closeContextMenus')"
     @contextmenu="$emit('closeContextMenus')"
-    @pointerdown="$emit('startWindowDrag', $event)"
+    @mousedown="$emit('startWindowDrag', $event)"
   >
     <slot name="overlays"></slot>
 
@@ -110,6 +111,7 @@ defineEmits<{
   grid-row: 2;
   grid-column: 1 / -1;
   min-width: 0;
+  min-height: var(--player-height);
 }
 
 :slotted(.app-startup-loading) {
@@ -148,4 +150,5 @@ defineEmits<{
     transition: none;
   }
 }
+
 </style>

@@ -1,4 +1,4 @@
-﻿import { computed, ref, type ComputedRef, type Ref } from 'vue';
+import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import type { PluginCatalogItem, PluginManifest } from '../types/plugin';
 import { getErrorMessage } from '../utils/error';
 import { isMarketPluginKind, toRealMarketPlugin } from './pluginMarketItems';
@@ -6,7 +6,7 @@ import { usePluginMarketFilters } from './usePluginMarketFilters';
 import { usePluginMarketLabels } from './usePluginMarketLabels';
 import { usePluginMarketSelection } from './usePluginMarketSelection';
 
-export type PluginMarketCategory = 'all' | 'music' | 'lyrics' | 'lyrics-renderer' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
+export type PluginMarketCategory = 'all' | 'music' | 'lyrics' | 'lyrics-renderer' | 'desktop-lyrics' | 'metadata' | 'playlist' | 'theme' | 'integration' | 'tool';
 export type PluginMarketKind = Exclude<PluginMarketCategory, 'all'>;
 export type PluginMarketStatus = 'available' | 'installed' | 'update';
 
@@ -53,6 +53,7 @@ export const marketCategories = [
   { id: 'all', label: '全部', description: '显示全部插件' },
   { id: 'music', label: '音源', description: '搜索和播放在线音乐' },
   { id: 'lyrics', label: '歌词', description: '搜索、匹配和处理歌词' },
+  { id: 'desktop-lyrics', label: '桌面歌词', description: '自定义桌面悬浮歌词和播放卡片' },
   { id: 'lyrics-renderer', label: '歌词页面', description: '扩展歌词页面样式和播放视觉' },
   { id: 'metadata', label: '元数据', description: '补全封面、专辑和曲目信息' },
   { id: 'playlist', label: '歌单', description: '导入和导出歌单' },
@@ -73,11 +74,9 @@ export function usePluginMarket({ appLocale, installedPlugins, notify, officialC
   } = usePluginMarketLabels({ appLocale, installingPluginIds });
 
   const realMarketPlugins = computed(() => {
-    const catalogById = new Map(officialCatalogPlugins.value.map((plugin) => [plugin.id, plugin]));
     const installedById = new Map(installedPlugins.value.map((plugin) => [plugin.id, plugin]));
-
-    return [...catalogById.keys()]
-      .map((pluginId) => toRealMarketPlugin(catalogById.get(pluginId) ?? null, installedById.get(pluginId) ?? null))
+    return officialCatalogPlugins.value
+      .map((item) => item.managementStatus ? toRealMarketPlugin(item, installedById.get(item.id) ?? null, item.managementStatus) : null)
       .filter((plugin): plugin is PluginMarketItem => plugin !== null && isMarketPluginKind(plugin.kind));
   });
 

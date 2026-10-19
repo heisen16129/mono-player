@@ -16,7 +16,6 @@ interface UseTrackLyricsMutationOptions {
   currentPlaybackTrack: Ref<Track | null>;
   onlineActiveTrack: Ref<Track | null>;
   player: ReturnType<typeof usePlayerStore>;
-  rustPlaybackQueue: Ref<Track[]>;
   selectedTrack: Ref<Track | null>;
   updateLyricsViewStateForRequest: (track: Track, status: LyricsViewStatus, error?: string | null) => void;
 }
@@ -26,7 +25,6 @@ export function useTrackLyricsMutation({
   currentPlaybackTrack,
   onlineActiveTrack,
   player,
-  rustPlaybackQueue,
   selectedTrack,
   updateLyricsViewStateForRequest,
 }: UseTrackLyricsMutationOptions) {
@@ -87,10 +85,6 @@ export function useTrackLyricsMutation({
       player.setCurrentTrack(nextTrack);
     }
     updateLyricsViewStateForRequest(nextTrack, 'ready');
-
-    player.tracks = player.tracks.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, lyrics, artwork, sourceName, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
-    player.queue = player.queue.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, lyrics, artwork, sourceName, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
-    rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (isSameTrackForMetadata(track, active) ? withTrackLyrics(track, target, lyrics, artwork, sourceName, lyricsProviderId, lyricsTrackId, lyricsTrackRaw) : track));
   }
 
   function updateActiveTrackSourceLyrics(
@@ -141,10 +135,6 @@ export function useTrackLyricsMutation({
       player.setCurrentTrack(nextTrack);
     }
     updateLyricsViewStateForRequest(nextTrack, normalizeTrackLyrics(nextTrack)?.lyrics.length ? 'ready' : 'empty');
-
-    player.tracks = player.tracks.map((track) => (isSameTrackForMetadata(track, active) ? withoutAssociatedTrackLyrics(track) : track));
-    player.queue = player.queue.map((track) => (isSameTrackForMetadata(track, active) ? withoutAssociatedTrackLyrics(track) : track));
-    rustPlaybackQueue.value = rustPlaybackQueue.value.map((track) => (isSameTrackForMetadata(track, active) ? withoutAssociatedTrackLyrics(track) : track));
   }
 
   return {

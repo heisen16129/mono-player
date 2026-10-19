@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
-import { Clock3, Music2, ScanLine } from '@lucide/vue';
+import { Clock3, Download, History, Music2, ScanLine, UserRound } from '@lucide/vue';
+import { computed } from 'vue';
 import { songCount, t } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import type { LibraryPanelEmits, LibraryPanelProps } from '../types/library';
@@ -8,6 +9,7 @@ import LibraryFolderRow from './LibraryFolderRow.vue';
 import LibraryQuickRow from './LibraryQuickRow.vue';
 
 const player = usePlayerStore();
+const recentPlayedCount = computed(() => player.libraryListTotals.recentPlayedTracks.count);
 
 defineProps<LibraryPanelProps>();
 
@@ -18,12 +20,20 @@ const emit = defineEmits<LibraryPanelEmits>();
   <aside class="library-panel">
     <div class="panel-title">
       <h1>{{ t(player.settings.locale, 'musicLibrary') }}</h1>
+      <div class="panel-title-actions">
+        <button class="icon-button" type="button" :title="t(player.settings.locale, 'allSongs')" :aria-label="t(player.settings.locale, 'allSongs')" @click="emit('openAll')">
+          <Music2 :size="18" />
+        </button>
+        <button class="icon-button" type="button" :title="t(player.settings.locale, 'artists')" :aria-label="t(player.settings.locale, 'artists')" @click="emit('openArtists')">
+          <UserRound :size="18" />
+        </button>
+      </div>
     </div>
 
     <div class="quick-list">
       <LibraryQuickRow
-        :count-label="songCount(player.settings.locale, visibleTrackCount)"
-        :selected="!activeOnlineSearch && activeCollection === 'all' && activeLibraryFilter === 'all' && !activeFolderPath"
+        :count-label="songCount(player.settings.locale, player.libraryListTotals.tracks.count)"
+        :selected="!downloadsActive && !activeOnlineSearch && activeCollection === 'all' && activeLibraryFilter === 'all' && !activeFolderPath"
         :title="t(player.settings.locale, 'allSongs')"
         @select="emit('openAll')"
       >
@@ -31,11 +41,28 @@ const emit = defineEmits<LibraryPanelEmits>();
       </LibraryQuickRow>
       <LibraryQuickRow
         :count-label="songCount(player.settings.locale, recentAddedCount)"
-        :selected="activeLibraryFilter === 'recentAdded'"
+        :selected="!downloadsActive && activeLibraryFilter === 'recentAdded'"
         :title="t(player.settings.locale, 'recentAdded')"
         @select="emit('openRecentAdded')"
       >
         <template #icon><Clock3 :size="19" /></template>
+      </LibraryQuickRow>
+      <LibraryQuickRow
+        :count-label="songCount(player.settings.locale, recentPlayedCount)"
+        :selected="!downloadsActive && activeLibraryFilter === 'recentPlayed'"
+        :title="t(player.settings.locale, 'recentPlayed')"
+        @select="emit('openRecentPlayed')"
+      >
+        <template #icon><History :size="19" /></template>
+      </LibraryQuickRow>
+      <LibraryQuickRow
+        v-if="showDownloads"
+        count-label=""
+        :selected="Boolean(downloadsActive)"
+        title="下载管理"
+        @select="emit('openDownloads')"
+      >
+        <template #icon><Download :size="19" /></template>
       </LibraryQuickRow>
     </div>
 
@@ -54,7 +81,7 @@ const emit = defineEmits<LibraryPanelEmits>();
         :key="folder.path"
         :count-label="songCount(player.settings.locale, folder.count)"
         :folder="folder"
-        :selected="activeFolderPath === folder.path"
+        :selected="!downloadsActive && activeFolderPath === folder.path"
         @open="emit('openFolder', $event)"
       />
 
@@ -91,9 +118,20 @@ const emit = defineEmits<LibraryPanelEmits>();
   font-weight: 650;
 }
 
+.panel-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.panel-title-actions .icon-button {
+  width: 28px;
+  height: 28px;
+}
+
 .quick-list {
   display: grid;
-  gap: 10px;
+  gap: 2px;
 }
 
 .divider {

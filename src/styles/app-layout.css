@@ -99,11 +99,23 @@
 }
 
 .mono-window.lyrics-open .player-dock {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
   z-index: 28;
+}
+
+/* The library dock stays in place while the lyrics surface leaves. */
+.mono-window.lyrics-closing .player-dock {
+  transform: none;
+  opacity: 1;
+  transition: none;
+}
+
+.mono-window.lyrics-closing .player-dock :is(
+  .info-roll-enter-active, .info-roll-leave-active,
+  .info-roll-enter-from, .info-roll-leave-to
+) {
+  transition: none;
+  transform: none;
+  opacity: 1;
 }
 
 .mono-window.lyrics-open .player-dock:not(.lyrics-auto-hidden) {

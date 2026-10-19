@@ -1,11 +1,10 @@
-import { computed, ref } from 'vue';
-import { readPersistentValue, writePersistentValue } from '../services/persistentStore';
+import { ref } from 'vue';
+import { downloadRecordsSnapshot } from '../services/downloads';
 import type { DownloadQueueEvent } from '../services/downloads';
 import type { DownloadItem, Track } from '../types/music';
 
-const DOWNLOAD_ITEMS_KEY = 'downloads.items';
-const DOWNLOAD_PROGRESS_UPDATE_INTERVAL_MS = 250;
-const DOWNLOAD_PROGRESS_STEP = 5;
+// Shared backend-classified snapshots used by the download page and playback badges.
+export const downloadRecordGroups = ref<{ downloaded: DownloadItem[]; downloading: DownloadItem[] }>({ downloaded: [], downloading: [] });
 
 type DownloadQueueEventResult =
   | { status: 'downloaded'; item: DownloadItem }
@@ -14,19 +13,10 @@ type DownloadQueueEventResult =
 
 export function useDownloadState() {
   const downloadItems = ref<DownloadItem[]>([]);
-  const progressUpdatedAt = new Map<string, number>();
+  let loadQueue: Promise<void> = Promise.resolve();
 
-  const downloadedTrackKeys = computed(() => (
-    downloadItems.value
-      .filter((item) => item.status === 'downloaded')
-      .map((item) => item.id)
-  ));
-
-  const pendingDownloadTrackKeys = computed(() => (
-    downloadItems.value
-      .filter((item) => item.status === 'downloading' || item.status === 'paused')
-      .map((item) => item.id)
-  ));
+  const downloadedTrackKeys = ref<string[]>([]);
+  const pendingDownloadTrackKeys = ref<string[]>([]);
 
   function getDownloadTrackKey(track: Track) {
     const sourceName = track.sourceName ?? '本地';
@@ -34,76 +24,24 @@ export function useDownloadState() {
     return `${sourceName}:${sourceId}`;
   }
 
-  async function persistDownloadItems() {
-    await writePersistentValue(DOWNLOAD_ITEMS_KEY, downloadItems.value);
+  function loadDownloadItems() {
+    const next = loadQueue.catch(() => {}).then(async () => {
+      const snapshot = await downloadRecordsSnapshot();
+      downloadRecordGroups.value = { downloaded: snapshot.downloaded, downloading: snapshot.downloading };
+      downloadItems.value = [...snapshot.downloaded, ...snapshot.downloading];
+      downloadedTrackKeys.value = snapshot.downloadedKeys;
+      pendingDownloadTrackKeys.value = snapshot.pendingKeys;
+    });
+    loadQueue = next;
+    return next;
   }
 
-  async function loadDownloadItems() {
-    const storedItems = await readPersistentValue<DownloadItem[]>(DOWNLOAD_ITEMS_KEY);
-    downloadItems.value = (storedItems ?? []).map((item) => (
-      item.status === 'downloading'
-        ? { ...item, status: 'failed', progress: 0, error: item.error ?? '下载已中断' }
-        : item
-    ));
-    await persistDownloadItems();
-  }
-
-  function updateDownloadItem(id: string, patch: Partial<DownloadItem>, options: { persist?: boolean } = {}) {
-    downloadItems.value = downloadItems.value.map((item) => (
-      item.id === id ? { ...item, ...patch } : item
-    ));
-    if (options.persist !== false) {
-      void persistDownloadItems();
-    }
-  }
-
-  function shouldApplyDownloadProgress(event: DownloadQueueEvent, item: DownloadItem | undefined) {
-    if (!item || item.status !== 'downloading') return true;
-    if (event.progress <= item.progress) return false;
-    if (event.progress >= 90) return true;
-    if (event.progress - item.progress >= DOWNLOAD_PROGRESS_STEP) return true;
-
-    const now = Date.now();
-    const updatedAt = progressUpdatedAt.get(event.taskId) ?? 0;
-    return now - updatedAt >= DOWNLOAD_PROGRESS_UPDATE_INTERVAL_MS;
-  }
-
-  function handleDownloadQueueEvent(event: DownloadQueueEvent): DownloadQueueEventResult {
-    const currentItem = downloadItems.value.find((entry) => entry.id === event.taskId);
-    if (event.status === 'downloaded') {
-      updateDownloadItem(event.taskId, {
-        status: 'downloaded',
-        progress: 100,
-        filePath: event.filePath,
-        lyricsPath: event.lyricsPath,
-        error: null,
-      });
-      progressUpdatedAt.delete(event.taskId);
-      const item = downloadItems.value.find((entry) => entry.id === event.taskId);
-      return item ? { status: 'downloaded', item } : null;
-    }
-
-    if (event.status === 'failed') {
-      if (currentItem?.status === 'paused') return null;
-      const error = event.error ?? '下载失败';
-      updateDownloadItem(event.taskId, {
-        status: 'failed',
-        progress: event.progress,
-        error,
-      });
-      progressUpdatedAt.delete(event.taskId);
-      const item = downloadItems.value.find((entry) => entry.id === event.taskId);
-      return item ? { status: 'failed', item, error } : null;
-    }
-
-    if (currentItem?.status === 'paused') return null;
-    if (!shouldApplyDownloadProgress(event, currentItem)) return null;
-    progressUpdatedAt.set(event.taskId, Date.now());
-    updateDownloadItem(event.taskId, {
-      status: 'downloading',
-      progress: event.progress,
-      error: null,
-    }, { persist: false });
+  async function handleDownloadQueueEvent(event: DownloadQueueEvent): Promise<DownloadQueueEventResult> {
+    await loadDownloadItems();
+    const item = downloadItems.value.find((entry) => entry.id === event.taskId);
+    if (!item || item.status !== event.status) return null;
+    if (event.status === 'downloaded') return { status: 'downloaded', item };
+    if (event.status === 'failed') return { status: 'failed', item, error: item.error ?? '下载失败' };
     return null;
   }
 
@@ -124,7 +62,5 @@ export function useDownloadState() {
     isTrackDownloadPending,
     loadDownloadItems,
     pendingDownloadTrackKeys,
-    persistDownloadItems,
-    updateDownloadItem,
   };
 }

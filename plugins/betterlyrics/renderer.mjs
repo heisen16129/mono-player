@@ -407,6 +407,8 @@ function createLyricsView(elements, state, post, signal) {
       scroll.scrollTop = scroll.scrollLeft = 0;
     }
     scroll.style.setProperty("--vertical-offset", `${state.config.verticalOffset}%`);
+    empty.style.setProperty("--size", state.config.fontSize + "px");
+    empty.style.textAlign = state.config.alignment === "center" ? "center" : "left";
     scroll.style.setProperty("--size", `${state.config.fontSize}px`);
     scroll.style.setProperty("--gap", String(state.config.lineGap));
     scroll.style.setProperty("--align", state.config.alignment === "center" ? "center" : "left");
@@ -720,6 +722,10 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent
 
 
 .vertical-divider{display:none;pointer-events:none}.lyrics-scroll[data-style=vertical] .vertical-divider{display:block;position:absolute;top:10px;width:1px;background:color-mix(in srgb,var(--lyric-color,#fff) 10%,transparent)}
+
+.betterlyrics.fan-mode .empty{inset:45% 16px auto 10px;display:block;transform:translateY(-50%);font-size:var(--size,40px);font-weight:700;line-height:1.4;letter-spacing:-.025em;overflow-wrap:anywhere}
+@media(max-width:700px){.betterlyrics.fan-mode .empty{font-size:calc(var(--size,40px)*.76)}}
+@media(max-height:500px) and (min-width:701px){.betterlyrics.fan-mode .empty{font-size:calc(var(--size,40px)*.8)}}
 `;
 
 // src/controller.mjs

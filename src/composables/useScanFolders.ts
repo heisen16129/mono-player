@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue';
+import { computed, onScopeDispose, ref, type Ref } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { resolveLocale } from '../i18n';
@@ -23,14 +23,12 @@ export function useScanFolders({ activeFolderPath, player }: ScanFoldersOptions)
   const completedFolderCount = ref(0);
   const totalFolderCount = ref(0);
   const isCancelingScan = ref(false);
-  let scanCanceled = false;
-  let unlistenScanTrack: UnlistenFn | null = null;
-  let unlistenScanDone: UnlistenFn | null = null;
+  let unlistenScanProgress: UnlistenFn | null = null;
 
   const scanProgressText = computed(() => {
     if (!isConfirmingScan.value) return '';
     const folderProgress = totalFolderCount.value > 1
-      ? `${completedFolderCount.value + 1}/${totalFolderCount.value} - `
+      ? `${Math.min(completedFolderCount.value + 1, totalFolderCount.value)}/${totalFolderCount.value} - `
       : '';
     const label = resolveLocale(player.settings.locale) === 'en-US' ? 'tracks scanned' : '首歌曲已扫描';
     const folder = currentScanFolder.value.split(/[\\/]/).pop() || currentScanFolder.value;
@@ -93,8 +91,10 @@ export function useScanFolders({ activeFolderPath, player }: ScanFoldersOptions)
 
   async function removeScanFolder(path: string) {
     if (isConfirmingScan.value) return;
-    scanFolders.value = scanFolders.value.filter((folder) => folder.path !== path);
-    await player.setMusicDirs(scanFolders.value.map((folder) => folder.path));
+    const remaining = scanFolders.value.filter((folder) => folder.path !== path);
+    try { await player.setMusicDirs(remaining.map((folder) => folder.path)); }
+    catch { return; }
+    scanFolders.value = remaining;
     if (activeFolderPath.value === path) {
       activeFolderPath.value = null;
     }
@@ -110,7 +110,8 @@ export function useScanFolders({ activeFolderPath, player }: ScanFoldersOptions)
     if (isConfirmingScan.value) return;
 
     const folders = scanFolders.value.filter((folder) => folder.checked).map((folder) => folder.path);
-    await player.setMusicDirs(scanFolders.value.map((folder) => folder.path));
+    try { await player.setMusicDirs(scanFolders.value.map((folder) => folder.path)); }
+    catch { return; }
 
     if (folders.length === 0) {
       isScanDialogOpen.value = false;
@@ -119,33 +120,17 @@ export function useScanFolders({ activeFolderPath, player }: ScanFoldersOptions)
 
     isConfirmingScan.value = true;
     isCancelingScan.value = false;
-    scanCanceled = false;
     completedFolderCount.value = 0;
     totalFolderCount.value = folders.length;
 
     try {
-      for (const folder of folders) {
-        if (scanCanceled) break;
-        currentScanFolder.value = folder;
-        scannedTrackCount.value = 0;
-        await startScanProgressListeners();
-        try {
-          await player.scanLibrary(folder);
-        } catch (err) {
-          const message = getErrorMessage(err);
-          if (message.includes('Scan canceled')) {
-            scanCanceled = true;
-            break;
-          }
-          throw err;
-        }
-        stopScanProgressListeners();
-        completedFolderCount.value += 1;
-      }
-      if (!scanCanceled) {
-        isScanDialogOpen.value = false;
-      }
+      await startScanProgressListeners();
+      if (isCancelingScan.value) return;
+      const result = await player.scanLibraries(folders);
+      if (result && !result.canceled) isScanDialogOpen.value = false;
       pendingRecentFolderPath.value = null;
+    } catch (err) {
+      player.error = getErrorMessage(err);
     } finally {
       stopScanProgressListeners();
       isConfirmingScan.value = false;
@@ -159,7 +144,6 @@ export function useScanFolders({ activeFolderPath, player }: ScanFoldersOptions)
 
   async function cancelScanFolders() {
     if (!isConfirmingScan.value || isCancelingScan.value) return;
-    scanCanceled = true;
     isCancelingScan.value = true;
     try {
       await cancelScanMusicDir();
@@ -171,20 +155,22 @@ export function useScanFolders({ activeFolderPath, player }: ScanFoldersOptions)
   async function startScanProgressListeners() {
     if (!isTauriRuntime()) return;
     stopScanProgressListeners();
-    unlistenScanTrack = await listen('scan://track', () => {
-      scannedTrackCount.value += 1;
-    });
-    unlistenScanDone = await listen<number>('scan://done', (event) => {
-      scannedTrackCount.value = Math.max(scannedTrackCount.value, event.payload);
+    unlistenScanProgress = await listen<{
+      currentFolder: string; completedFolders: number; totalFolders: number; scannedTracks: number;
+    }>('scan://batch', ({ payload }) => {
+      currentScanFolder.value = payload.currentFolder;
+      completedFolderCount.value = payload.completedFolders;
+      totalFolderCount.value = payload.totalFolders;
+      scannedTrackCount.value = payload.scannedTracks;
     });
   }
 
   function stopScanProgressListeners() {
-    unlistenScanTrack?.();
-    unlistenScanDone?.();
-    unlistenScanTrack = null;
-    unlistenScanDone = null;
+    unlistenScanProgress?.();
+    unlistenScanProgress = null;
   }
+
+  onScopeDispose(stopScanProgressListeners);
 
   return {
     addScanFolder,

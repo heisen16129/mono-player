@@ -4,6 +4,7 @@ import { t } from '../../i18n';
 import { usePlayerStore } from '../../stores/player';
 import LyricsColorEffectsSetting from './LyricsColorEffectsSetting.vue';
 import LyricsRendererSetting from './LyricsRendererSetting.vue';
+import DesktopLyricsSetting from './DesktopLyricsSetting.vue';
 
 const player = usePlayerStore();
 const locale = computed(() => player.settings.locale);
@@ -14,6 +15,7 @@ const locale = computed(() => player.settings.locale);
   <section class="settings-section">
     <h2>{{ t(locale, 'lyrics') }}</h2>
     <LyricsRendererSetting />
+    <DesktopLyricsSetting />
     <LyricsColorEffectsSetting />
   </section>
 </template>

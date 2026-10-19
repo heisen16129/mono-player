@@ -98,17 +98,13 @@ export async function openDesktopLyricsWindow() {
 
 export async function toggleDesktopLyricsWindow() {
   if (!isTauriRuntime()) return null;
-
-  const existingWindow = await WebviewWindow.getByLabel(DESKTOP_LYRICS_LABEL);
-  if (existingWindow) {
-    desktopLyricsWindow = null;
-    await existingWindow.close();
-    return null;
-  }
-
-  return openDesktopLyricsWindow();
+  const { closeDesktopLyrics, openSelectedDesktopLyrics } = await import('./desktopLyricsOptions');
+  const existing = await WebviewWindow.getByLabel(DESKTOP_LYRICS_LABEL)
+    ?? await WebviewWindow.getByLabel('desktop-playback-card');
+  if (existing) { await closeDesktopLyrics(); return null; }
+  await openSelectedDesktopLyrics();
+  return null;
 }
-
 export async function broadcastDesktopLyricsState(state: DesktopLyricsState) {
   if (!isTauriRuntime()) return;
   await broadcastDesktopCardState(state);

@@ -155,6 +155,7 @@ export interface PlaylistProgress {
 export type PlayMode = 'order' | 'single' | 'random' | 'loop' | 'singlePlay';
 
 export interface PlayerStatus {
+  external_media?: { title: string; artist: string };
   state?: string;
   is_playing?: boolean;
   position?: number;

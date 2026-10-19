@@ -1,0 +1,27 @@
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { transform } from 'esbuild';
+const source = readFileSync('src/composables/useWindowDrag.ts', 'utf8');
+const { code } = await transform(source.replace(/^import .*;\r?\n/gm, '').replaceAll('export ', ''), { loader: 'ts' });
+test('native drag cancels browser behavior, rejects duplicate starts and preserves controls', async () => {
+  let calls = 0;
+  let finish;
+  const context = vm.createContext({ console, isTauriRuntime: () => true, shouldSkipWindowDrag: target => target === 'button', getCurrentWindow: () => ({ startDragging: () => { calls++; return new Promise(resolve => { finish = resolve; }); } }) });
+  vm.runInContext(code, context);
+  const { startWindowDrag } = vm.runInContext('useWindowDrag()', context);
+  const event = (extra = {}) => ({ button: 0, clientY: 20, target: 'title', defaultPrevented: false, stopped: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; }, ...extra });
+  for (const item of [{button: 2}, {clientY: 100}, {target: 'button'}, {defaultPrevented: true}]) await startWindowDrag(event(item));
+  assert.equal(calls, 0);
+  const first = event();
+  const pending = startWindowDrag(first);
+  await startWindowDrag(event());
+  assert.equal(calls, 1);
+  assert.equal(first.defaultPrevented, true);
+  assert.equal(first.stopped, true);
+  finish(); await pending;
+  const next = startWindowDrag(event());
+  assert.equal(calls, 2);
+  finish(); await next;
+});

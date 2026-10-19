@@ -6,6 +6,7 @@ import PlayerSpeedPopup from './PlayerSpeedPopup.vue';
 import PlayerProgress from './PlayerProgress.vue';
 import PlayerSleepTimerPopup from './PlayerSleepTimerPopup.vue';
 import PlayerVolumePopup from './PlayerVolumePopup.vue';
+import PlayerQueueDialog from './PlayerQueueDialog.vue';
 import SlButton from '../ui/SlButton.vue';
 import SlIcon from '../ui/SlIcon.vue';
 import { closePage, navigation, notifyHostFavorite } from '../runtime';
@@ -21,6 +22,7 @@ let detailRequest = 0;
 const lyrics = ref<LyricLine[]>([]);
 const isFavorite = ref(false);
 const favoriteBusy = ref(false);
+const queueOpen = ref(false);
 const sleepTimerBusy = ref(false);
 const sleepTimer = ref<SleepTimerStatus>({ active: false, mode: 'time', remaining: 0, total: 0 });
 const mobilePager = ref<HTMLElement | null>(null);
@@ -311,8 +313,8 @@ watch(activeLyric, centerActiveLyric);
                 <div v-else class="fullscreen-cover player-cover-empty"><SlIcon name="music_note" :size="44" player-icon /></div>
               </div>
               <div class="fullscreen-song-meta fullscreen-song-meta-desktop">
-                <span class="fullscreen-song-title">{{ state.player.current_song?.title || '暂无播放' }}</span>
-                <span class="fullscreen-song-artist">{{ state.player.current_song?.artist || '选择一首歌曲开始播放' }}</span>
+                <span class="fullscreen-song-title">{{ state.player.external_media?.title || state.player.current_song?.title || '暂无播放' }}</span>
+                <span class="fullscreen-song-artist">{{ state.player.external_media?.artist || state.player.current_song?.artist || '选择一首歌曲开始播放' }}</span>
               </div>
             </section>
             <section ref="desktopLyrics" class="lyrics fullscreen-lyrics-panel" aria-label="歌词">
@@ -353,8 +355,8 @@ watch(activeLyric, centerActiveLyric);
 
         <div class="fullscreen-playback">
           <div class="fullscreen-song-meta fullscreen-song-meta-mobile">
-            <span class="fullscreen-song-title">{{ state.player.current_song?.title || '暂无播放' }}</span>
-            <span class="fullscreen-song-artist">{{ state.player.current_song?.artist || '选择一首歌曲开始播放' }}</span>
+            <span class="fullscreen-song-title">{{ state.player.external_media?.title || state.player.current_song?.title || '暂无播放' }}</span>
+            <span class="fullscreen-song-artist">{{ state.player.external_media?.artist || state.player.current_song?.artist || '选择一首歌曲开始播放' }}</span>
           </div>
           <PlayerProgress
             :position="Number(state.player.position || 0)"
@@ -454,9 +456,11 @@ watch(activeLyric, centerActiveLyric);
                  强行用会 fallback 成字面文本渲染不出图标。走 Miot UI Icons 的 delete
                  (0xE92E)，与 SongRow 的删除按钮字形一致。 -->
             <SlButton variant="icon" icon="delete" class="player-tool-button" title="从歌单删除" :disabled="!canRemoveCurrent" @click="removeCurrentSong" />
+            <SlButton variant="icon" icon="queue_music" player-icon class="player-tool-button" title="播放列表" :disabled="!state.currentDeviceId" @click="navigation.playerPopup = ''; queueOpen = true" />
           </div>
         </div>
       </div>
     </main>
+    <PlayerQueueDialog v-if="queueOpen" @close="queueOpen = false" />
   </div>
 </template>

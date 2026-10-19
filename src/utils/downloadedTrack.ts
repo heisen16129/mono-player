@@ -5,7 +5,7 @@ import { positiveStableStringHash } from './trackKey';
 export function createDownloadTrack(item: DownloadItem): Track {
   return {
     id: -positiveStableStringHash(`download:${item.id}`),
-    path: item.filePath ?? '',
+    path: item.status === 'downloaded' ? item.filePath ?? '' : '',
     title: item.title,
     artist: item.artist,
     album: item.album,

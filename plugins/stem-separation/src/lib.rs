@@ -55,6 +55,7 @@ fn handle_request(request: &Value) -> Result<Value, String> {
             "description": "使用本地 Demucs 将音乐导出为人声与伴奏 WAV。支持一键准备组件、自动识别已有环境，无需手动配置。",
             "updatedAt": "2026-09-17",
             "capabilities": ["stem-separation"],
+            "sidebar": {"title":"人声／伴奏分离","icon":"audio-lines","page":{"action":"stem-separation"}},
             "permissions": ["audio-process", "network"],
             "highlights": ["一键准备，自动配置", "音频在本机处理", "人声和伴奏双轨导出", "支持取消任务"],
             "configSchema": { "fields": [

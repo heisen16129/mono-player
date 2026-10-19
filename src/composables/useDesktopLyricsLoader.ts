@@ -30,7 +30,7 @@ export function useDesktopLyricsLoader({ activeTrack, lyricContent, lyricFormat 
           ? await resolveLyricsSource({ content, format })
           : parseRawLyrics(content ?? '');
         if (requestId !== lyricsLoadRequestId) return;
-        lyricLines.value = normalizeLyricLines(lines);
+        lyricLines.value = lines;
       } finally {
         if (requestId === lyricsLoadRequestId) {
           isLoading.value = false;
@@ -50,11 +50,4 @@ export function useDesktopLyricsLoader({ activeTrack, lyricContent, lyricFormat 
     lyricLines,
     stopLyricsLoading,
   };
-}
-
-function normalizeLyricLines(lines: LyricLine[]) {
-  return lines.filter((line) => {
-    const text = line.text.trim();
-    return text && text !== '...';
-  });
 }

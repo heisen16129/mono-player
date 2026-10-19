@@ -1,5 +1,6 @@
 import { watch } from 'vue';
-import { broadcastDesktopLyricsState, openDesktopLyricsWindow, toggleDesktopLyricsWindow } from '../services/desktopLyrics';
+import { broadcastDesktopLyricsState, toggleDesktopLyricsWindow } from '../services/desktopLyrics';
+import { openSelectedDesktopLyrics } from '../services/desktopLyricsOptions';
 import type { Track, TrackLyricVariant } from '../types/music';
 
 interface ReadonlyRefValue<T> {
@@ -49,13 +50,13 @@ export function useDesktopLyricsSync({
   }
 
   async function openDesktopLyrics() {
-    await openDesktopLyricsWindow();
+    await openSelectedDesktopLyrics();
     await broadcastCurrentDesktopLyricsState();
   }
 
   async function toggleDesktopLyrics() {
-    const window = await toggleDesktopLyricsWindow();
-    if (window) await broadcastCurrentDesktopLyricsState();
+    await toggleDesktopLyricsWindow();
+    await broadcastCurrentDesktopLyricsState();
   }
 
   watch(

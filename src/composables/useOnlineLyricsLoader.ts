@@ -1,3 +1,4 @@
+import { watch } from 'vue';
 import { getPluginLyricsMetadata } from '../services/pluginSearch';
 import type { Track, TrackLyrics } from '../types/music';
 import type { PluginSearchTrack } from '../types/plugin';
@@ -13,7 +14,6 @@ interface UseOnlineLyricsLoaderOptions {
   activeTrack: ReadonlyRefValue<Track | null>;
   onlineActiveTrackKey: ReadonlyRefValue<string | null>;
   getOnlineTrackKey: (track: PluginSearchTrack) => string;
-  hasTrackSourceLyrics: (track: Track | null) => boolean;
   loadLocalTrackLyricsInBackground: (track: Track) => void;
   updateActiveTrackSourceLyrics: (
     lyrics: TrackLyrics,
@@ -30,34 +30,36 @@ export function useOnlineLyricsLoader({
   activeTrack,
   onlineActiveTrackKey,
   getOnlineTrackKey,
-  hasTrackSourceLyrics,
   loadLocalTrackLyricsInBackground,
   updateActiveTrackSourceLyrics,
   updateLyricsViewStateForRequest,
 }: UseOnlineLyricsLoaderOptions) {
   const onlineLyricsRequests = new Map<string, Promise<void>>();
+  let generation = 0;
+  watch(
+    () => `${onlineActiveTrackKey.value}:${activeTrack.value?.id}:${activeTrack.value?.path}`,
+    () => { generation += 1; onlineLyricsRequests.clear(); },
+    { flush: 'sync' },
+  );
 
   async function loadOnlineTrackLyricsInBackground(track: PluginSearchTrack, playbackTrack: Track) {
     const trackKey = getOnlineTrackKey(track);
-    if (hasTrackSourceLyrics(playbackTrack)) {
-      updateLyricsViewStateForRequest(playbackTrack, 'ready');
-      return;
-    }
     const existing = onlineLyricsRequests.get(trackKey);
     if (existing) return existing;
 
+    const requestGeneration = generation;
+    const isCurrent = () => requestGeneration === generation
+      && onlineActiveTrackKey.value === trackKey && activeTrack.value?.id === playbackTrack.id;
+    if (isCurrent()) updateActiveTrackSourceLyrics(
+      { lyrics: [] }, null, track.providerName, track.providerId, track.id, track.sourceRaw ?? track,
+    );
     const request = (async () => {
       try {
         const lyrics = await getPluginLyricsMetadata(track, {
           providerId: track.providerId,
           sourceId: track.id,
         });
-        if (!lyrics.lyrics.length || onlineActiveTrackKey.value !== trackKey || activeTrack.value?.id !== playbackTrack.id) {
-          if (onlineActiveTrackKey.value === trackKey && activeTrack.value?.id === playbackTrack.id) {
-            updateLyricsViewStateForRequest(playbackTrack, 'empty');
-          }
-          return;
-        }
+        if (!isCurrent()) return;
         updateActiveTrackSourceLyrics(
           lyrics,
           playbackTrack.artwork ?? track.artwork ?? null,
@@ -66,9 +68,9 @@ export function useOnlineLyricsLoader({
           track.id,
           track.sourceRaw ?? track,
         );
-        updateLyricsViewStateForRequest(playbackTrack, 'ready');
+        updateLyricsViewStateForRequest(playbackTrack, lyrics.lyrics.length ? 'ready' : 'empty');
       } catch (error) {
-        if (isPlaybackRequestReplacedError(error)) return;
+        if (!isCurrent() || isPlaybackRequestReplacedError(error)) return;
         updateLyricsViewStateForRequest(playbackTrack, 'empty');
         console.warn('[plugin-lyrics] background lyrics load failed', {
           providerId: track.providerId,
@@ -78,7 +80,7 @@ export function useOnlineLyricsLoader({
           error,
         });
       } finally {
-        onlineLyricsRequests.delete(trackKey);
+        if (requestGeneration === generation) onlineLyricsRequests.delete(trackKey);
       }
     })();
 

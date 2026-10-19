@@ -9,6 +9,7 @@ import type { Track } from '../types/music';
 import type { WorkspaceViewListeners, WorkspaceViewProps } from '../types/workspace';
 
 const props = defineProps<{
+  downloadsActive?: boolean;
   activeCollection: LibraryCollection;
   activeFolderPath: string | null;
   activeLibraryFilter: LibraryFilter;
@@ -18,13 +19,14 @@ const props = defineProps<{
   isAudioPlaying: boolean;
   isOnlineSearchOpen: boolean;
   isPreparingActiveTrack: boolean;
-  libraryMeta: { count: number; minutes: number };
+  libraryMeta: { count: number; minutes: number; totalSeconds: number };
   libraryTitle: string;
   localFolderTrackCount: number;
   localFolders: LocalFolderItem[];
   playerError: string | null;
   playerQuery: string;
   recentAddedTrackCount: number;
+  showDownloads: boolean;
   visibleTracks: Track[];
 }>();
 
@@ -33,6 +35,9 @@ const emit = defineEmits<{
   openArtistFromTrack: [artistName: string];
   openLocalFolderFromPanel: [path: string];
   openRecentAddedFromPanel: [];
+  openRecentPlayedFromPanel: [];
+  openDownloads: [];
+  openArtists: [];
   openScanDialog: [];
   openTrackContextMenu: [track: Track, x: number, y: number];
   playFavoriteTracks: [];
@@ -45,12 +50,14 @@ const emit = defineEmits<{
 }>();
 
 const libraryPanelProps = computed<LibraryPanelProps>(() => ({
+  downloadsActive: props.downloadsActive,
   activeCollection: props.activeCollection,
   activeFolderPath: props.activeFolderPath,
   activeLibraryFilter: props.activeLibraryFilter,
   activeOnlineSearch: props.isOnlineSearchOpen,
   localFolders: props.localFolders,
   recentAddedCount: props.recentAddedTrackCount,
+  showDownloads: props.showDownloads,
   visibleTrackCount: props.localFolderTrackCount,
 }));
 
@@ -59,6 +66,9 @@ const libraryPanelListeners: LibraryPanelListeners = {
   onOpenAll: () => emit('returnToLocalLibrary'),
   onOpenFolder: (path) => emit('openLocalFolderFromPanel', path),
   onOpenRecentAdded: () => emit('openRecentAddedFromPanel'),
+  onOpenRecentPlayed: () => emit('openRecentPlayedFromPanel'),
+  onOpenDownloads: () => emit('openDownloads'),
+  onOpenArtists: () => emit('openArtists'),
   onOpenScanDialog: () => emit('openScanDialog'),
 };
 
@@ -99,9 +109,11 @@ const workspaceViewListeners: WorkspaceViewListeners = {
       />
     </template>
     <template #detail>
-      <WorkspaceView
-        v-bind="{ ...workspaceViewProps, ...workspaceViewListeners }"
-      />
+      <slot name="detail">
+        <WorkspaceView
+          v-bind="{ ...workspaceViewProps, ...workspaceViewListeners }"
+        />
+      </slot>
     </template>
   </LibraryContentLayout>
 </template>

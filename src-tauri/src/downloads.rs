@@ -12,9 +12,8 @@ use std::fs;
 use std::io::{Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, Manager, State};
+use std::time::Duration;
+use tauri::{AppHandle, Manager, State};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct DownloadTrackRequest {
@@ -31,6 +30,7 @@ pub(crate) struct DownloadTrackRequest {
     pub(crate) lyric_format: Option<String>,
     #[serde(rename = "trackLyrics")]
     pub(crate) track_lyrics: Option<TrackLyrics>,
+    #[serde(default)]
     pub(crate) plugins: Vec<crate::plugins::PluginPlaybackPlanPlugin>,
 }
 
@@ -138,7 +138,6 @@ pub(crate) struct DownloadQueueEvent {
     pub(crate) error: Option<String>,
 }
 
-static DOWNLOAD_TASK_COUNTER: AtomicU64 = AtomicU64::new(1);
 const AUDIO_DOWNLOAD_USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 const NETEASE_REFERER: &str = "https://music.163.com/";
@@ -148,44 +147,9 @@ pub(crate) fn enqueue_download_online_track(
     app: tauri::AppHandle,
     request: DownloadTrackRequest,
 ) -> ApiResponse<EnqueueDownloadResult> {
-    let task_id = request
-        .task_id
-        .clone()
-        .unwrap_or_else(next_download_task_id);
-    let app_for_task = app.clone();
-    let task_id_for_task = task_id.clone();
-
-    tauri::async_runtime::spawn_blocking(move || {
-        let result = (|| {
-            let request = resolve_download_track_request(&app_for_task, request)?;
-            app_for_task
-                .state::<crate::workers::download::DownloadWorkerState>()
-                .enqueue_download_track(task_id_for_task.clone(), request)
-        })();
-
-        if let Err(error) = result {
-            emit_download_failure(&app_for_task, &task_id_for_task, error);
-        }
-    });
-
-    ApiResponse::success(EnqueueDownloadResult { task_id })
+    ApiResponse::from_result(crate::download_records::enqueue(&app, request))
 }
 
-fn emit_download_failure(app: &tauri::AppHandle, task_id: &str, error: String) {
-    let _ = app.emit(
-        "download://event",
-        DownloadQueueEvent {
-            task_id: task_id.to_string(),
-            status: "failed".to_string(),
-            progress: 0,
-            file_path: None,
-            lyrics_path: None,
-            error: Some(error),
-        },
-    );
-}
-
-#[tauri::command]
 pub(crate) fn delete_downloaded_track_file(
     request: DeleteDownloadedTrackFileRequest,
 ) -> ApiResponse<()> {
@@ -560,16 +524,7 @@ fn open_file_in_folder(path: &Path) -> Result<(), String> {
     }
 }
 
-fn next_download_task_id() -> String {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|value| value.as_millis())
-        .unwrap_or_default();
-    let index = DOWNLOAD_TASK_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("download-{millis}-{index}")
-}
-
-fn resolve_download_track_request(
+pub(crate) fn resolve_download_track_request(
     app: &tauri::AppHandle,
     request: DownloadTrackRequest,
 ) -> Result<ResolvedDownloadTrackRequest, String> {
@@ -612,12 +567,12 @@ fn resolve_download_track_request(
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
         let source = crate::plugins::resolve_plugin_download_source_backend(
             &worker,
-            provider_id,
+            provider_id.clone(),
             plugin_track,
             preferred_quality,
             quality_fallback,
             true,
-            request.plugins.clone(),
+            crate::plugins::read_playback_plugin(app, &provider_id)?,
         )?;
         url = source.url.clone();
         track.path = source.url;
@@ -773,7 +728,7 @@ fn plugin_lyrics_to_track_lyrics(
     }
 }
 
-pub(crate) fn download_online_track_blocking_with_progress<F: FnMut(u8)>(
+pub(crate) fn download_online_track_blocking_with_progress<F: FnMut(u8) -> Result<(), String>>(
     request: ResolvedDownloadTrackRequest,
     mut report_progress: F,
 ) -> Result<DownloadTrackResult, String> {
@@ -812,10 +767,16 @@ pub(crate) fn download_online_track_blocking_with_progress<F: FnMut(u8)>(
     let extension = infer_audio_extension(&request.url, content_type.as_deref());
     let stem = make_download_stem(&request);
     let file_path = unique_file_path(&download_dir, &stem, extension);
-    write_response_to_file(response, &file_path, &mut report_progress)?;
+    if let Err(error) = write_response_to_file(response, &file_path, &mut report_progress) {
+        let _ = fs::remove_file(&file_path);
+        return Err(error);
+    }
 
     let artwork = download_artwork(&client, request.artwork.as_deref());
-    report_progress(94);
+    if let Err(error) = report_progress(94) {
+        let _ = fs::remove_file(&file_path);
+        return Err(error);
+    }
     write_audio_metadata_safely(&file_path, &request, artwork);
     let lyrics_stem = file_path
         .file_stem()
@@ -840,7 +801,7 @@ fn write_response_to_file<F>(
     report_progress: &mut F,
 ) -> Result<(), String>
 where
-    F: FnMut(u8),
+    F: FnMut(u8) -> Result<(), String>,
 {
     let total_bytes = response.content_length();
     let mut file = fs::File::create(file_path).map_err(|err| err.to_string())?;
@@ -859,14 +820,14 @@ where
 
         if let Some(total_bytes) = total_bytes.filter(|value| *value > 0) {
             let progress = ((downloaded.saturating_mul(90) / total_bytes).min(90)) as u8;
-            report_progress(progress);
+            report_progress(progress)?;
         } else {
-            report_progress(10);
+            report_progress(10)?;
         }
     }
 
     file.flush().map_err(|err| err.to_string())?;
-    report_progress(92);
+    report_progress(92)?;
     Ok(())
 }
 

@@ -1,3 +1,4 @@
+mod download_control;
 pub(crate) mod lifecycle;
 pub(crate) mod manager;
 pub(crate) mod protocol;

@@ -159,8 +159,8 @@ async function cancelSleepTimer(): Promise<void> {
           <img v-if="cover" :key="coverEpoch" class="player-cover" :src="cover" :alt="state.player.current_song?.title || '歌曲封面'" @error="onCoverError" @load="onCoverLoad" />
           <div v-else class="player-cover player-cover-empty"><SlIcon name="music_note" :size="22" player-icon /></div>
           <div class="player-copy">
-            <span class="player-title">{{ state.player.current_song?.title || '暂无播放' }}</span>
-            <span class="player-subtitle">{{ state.player.current_song?.artist || currentDevice.name || '已选择设备' }}</span>
+            <span class="player-title">{{ state.player.external_media?.title || state.player.current_song?.title || '暂无播放' }}</span>
+            <span class="player-subtitle">{{ state.player.external_media?.artist || state.player.current_song?.artist || currentDevice.name || '已选择设备' }}</span>
           </div>
         </div>
         <SlButton

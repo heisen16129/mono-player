@@ -2,20 +2,14 @@
 import PlaybackAudioCacheClearAction from './PlaybackAudioCacheClearAction.vue';
 import PlaybackAudioCacheSizeField from './PlaybackAudioCacheSizeField.vue';
 
-const props = defineProps<{
+defineProps<{
   audioCacheMaxMb: number;
   cacheCleanupMessage: string;
   cacheUsedLabel: string;
   clearAudioCache: () => void;
   locale: string;
-  refreshCacheStatus: () => Promise<void>;
   setAudioCacheMaxMb: (value: number) => void;
 }>();
-
-function setAudioCacheMaxMb(value: number) {
-  props.setAudioCacheMaxMb(value);
-  void props.refreshCacheStatus();
-}
 </script>
 
 <template>

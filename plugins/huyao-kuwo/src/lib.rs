@@ -1,3 +1,5 @@
+#[path = "../../shared/playback_quality.rs"]
+mod playback_quality;
 use serde_json::{json, Value};
 use std::cell::Cell;
 
@@ -227,6 +229,7 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
     else {
         return json!({ "error": "狐妖酷我未返回可播放地址。" });
     };
+    let actual_quality = playback_quality::actual_quality(&payload, &url);
     let track = request.get("track").unwrap_or(&Value::Null);
     let lyrics = lyric_metadata(&payload);
     json!({
@@ -236,7 +239,8 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         "album": data.get("album").cloned().or_else(|| track.get("album").cloned()).unwrap_or(Value::Null),
         "duration": data.get("duration").cloned().unwrap_or(Value::Null),
         "artwork": data.get("picture").cloned().unwrap_or(Value::Null),
-        "quality": music.get("level").cloned().unwrap_or_else(|| Value::String(configured_quality(request).to_string())),
+        "quality": request.get("quality").and_then(Value::as_str).unwrap_or_else(|| configured_quality(request)),
+        "actualQuality": actual_quality,
         "lyrics": lyrics,
         "sourceId": track_id(track), "sourceName": PROVIDER_NAME, "sourceProviderId": PROVIDER_ID,
         "sourceRaw": track.get("sourceRaw").cloned().unwrap_or(Value::Null)

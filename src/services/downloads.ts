@@ -1,7 +1,6 @@
 import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
-import { getInstalledPlugin } from './plugins';
-import type { Track, TrackLyrics } from '../types/music';
+import type { DownloadItem, Track, TrackLyrics } from '../types/music';
 import type { PluginManifest } from '../types/plugin';
 
 export interface DownloadOnlineTrackRequest {
@@ -65,24 +64,12 @@ export interface DownloadQueueEvent {
   error: string | null;
 }
 
-async function withInstalledPlugins(request: DownloadOnlineTrackRequest): Promise<DownloadOnlineTrackRequest> {
-  const providerId = request.track.sourceProviderId?.trim();
-  if (!providerId) throw new Error('在线歌曲缺少来源插件。');
-  const plugin = request.plugins?.find((item) => item.id === providerId)
-    ?? await getInstalledPlugin(providerId);
-  if (!plugin) throw new Error('歌曲来源插件未安装。');
-  return {
-    ...request,
-    plugins: [plugin],
-  };
-}
-
 export async function enqueueDownloadOnlineTrack(request: DownloadOnlineTrackRequest): Promise<EnqueueDownloadResult> {
   if (!isTauriRuntime()) {
     return Promise.reject(new Error('请在 Tauri 桌面窗口中下载音乐。'));
   }
 
-  return invokeApi<EnqueueDownloadResult>('enqueue_download_online_track', { request: await withInstalledPlugins(request) });
+  return invokeApi<EnqueueDownloadResult>('enqueue_download_online_track', { request });
 }
 
 export function downloadLyricsFile(request: DownloadLyricsFileRequest): Promise<DownloadLyricsFileResult> {
@@ -101,18 +88,18 @@ export function downloadCoverFile(request: DownloadCoverFileRequest): Promise<Do
   return invokeApi<DownloadCoverFileResult>('download_cover_file', { request });
 }
 
-export function deleteDownloadedTrackFile(request: DeleteDownloadedTrackFileRequest): Promise<void> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve();
-  }
-
-  return invokeApi<void>('delete_downloaded_track_file', { request });
-}
-
 export function openDownloadedTrackInFolder(request: DeleteDownloadedTrackFileRequest): Promise<void> {
   if (!isTauriRuntime()) {
     return Promise.resolve();
   }
 
   return invokeApi<void>('open_downloaded_track_in_folder', { request });
+}
+
+export function downloadRecordsSnapshot(): Promise<{ downloaded: DownloadItem[]; downloading: DownloadItem[]; downloadedKeys: string[]; pendingKeys: string[] }> {
+  return invokeApi('download_records_snapshot');
+}
+
+export function downloadRecordAction(id: string, action: 'pause' | 'resume' | 'retry' | 'clear' | 'delete'): Promise<void> {
+  return invokeApi<void>('download_record_action', { id, action });
 }

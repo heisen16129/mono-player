@@ -26,7 +26,6 @@ const {
   clearAudioCache,
   refreshCacheStatus,
 } = useAudioCacheSettings({
-  getAudioCacheMaxMb: () => props.audioCacheMaxMb,
   setAudioCacheDir: props.setAudioCacheDir,
 });
 
@@ -71,7 +70,6 @@ onMounted(() => {
     :cache-used-label="cacheUsedLabel"
     :clear-audio-cache="clearAudioCache"
     :locale="locale"
-    :refresh-cache-status="refreshCacheStatus"
     :set-audio-cache-max-mb="setAudioCacheMaxMb"
   />
     </div>

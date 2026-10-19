@@ -12,9 +12,8 @@ export interface PluginSearchPage {
 }
 
 export async function listPluginSearchProviders(): Promise<PluginSearchProvider[]> {
-  const plugins = await listInstalledPluginManifests();
+  const plugins = await listInstalledPluginManifests('music-search');
   return plugins
-    .filter((plugin) => plugin.capabilities.includes('search') && plugin.capabilities.includes('play'))
     .map((plugin) => ({
       id: plugin.id,
       name: plugin.name,
@@ -24,9 +23,8 @@ export async function listPluginSearchProviders(): Promise<PluginSearchProvider[
 }
 
 export async function listPluginLyricSearchProviders(): Promise<PluginSearchProvider[]> {
-  const plugins = await listInstalledPluginManifests();
+  const plugins = await listInstalledPluginManifests('lyrics-search');
   return plugins
-    .filter((plugin) => plugin.capabilities.includes('search') && plugin.capabilities.includes('lyrics'))
     .map((plugin) => ({
       id: plugin.id,
       name: plugin.name,
@@ -35,90 +33,18 @@ export async function listPluginLyricSearchProviders(): Promise<PluginSearchProv
     }));
 }
 
-export async function searchPluginMusic(keyword: string, providerId?: string | null, page = 1, pageSize = 30): Promise<PluginSearchPage> {
-  const query = keyword.trim();
-  if (!query) return { tracks: [], isEnd: true };
-
-  const plugins = await listInstalledPluginManifests();
-  const candidateProviders = plugins.filter((plugin) => {
-    return plugin.enabled
-      && plugin.capabilities.includes('search')
-      && plugin.capabilities.includes('play')
-      && (!providerId || plugin.id === providerId);
-  });
-
-  if (candidateProviders.length === 0) {
-    throw new Error(providerId ? 'Selected plugin is not enabled or does not support search.' : 'No enabled plugin supports music search. Install and enable a plugin first.');
-  }
-
-  if (providerId && candidateProviders.length === 1) {
-    return searchWithPlugin(candidateProviders[0], query, page, pageSize);
-  }
-
-  const settledResults = await Promise.allSettled(
-    candidateProviders.map((plugin) => searchWithPluginPage(plugin, query, page, pageSize)),
-  );
-  const pages = settledResults
-    .filter((result): result is PromiseFulfilledResult<PluginSearchPage> => result.status === 'fulfilled')
-    .map((result) => result.value);
-  const tracks = pages.flatMap((result) => result.tracks);
-
-  if (tracks.length > 0) {
-    return {
-      tracks,
-      isEnd: pages.every((result) => result.isEnd || result.tracks.length < pageSize),
-    };
-  }
-
-  const firstError = settledResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  if (firstError) {
-    throw new Error(firstError.reason instanceof Error ? firstError.reason.message : 'Plugin search failed.');
-  }
-
-  return { tracks: [], isEnd: true };
+export interface OnlineMusicSearchResult extends PluginSearchPage {
+  sessionId: string;
 }
 
-export async function searchPluginLyrics(keyword: string, providerId?: string | null, page = 1, pageSize = 30): Promise<PluginSearchPage> {
-  const query = keyword.trim();
-  if (!query) return { tracks: [], isEnd: true };
+export function searchPluginMusic(keyword: string, providerId: string, sessionId: string | null = null): Promise<OnlineMusicSearchResult> {
+  if (!isTauriRuntime()) throw new Error('在线搜索仅支持桌面环境。');
+  return invokeApi<OnlineMusicSearchResult>('search_online_music', { keyword, providerId, sessionId });
+}
 
-  const plugins = await listInstalledPluginManifests();
-  const candidateProviders = plugins.filter((plugin) => {
-    return plugin.enabled
-      && plugin.capabilities.includes('search')
-      && plugin.capabilities.includes('lyrics')
-      && (!providerId || plugin.id === providerId);
-  });
-
-  if (candidateProviders.length === 0) {
-    throw new Error(providerId ? '选中的插件未启用，或不支持搜索歌词。' : '没有启用支持搜索歌词的插件。');
-  }
-
-  if (providerId && candidateProviders.length === 1) {
-    return searchWithPlugin(candidateProviders[0], query, page, pageSize);
-  }
-
-  const settledResults = await Promise.allSettled(
-    candidateProviders.map((plugin) => searchWithPluginPage(plugin, query, page, pageSize)),
-  );
-  const pages = settledResults
-    .filter((result): result is PromiseFulfilledResult<PluginSearchPage> => result.status === 'fulfilled')
-    .map((result) => result.value);
-  const tracks = pages.flatMap((result) => result.tracks);
-
-  if (tracks.length > 0) {
-    return {
-      tracks,
-      isEnd: pages.every((result) => result.isEnd || result.tracks.length < pageSize),
-    };
-  }
-
-  const firstError = settledResults.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  if (firstError) {
-    throw new Error(firstError.reason instanceof Error ? firstError.reason.message : '歌词插件搜索失败。');
-  }
-
-  return { tracks: [], isEnd: true };
+export function searchPluginLyrics(keyword: string, providerId: string, sessionId: string | null = null): Promise<OnlineMusicSearchResult> {
+  if (!isTauriRuntime()) throw new Error('歌词搜索仅支持桌面环境。');
+  return invokeApi<OnlineMusicSearchResult>('search_online_lyrics', { keyword, providerId, sessionId });
 }
 
 export interface PluginLyricsPlaybackGuard {
@@ -149,43 +75,17 @@ export async function resolvePluginPlaybackQualitiesWithRust(track: PluginSearch
   });
 }
 
-async function searchWithPluginPage(plugin: PluginManifest, keyword: string, page: number, pageSize: number): Promise<PluginSearchPage> {
-  const collected: PluginSearchTrack[] = [];
-  let isEnd = false;
-  let pluginPage = 1;
-  const offset = Math.max(0, page - 1) * pageSize;
-  const targetCount = offset + pageSize;
-
-  while (collected.length < targetCount && !isEnd && pluginPage <= page * 3 + 3) {
-    const result = await searchWithPlugin(plugin, keyword, pluginPage, pageSize);
-    collected.push(...result.tracks);
-    isEnd = result.isEnd || result.tracks.length === 0;
-    pluginPage += 1;
-  }
-
-  const tracks = collected.slice(offset, targetCount);
-  const reachedRequestedPage = collected.length >= targetCount;
-  return {
-    tracks,
-    isEnd: isEnd || !reachedRequestedPage || tracks.length < pageSize,
-  };
-}
-
-async function searchWithPlugin(plugin: PluginManifest, keyword: string, page: number, pageSize: number): Promise<PluginSearchPage> {
-  if (!isTauriRuntime()) throw new Error('Plugin search is only available in the desktop runtime.');
-
-  const configuredPlugin = await requireInstalledPlugin(plugin.id);
-  return invokeApi<PluginSearchPage>('search_plugin', {
-    providerId: plugin.id,
-    keyword,
-    page,
-    pageSize,
-    plugins: [configuredPlugin],
-  });
-}
-
 async function requireInstalledPlugin(pluginId: string): Promise<PluginManifest> {
   const plugin = await getInstalledPlugin(pluginId);
   if (!plugin) throw new Error('Selected plugin is not installed.');
   return plugin;
+}
+
+export async function searchPluginCoverCandidates(keyword: string, providerId: string | null): Promise<PluginSearchPage> {
+  if (!providerId) throw new Error('请选择搜索来源。');
+  if (!keyword.trim()) return { tracks: [], isEnd: true };
+  const plugin = await requireInstalledPlugin(providerId);
+  return invokeApi<PluginSearchPage>('search_plugin', {
+    providerId, keyword: keyword.trim(), page: 1, pageSize: 30, plugins: [plugin],
+  });
 }

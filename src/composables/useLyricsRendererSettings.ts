@@ -112,16 +112,12 @@ export function useLyricsRendererSettings() {
   });
   onBeforeUnmount(() => window.removeEventListener(PLUGINS_CHANGED_EVENT, refreshAvailableRenderers));
 
-  function saveLyricsRendererConfig(pluginId: string, config: PluginConfig) {
+  async function saveLyricsRendererConfig(pluginId: string, config: PluginConfig) {
     if (!getLyricsRenderer(pluginId)) return false;
-    const normalizedConfig = normalizeConfig(config);
-    rendererConfigs.value = {
-      ...rendererConfigs.value,
-      [pluginId]: normalizedConfig,
-    };
-    if (isTauriRuntime()) {
-      void savePluginConfig(rendererConfigId(pluginId), normalizedConfig);
-    }
+    const normalizedConfig = isTauriRuntime()
+      ? await savePluginConfig(rendererConfigId(pluginId), config)
+      : normalizeConfig(config);
+    rendererConfigs.value = { ...rendererConfigs.value, [pluginId]: normalizedConfig };
     return true;
   }
 

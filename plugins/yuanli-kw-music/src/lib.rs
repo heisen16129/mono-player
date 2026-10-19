@@ -1,3 +1,5 @@
+#[path = "../../shared/playback_quality.rs"]
+mod playback_quality;
 use serde_json::{json, Value};
 use std::cell::Cell;
 
@@ -245,6 +247,7 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
     let Some(url) = playable_url_from_response(&payload) else {
         return json!({"error":format!("{} did not return a playable url.",PROVIDER_NAME)});
     };
+    let actual_quality = playback_quality::actual_quality(&payload, &url);
     let track = request.get("track").unwrap_or(&Value::Null);
     let quality = request
         .get("quality")
@@ -252,7 +255,7 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| configured_default_quality(request));
-    json!({"url":url,"path":url,"title":track.get("title").cloned().unwrap_or(Value::Null),"artist":track.get("artist").cloned().unwrap_or(Value::Null),"album":track.get("album").cloned().unwrap_or(Value::Null),"duration":normalize_seconds(track.get("duration")),"artwork":track.get("artwork").cloned().unwrap_or(Value::Null),"quality":quality,"lyrics":play_lyrics_metadata(track),"sourceId":source_id_value(track),"sourceName":PROVIDER_NAME,"sourceProviderId":PROVIDER_ID,"sourceRaw":track_source_raw(track)})
+    json!({"url":url,"path":url,"title":track.get("title").cloned().unwrap_or(Value::Null),"artist":track.get("artist").cloned().unwrap_or(Value::Null),"album":track.get("album").cloned().unwrap_or(Value::Null),"duration":normalize_seconds(track.get("duration")),"artwork":track.get("artwork").cloned().unwrap_or(Value::Null),"quality":quality,"actualQuality":actual_quality,"lyrics":play_lyrics_metadata(track),"sourceId":source_id_value(track),"sourceName":PROVIDER_NAME,"sourceProviderId":PROVIDER_ID,"sourceRaw":track_source_raw(track)})
 }
 
 fn source_id_value(track: &Value) -> Value { track.get("sourceId").cloned().unwrap_or(Value::Null) }

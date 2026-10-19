@@ -10,6 +10,7 @@ interface ReadonlyRefValue<T> {
 
 interface UsePlaybackLyricsActionsOptions {
   activeTrack: ReadonlyRefValue<Track | null>;
+  currentPlaybackTrack: Ref<Track | null>;
   onlineActiveTrack: ReadonlyRefValue<Track | null>;
   player: ReturnType<typeof usePlayerStore>;
   selectedTrack: Ref<Track | null>;
@@ -25,6 +26,7 @@ interface PlaybackLyricActionContext {
 
 export function usePlaybackLyricsActions({
   activeTrack,
+  currentPlaybackTrack,
   onlineActiveTrack,
   player,
   selectedTrack,
@@ -49,9 +51,9 @@ export function usePlaybackLyricsActions({
     lyricActionContext.setSelectedLyricFormat(active, format);
   }
 
-  function updateCurrentLocalTrackLyrics(track: Track, lyrics: TrackLyrics) {
+  function updateCurrentLocalTrackLyrics(track: Track, lyrics: TrackLyrics | null) {
     if (onlineActiveTrack.value && isRemoteTrack(onlineActiveTrack.value)) return;
-    const current = player.currentTrack ?? selectedTrack.value;
+    const current = activeTrack.value;
     if (!current) return;
     const sameTrack = current.id === track.id || normalizePath(current.path) === normalizePath(track.path);
     if (!sameTrack) return;
@@ -61,6 +63,9 @@ export function usePlaybackLyricsActions({
       lyrics,
       artwork: current.artwork ?? track.artwork ?? null,
     };
+    if (currentPlaybackTrack.value && normalizePath(currentPlaybackTrack.value.path) === normalizePath(track.path)) {
+      currentPlaybackTrack.value = nextTrack;
+    }
     player.setCurrentTrack(nextTrack);
     if (selectedTrack.value && (selectedTrack.value.id === track.id || normalizePath(selectedTrack.value.path) === normalizePath(track.path))) {
       selectedTrack.value = nextTrack;

@@ -1,30 +1,26 @@
+import { preloadStartupCovers } from '../services/startupCovers';
+import { useLibrarySearch } from '../composables/useLibrarySearch';
+import { useLibraryStatistics } from '../composables/useLibraryStatistics';
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import { resolveLocale } from '../i18n';
-import { listLatestAddedTracks, listTracks, removeMusicDir, scanMusicDir } from '../services/music';
-import { readPersistentValue, removePersistentValue, writePersistentValue } from '../services/persistentStore';
+import { listLatestAddedTracks, listTracks, updateLibraryDirectories, scanMusicDirs } from '../services/music';
+import { listThemes } from '../services/themes';
+import { readPersistentValue } from '../services/persistentStore';
 import type { CustomTheme, PlaybackMode, PlaybackSession, PlayerSettings, Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
 import {
-  CUSTOM_THEMES_KEY,
-  FAVORITES_KEY,
   fallbackSettings,
-  PLAYBACK_SESSION_KEY,
-  RECENT_PLAYED_TRACK_IDS_KEY,
   SETTINGS_KEY,
 } from './player/constants';
 import { createPlayerFavoriteActions } from './player/favoriteActions';
 import {
   dedupeTracksByPath,
-  normalizeCustomThemes,
-  normalizeFavoriteStore,
-  normalizeSettings,
-  normalizePlaybackSession,
 } from './player/normalizers';
 import { createPlayerPlaylistActions } from './player/playlistActions';
 import { createPlayerPlaybackStateActions } from './player/playbackStateActions';
-import { createPlaybackSessionSnapshot, resolvePlaybackSessionRestore } from './player/playbackSession';
-import { normalizeRecentPlayedTrackIds } from './player/recentPlayed';
+import { readPlaybackSession } from '../services/playbackSession';
+import { createRecentPlayedActions } from './player/recentPlayed';
 import { createPlayerSettingsActions } from './player/settingsActions';
 import { createPlayerThemeController } from './player/theme';
 
@@ -33,126 +29,74 @@ export const usePlayerStore = defineStore('player', () => {
   const latestAddedTracks = ref<Track[]>([]);
   const queue = ref<Track[]>([]);
   const currentTrack = ref<Track | null>(null);
-  const favoriteTrackIds = ref<number[]>([]);
-  const favoriteTrackSnapshots = ref<Track[]>([]);
-  const recentPlayedTrackIds = ref<number[]>([]);
   const customThemes = ref<CustomTheme[]>([]);
   const query = ref('');
   const loading = ref(false);
   const error = ref<string | null>(null);
   const settings = ref<PlayerSettings>(fallbackSettings);
+  const { libraryStatistics, refreshLibraryStatistics } = useLibraryStatistics({ tracks, settings, query, error });
   const playbackMode = ref<PlaybackMode>('shuffle');
   const playbackSession = ref<PlaybackSession | null>(null);
   const {
+    reloadThemes,
     addCustomTheme,
     applySettingsSideEffects,
     persistSettings,
     removeCustomTheme,
     setTheme,
-  } = createPlayerThemeController({ settings, customThemes });
+  } = createPlayerThemeController({ settings, customThemes, onSettingsError: (err) => { error.value = getErrorMessage(err); } });
 
-  const { favoriteTracks, isFavorite, toggleFavorite } = createPlayerFavoriteActions({
-    favoriteTrackIds,
-    favoriteTrackSnapshots,
-    persistFavorites,
-    tracks,
+  const { favoriteStatistics, favoriteTracks, favoriteTrackIds, isFavorite, toggleFavorite, addFavoriteTrack, reloadFavorites } = createPlayerFavoriteActions({
+    error,
   });
 
   const {
     currentSource,
-    filteredTracks,
     playbackModeLabel,
-    recordRecentlyPlayed,
     setCurrentTrack,
     togglePlaybackMode,
   } = createPlayerPlaybackStateActions({
     currentTrack,
-    persistRecentlyPlayed,
     playbackMode,
-    query,
-    recentPlayedTrackIds,
     settings,
-    tracks,
+  });
+
+  const { recentPlayedTracks, reloadRecentlyPlayed } = createRecentPlayedActions();
+
+  const { refreshLibrarySearch, libraryListStatistics, libraryListTotals, filteredTracks, filteredLatestAddedTracks, filteredRecentPlayedTracks } = useLibrarySearch({
+    tracks, latestAddedTracks, recentPlayedTracks, query, error,
   });
 
   async function hydratePersistedState() {
     const [
       storedSettings,
-      storedFavoriteTrackIds,
       storedCustomThemes,
       storedPlaybackSession,
-      storedRecentPlayedTrackIds,
     ] = await Promise.all([
-      readPersistentValue<unknown>(SETTINGS_KEY),
-      readPersistentValue<unknown>(FAVORITES_KEY),
-      readPersistentValue<unknown>(CUSTOM_THEMES_KEY),
-      readPersistentValue<unknown>(PLAYBACK_SESSION_KEY),
-      readPersistentValue<unknown>(RECENT_PLAYED_TRACK_IDS_KEY),
+      readPersistentValue<PlayerSettings>(SETTINGS_KEY),
+      listThemes(),
+      readPlaybackSession(),
+      reloadFavorites(),
+      reloadPlaylists(),
+      reloadRecentlyPlayed(),
     ]);
 
-    const legacyRecentPlayedTrackIds = storedSettings && typeof storedSettings === 'object'
-      ? (storedSettings as { recentPlayedTrackIds?: unknown }).recentPlayedTrackIds
-      : undefined;
-    const hasLegacyRecentPlayedTrackIds = storedSettings !== null
-      && typeof storedSettings === 'object'
-      && Object.prototype.hasOwnProperty.call(storedSettings, 'recentPlayedTrackIds');
-
     if (storedSettings) {
-      settings.value = normalizeSettings(storedSettings);
-    }
-
-    recentPlayedTrackIds.value = normalizeRecentPlayedTrackIds(
-      storedRecentPlayedTrackIds ?? legacyRecentPlayedTrackIds,
-    );
-    if (storedRecentPlayedTrackIds === null && hasLegacyRecentPlayedTrackIds) {
-      await writePersistentValue(RECENT_PLAYED_TRACK_IDS_KEY, recentPlayedTrackIds.value);
-    }
-    if (hasLegacyRecentPlayedTrackIds) {
-      await writePersistentValue(SETTINGS_KEY, settings.value);
-    }
-
-    if (storedFavoriteTrackIds) {
-      const favorites = normalizeFavoriteStore(storedFavoriteTrackIds);
-      favoriteTrackIds.value = favorites.ids;
-      favoriteTrackSnapshots.value = favorites.tracks;
+      settings.value = storedSettings;
     }
 
     if (storedCustomThemes) {
-      customThemes.value = normalizeCustomThemes(storedCustomThemes);
+      customThemes.value = storedCustomThemes.themes;
+      settings.value.theme = storedCustomThemes.activeTheme;
     }
 
     if (storedPlaybackSession) {
-      playbackSession.value = normalizePlaybackSession(storedPlaybackSession);
+      playbackSession.value = storedPlaybackSession;
     }
 
     applySettingsSideEffects();
   }
 
-  function persistFavorites() {
-    void writePersistentValue(FAVORITES_KEY, {
-      ids: favoriteTrackIds.value,
-      tracks: favoriteTrackSnapshots.value,
-    });
-  }
-
-  function persistRecentlyPlayed() {
-    void writePersistentValue(RECENT_PLAYED_TRACK_IDS_KEY, recentPlayedTrackIds.value);
-  }
-
-  function persistPlaybackSession(currentTime = 0, track?: Track | null, queueOverride?: Track[]) {
-    const current = track ?? currentTrack.value;
-    const queueSource = queueOverride?.length ? queueOverride : queue.value;
-    const session = createPlaybackSessionSnapshot(currentTime, playbackMode.value, current, queueSource);
-
-    if (!session) {
-      void removePersistentValue(PLAYBACK_SESSION_KEY);
-      playbackSession.value = null;
-      return;
-    }
-
-    playbackSession.value = session;
-    void writePersistentValue(PLAYBACK_SESSION_KEY, session);
-  }
 
   const {
     setAudioCacheDir,
@@ -187,26 +131,43 @@ export const usePlayerStore = defineStore('player', () => {
   } = createPlayerSettingsActions({ persistSettings, settings });
 
   const {
+    playlists,
+    reloadPlaylists,
     addTrackToPlaylist,
     createPlaylist,
     deletePlaylist,
     removeTrackFromPlaylist,
     renamePlaylist,
     updatePlaylistCover,
-  } = createPlayerPlaylistActions({ persistSettings, settings, tracks });
+  } = createPlayerPlaylistActions({ error });
+
+  watch(tracks, () => {
+    void Promise.all([reloadFavorites(), reloadPlaylists()]).catch(err => { error.value = getErrorMessage(err); });
+  }, { deep: true });
+
+  async function prepareStartupView() {
+    await nextTick();
+    await Promise.all([refreshLibrarySearch(), refreshLibraryStatistics(), reloadFavorites(), reloadPlaylists()]);
+    await preloadStartupCovers([
+      ...filteredTracks.value.slice(0, 24),
+      ...libraryStatistics.value.folders.flatMap(folder => folder.tracks.slice(0, 4)),
+      ...(currentTrack.value ? [currentTrack.value] : []),
+    ]);
+  }
 
   function restorePlaybackSession() {
     const session = playbackSession.value;
-    if (!session) return null;
+    if (!session?.currentTrack) {
+      const first = tracks.value[0] ?? null;
+      queue.value = [...tracks.value];
+      currentTrack.value = first;
+      return first ? { track: first, currentTime: 0 } : null;
+    }
 
-    const restored = resolvePlaybackSessionRestore(session, tracks.value);
-    if (!restored) return null;
-
-    queue.value = restored.queue;
-    currentTrack.value = restored.current;
-    playbackMode.value = restored.playbackMode;
-
-    return restored.current ? { track: restored.current, currentTime: restored.currentTime } : null;
+    queue.value = session.queueTracks;
+    currentTrack.value = session.currentTrack;
+    playbackMode.value = session.playbackMode;
+    return session.currentTrack ? { track: session.currentTrack, currentTime: session.currentTime } : null;
   }
 
   async function loadLibrary() {
@@ -230,6 +191,11 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function scanLibrary(path = settings.value.musicDir) {
+    try { await scanLibraries([path]); } catch { /* scanLibraries exposes the error in the store. */ }
+  }
+
+  async function scanLibraries(paths: string[]) {
+    const path = paths[paths.length - 1] ?? '';
     if (!path.trim()) {
       error.value = resolveLocale(settings.value.locale) === 'en-US' ? 'Please select or enter a music folder first.' : '请先选择或输入音乐目录。';
       return;
@@ -239,27 +205,12 @@ export const usePlayerStore = defineStore('player', () => {
     error.value = null;
 
     try {
-      settings.value.musicDir = path;
-      if (!settings.value.musicDirs.includes(path)) {
-        settings.value.musicDirs = [...settings.value.musicDirs, path];
-      }
-      const scanResult = await scanMusicDir(path);
+      const scanResult = await scanMusicDirs(paths);
       const nextTracks = dedupeTracksByPath(Array.isArray(scanResult.tracks) ? scanResult.tracks : []);
-      const addedTracks = dedupeTracksByPath(Array.isArray(scanResult.addedTracks) ? scanResult.addedTracks : []);
-      const addedTrackIds = addedTracks.length > 0
-        ? addedTracks.map((track) => track.id)
-        : (Array.isArray(scanResult.addedTrackIds) ? scanResult.addedTrackIds : []);
-
-      if (addedTracks.length > 0 || addedTrackIds.length > 0) {
-        settings.value.lastAddedMusicDir = path;
-        settings.value.lastAddedTrackIds = addedTrackIds;
-      }
-
-      persistSettings();
+      settings.value.musicDirs = scanResult.musicDirs;
+      settings.value.musicDir = scanResult.musicDir;
       tracks.value = nextTracks;
-      latestAddedTracks.value = addedTracks.length > 0
-        ? addedTracks
-        : dedupeTracksByPath(await listLatestAddedTracks());
+      latestAddedTracks.value = dedupeTracksByPath(await listLatestAddedTracks());
       queue.value = [...tracks.value];
       if (currentTrack.value) {
         currentTrack.value =
@@ -267,33 +218,32 @@ export const usePlayerStore = defineStore('player', () => {
           tracks.value.find((track) => track.path === currentTrack.value?.path) ??
           null;
       }
+      return scanResult;
     } catch (err) {
+      await loadLibrary();
+      const savedSettings = await readPersistentValue<PlayerSettings>(SETTINGS_KEY).catch(() => null);
+      if (savedSettings) {
+        settings.value.musicDirs = savedSettings.musicDirs;
+        settings.value.musicDir = savedSettings.musicDir;
+      }
       error.value = getErrorMessage(err);
+      throw err;
     } finally {
       loading.value = false;
     }
   }
 
   async function setMusicDirs(paths: string[]) {
-    const previousDirs = settings.value.musicDirs;
-    settings.value.musicDirs = [...new Set(paths.filter((path) => path.trim()))];
-    settings.value.musicDir = settings.value.musicDirs[0] ?? '';
-    if (!settings.value.musicDirs.includes(settings.value.lastAddedMusicDir)) {
-      settings.value.lastAddedMusicDir = settings.value.musicDir;
-      settings.value.lastAddedTrackIds = [];
-    }
-    persistSettings();
-
-    const removedDirs = previousDirs.filter((path) => !settings.value.musicDirs.includes(path));
-    for (const removedDir of removedDirs) {
-      tracks.value = dedupeTracksByPath(await removeMusicDir(removedDir));
-    }
-    if (removedDirs.length > 0) {
-      latestAddedTracks.value = dedupeTracksByPath(await listLatestAddedTracks());
-      queue.value = queue.value.filter((track) => tracks.value.some((item) => item.id === track.id));
-      if (currentTrack.value && !tracks.value.some((track) => track.id === currentTrack.value?.id)) {
-        currentTrack.value = null;
-      }
+    try {
+      const result = await updateLibraryDirectories(paths);
+      settings.value.musicDirs = result.musicDirs;
+      settings.value.musicDir = result.musicDir;
+      tracks.value = result.tracks;
+      latestAddedTracks.value = result.latestAddedTracks;
+      await Promise.all([reloadFavorites(), reloadPlaylists(), reloadRecentlyPlayed(), refreshLibraryStatistics(), refreshLibrarySearch()]);
+    } catch (err) {
+      error.value = getErrorMessage(err);
+      throw err;
     }
   }
 
@@ -304,9 +254,13 @@ export const usePlayerStore = defineStore('player', () => {
     currentTrack,
     error,
     favoriteTrackIds,
+    favoriteStatistics,
     favoriteTracks,
-    recentPlayedTrackIds,
+    libraryListStatistics,
+    libraryListTotals,
     filteredTracks,
+    filteredLatestAddedTracks,
+    filteredRecentPlayedTracks,
     loading,
     playbackMode,
     playbackModeLabel,
@@ -317,18 +271,20 @@ export const usePlayerStore = defineStore('player', () => {
     customThemes,
     tracks,
     latestAddedTracks,
+    libraryStatistics,
     hydratePersistedState,
-    refreshExternalFavorites(ids: number[], snapshots: Track[]) {
-      favoriteTrackIds.value = ids;
-      favoriteTrackSnapshots.value = snapshots;
-    },
+    reloadFavorites,
+    recentPlayedTracks,
+    reloadRecentlyPlayed,
+    playlists,
+    reloadPlaylists,
     loadLibrary,
     isFavorite,
     setCurrentTrack,
-    persistPlaybackSession,
     restorePlaybackSession,
-    recordRecentlyPlayed,
+    prepareStartupView,
     scanLibrary,
+    scanLibraries,
     setMusicDirs,
     createPlaylist,
     deletePlaylist,
@@ -366,9 +322,11 @@ export const usePlayerStore = defineStore('player', () => {
     setAppShortcut,
     setMcpAutoStart,
     setTheme,
+    reloadThemes,
     addCustomTheme,
     removeCustomTheme,
     toggleFavorite,
+    addFavoriteTrack,
     togglePlaybackMode,
   };
 });

@@ -1,18 +1,6 @@
 import { ref } from 'vue';
-import {
-  fetchPluginCatalog,
-  listCachedPluginCatalog,
-  listDeletedPluginIds,
-  listInstalledPlugins,
-  saveCachedPluginCatalog,
-} from '../services/plugins';
-import type { PluginCatalogItem, PluginManifest, PluginSubscription } from '../types/plugin';
-
-const OFFICIAL_PLUGIN_CATALOG_SUBSCRIPTION: PluginSubscription = {
-  id: 'official-plugin-store',
-  name: '官方插件商城',
-  url: 'https://raw.githubusercontent.com/heisen16129/mono-plugin-store/refs/heads/master/catalog.json',
-};
+import { pluginCatalog, listInstalledPlugins } from '../services/plugins';
+import type { PluginCatalogItem, PluginManifest } from '../types/plugin';
 
 export function usePluginCatalogState() {
   const installedPlugins = ref<PluginManifest[]>([]);
@@ -27,20 +15,11 @@ export function usePluginCatalogState() {
     pruneSelection = pruner;
   }
 
-  function mergeCatalogPlugins(currentPlugins: PluginCatalogItem[], nextPlugins: PluginCatalogItem[]) {
-    const pluginById = new Map(currentPlugins.map((plugin) => [plugin.id, plugin]));
-    for (const plugin of nextPlugins) {
-      pluginById.set(plugin.id, plugin);
-    }
-    return [...pluginById.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh-Hans-CN'));
-  }
-
   async function loadOfficialCatalog() {
-    const plugins = await fetchPluginCatalog(OFFICIAL_PLUGIN_CATALOG_SUBSCRIPTION);
-    officialCatalogPlugins.value = plugins;
-    catalogPlugins.value = mergeCatalogPlugins(catalogPlugins.value, plugins);
-    await saveCachedPluginCatalog(catalogPlugins.value);
-    return plugins;
+    const result = await pluginCatalog('refresh', 'official-plugin-store');
+    officialCatalogPlugins.value = result.official;
+    catalogPlugins.value = result.catalog;
+    if (result.errors.length) throw new Error(result.errors.map(e => e.error).join('；'));
   }
 
   async function loadInstalledPlugins() {
@@ -49,12 +28,17 @@ export function usePluginCatalogState() {
   }
 
   async function loadDeletedPluginIds() {
-    deletedPluginIds.value = new Set(await listDeletedPluginIds());
+    const result = await pluginCatalog();
+    deletedPluginIds.value = new Set(result.deletedIds);
+    catalogPlugins.value = result.catalog;
+    officialCatalogPlugins.value = result.official;
     pruneSelection();
   }
 
   async function loadCachedCatalogPlugins() {
-    catalogPlugins.value = await listCachedPluginCatalog();
+    const result = await pluginCatalog();
+    catalogPlugins.value = result.catalog;
+    officialCatalogPlugins.value = result.official;
     pruneSelection();
   }
 
@@ -63,7 +47,6 @@ export function usePluginCatalogState() {
     try {
       await loadOfficialCatalog();
     } catch (error) {
-      officialCatalogPlugins.value = [];
       console.warn('[PluginMarket] official catalog fetch failed', error);
     } finally {
       isLoadingOfficialCatalog.value = false;
@@ -95,7 +78,6 @@ export function usePluginCatalogState() {
     loadCachedCatalogPlugins,
     loadDeletedPluginIds,
     loadInstalledPlugins,
-    mergeCatalogPlugins,
     registerPluginCatalogSelectionPruner,
     refreshOfficialCatalogInBackground,
     startPluginCatalogFocusRefresh,

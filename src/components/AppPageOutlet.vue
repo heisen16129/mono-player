@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import PluginPageOutlet from './plugins/PluginPageOutlet.vue';
 import AppArtistsPageOutlet from './AppArtistsPageOutlet.vue';
 import AppDiscoverPageOutlet from './AppDiscoverPageOutlet.vue';
 import AppDownloadsPageOutlet from './AppDownloadsPageOutlet.vue';
@@ -31,10 +32,16 @@ const {
 
 <template>
   <div class="app-page-outlet">
+    <PluginPageOutlet v-if="activeView === 'plugin-page'" />
     <AppLibraryHomePageOutlet
-      v-if="isLibraryHomeOutlet(activeView, activeCollection, isLibraryPanelMode)"
+      v-else-if="activeView === 'downloads' || isLibraryHomeOutlet(activeView, activeCollection, isLibraryPanelMode)"
       v-bind="{ ...libraryHomePageOutletProps, ...libraryHomePageOutletListeners }"
-    />
+      :downloads-active="activeView === 'downloads'"
+    >
+      <template v-if="activeView === 'downloads'" #detail>
+        <AppDownloadsPageOutlet v-bind="{ ...downloadsPageOutletProps, ...downloadsPageOutletListeners }" />
+      </template>
+    </AppLibraryHomePageOutlet>
 
     <AppDiscoverPageOutlet
       v-else-if="activeView === 'discover'"
@@ -49,11 +56,6 @@ const {
     <AppArtistsPageOutlet
       v-else-if="activeView === 'artists'"
       v-bind="{ ...artistsPageOutletProps, ...artistsPageOutletListeners }"
-    />
-
-    <AppDownloadsPageOutlet
-      v-else-if="activeView === 'downloads'"
-      v-bind="{ ...downloadsPageOutletProps, ...downloadsPageOutletListeners }"
     />
 
     <AppUtilityPageOutlet

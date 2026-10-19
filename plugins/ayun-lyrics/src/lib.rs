@@ -147,7 +147,7 @@ fn host_response(request: &Value) -> Value {
     }
 }
 
-fn parse_search_response(request: &Value, body: &str) -> Value {
+fn parse_search_response(_request: &Value, body: &str) -> Value {
     let Ok(payload) = serde_json::from_str::<Value>(body) else {
         return json!({ "error": "search response is not JSON" });
     };
@@ -166,12 +166,9 @@ fn parse_search_response(request: &Value, body: &str) -> Value {
     } else {
         Vec::new()
     };
-    let page_size = request
-        .get("pageSize")
-        .and_then(Value::as_u64)
-        .unwrap_or(10)
-        .clamp(1, 60) as usize;
-    json!({ "isEnd": tracks.len() < page_size, "tracks": tracks })
+    // The service may cap page size below the requested num. A short page is not the end.
+    let is_end = payload.get("isEnd").and_then(Value::as_bool).unwrap_or(tracks.is_empty());
+    json!({ "isEnd": is_end, "tracks": tracks })
 }
 
 fn parse_lyrics_response(_request: &Value, body: &str) -> Value {
@@ -289,4 +286,22 @@ fn url_encode(value: &str) -> String {
         }
     }
     output
+}
+
+#[cfg(test)]
+mod paging_tests {
+    use super::*;
+    #[test]
+    fn short_page_keeps_loading_available() {
+        let result = parse_search_response(&json!({"page":1,"pageSize":30}), &json!({"code":200,"data":[{"id":1,"name":"Song"}]}).to_string());
+        assert_eq!(result["tracks"].as_array().unwrap().len(), 1);
+        assert_eq!(result["isEnd"], false);
+    }
+    #[test]
+    fn empty_page_or_explicit_end_finishes_search() {
+        for payload in [json!({"code":200,"data":[]}), json!({"code":200,"data":[{"id":1}],"isEnd":true})] {
+            let result = parse_search_response(&json!({"page":2,"pageSize":30}), &payload.to_string());
+            assert_eq!(result["isEnd"], true);
+        }
+    }
 }

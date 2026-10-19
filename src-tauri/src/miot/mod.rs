@@ -168,15 +168,15 @@ pub(crate) async fn miot_open(app: AppHandle) -> ApiResponse<String> {
 pub(crate) async fn miot_sync(app: AppHandle) -> ApiResponse<()> {
     ApiResponse::from_result(
         tauri::async_runtime::spawn_blocking(move || {
-            if installed(&app).is_ok() {
-                start(&app).map(|_| ())
-            } else {
-                app.state::<MiotState>().shutdown();
-                Ok(())
-            }
+            sync_service(&app)
         })
         .await
         .map_err(|e| e.to_string())
         .and_then(|r| r),
     )
+}
+
+pub(crate) fn sync_service(app: &AppHandle) -> Result<(), String> {
+    if installed(app).is_ok() { start(app).map(|_| ()) }
+    else { app.state::<MiotState>().shutdown(); Ok(()) }
 }

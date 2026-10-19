@@ -12,6 +12,7 @@ interface UseContentNavigationActionsOptions {
   openFolder: (path: string) => void;
   openLibraryView: () => void;
   openRecentAddedInLibrary: () => void;
+  openRecentPlayedInLibrary: () => void;
   resetOnlineSearchSnapshot: () => void;
 }
 
@@ -23,6 +24,7 @@ export function useContentNavigationActions({
   openFolder,
   openLibraryView,
   openRecentAddedInLibrary,
+  openRecentPlayedInLibrary,
   resetOnlineSearchSnapshot,
 }: UseContentNavigationActionsOptions) {
   function clearOnlineNavigationState() {
@@ -45,6 +47,11 @@ export function useContentNavigationActions({
     openRecentAddedInLibrary();
   }
 
+  function openRecentPlayedFromPanel() {
+    clearOnlineNavigationState();
+    openRecentPlayedInLibrary();
+  }
+
   function openDiscoverMusicView() {
     if (!pluginsEnabled.value || !hasMusicSourcePlugin.value) return;
     openDiscoverView();
@@ -61,6 +68,7 @@ export function useContentNavigationActions({
     openDiscoverMusicView,
     openLocalFolderFromPanel,
     openRecentAddedFromPanel,
+    openRecentPlayedFromPanel,
     returnToLocalLibrary,
   };
 }

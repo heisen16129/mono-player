@@ -1,3 +1,8 @@
+pub(crate) mod online_search;
+pub(crate) mod theme_links;
+pub(crate) mod management;
+pub(crate) mod config;
+pub(crate) mod catalog;
 use crate::api_response::ApiResponse;
 use serde_json::json;
 use serde_json::Value;
@@ -147,7 +152,7 @@ pub struct PluginPlaybackQualities {
     default_quality: Option<String>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginSearchTrack {
     id: String,
@@ -184,6 +189,7 @@ pub struct PluginPlaybackSource {
     pub(crate) artwork: Option<String>,
     pub(crate) lyrics: Option<PluginLyricsMetadata>,
     pub(crate) quality: String,
+    pub(crate) actual_quality: Option<String>,
     pub(crate) source_id: String,
     pub(crate) source_name: String,
     pub(crate) source_provider_id: String,
@@ -251,6 +257,10 @@ pub struct PluginCatalogItem {
     source_kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     config_schema: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    playback_bar: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar: Option<Value>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -280,6 +290,10 @@ pub struct PluginManifest {
     enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     config_schema: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    playback_bar: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar: Option<Value>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -298,6 +312,10 @@ pub struct PluginMetadata {
     screenshots: Option<Vec<String>>,
     permissions: Option<Vec<String>>,
     config_schema: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    playback_bar: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar: Option<Value>,
 }
 
 #[tauri::command]
@@ -317,39 +335,6 @@ pub async fn plugin_invoke(
     ApiResponse::from_result(result)
 }
 
-#[tauri::command]
-pub fn normalize_plugin_manifests(
-    plugins: Vec<serde_json::Value>,
-) -> ApiResponse<Vec<PluginManifest>> {
-    ApiResponse::success(
-        plugins
-            .into_iter()
-            .filter_map(normalize_plugin_manifest_value)
-            .collect(),
-    )
-}
-
-#[tauri::command]
-pub fn normalize_plugin_catalog_items(
-    plugins: Vec<serde_json::Value>,
-) -> ApiResponse<Vec<PluginCatalogItem>> {
-    ApiResponse::success(normalize_catalog_values(plugins))
-}
-
-#[tauri::command]
-pub async fn fetch_plugin_catalog_items(
-    app: AppHandle,
-    url: String,
-) -> Result<ApiResponse<Vec<PluginCatalogItem>>, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        fetch_plugin_catalog_items_inner(&worker, url)
-    })
-    .await
-    .map_err(|err| err.to_string())?;
-    Ok(ApiResponse::from_result(result))
-}
-
 fn fetch_plugin_catalog_items_inner(
     worker: &crate::workers::plugin::PluginWorkerState,
     url: String,
@@ -362,22 +347,6 @@ fn fetch_plugin_catalog_items_inner(
     let catalog_text = fetch_plugin_catalog_backend(url)?;
     let catalog = serde_json::from_str::<Value>(&catalog_text).map_err(|err| err.to_string())?;
     Ok(normalize_catalog_values(catalog_values(catalog)))
-}
-
-#[tauri::command]
-pub async fn build_plugin_manifest_from_catalog(
-    app: AppHandle,
-    item: PluginCatalogItem,
-    installed_at: String,
-    enabled: bool,
-) -> Result<ApiResponse<PluginManifest>, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        build_plugin_manifest_from_catalog_inner(&app, &worker, item, installed_at, enabled)
-    })
-    .await
-    .map_err(|err| err.to_string())?;
-    Ok(ApiResponse::from_result(result))
 }
 
 fn build_plugin_manifest_from_catalog_inner(
@@ -420,6 +389,8 @@ fn build_plugin_manifest_from_catalog_inner(
         screenshots: metadata.screenshots.unwrap_or_default(),
         capabilities,
         permissions: metadata.permissions.unwrap_or_default(),
+        playback_bar: metadata.playback_bar,
+        sidebar: metadata.sidebar,
         config_schema: metadata.config_schema,
         source_url: Some(item.source_url),
         source_kind: item.source_kind,
@@ -434,8 +405,8 @@ fn build_module_manifest_from_catalog(
     enabled: bool,
 ) -> Result<PluginManifest, String> {
     if item.runtime != "module"
-        || item.kind != "lyrics-renderer"
-        || !item.capabilities.iter().any(|capability| capability == "lyrics-renderer")
+        || !matches!(item.kind.as_str(), "lyrics-renderer" | "desktop-lyrics")
+        || !item.capabilities.iter().any(|capability| capability == &item.kind)
         || !is_module_plugin_url(&item.entry)
         || !(item.entry.starts_with("https://") || item.entry.starts_with("http://"))
     {
@@ -457,28 +428,14 @@ fn build_module_manifest_from_catalog(
         highlights: item.highlights,
         screenshots: item.screenshots,
         permissions: item.permissions,
+        playback_bar: item.playback_bar,
+        sidebar: item.sidebar,
         config_schema: item.config_schema,
         source_url: Some(item.source_url),
         source_kind: item.source_kind,
         installed_at,
         enabled,
     })
-}
-
-#[tauri::command]
-pub async fn build_local_plugin_manifest(
-    app: AppHandle,
-    file_path: String,
-    installed_at: String,
-    enabled: bool,
-) -> Result<ApiResponse<PluginManifest>, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        build_local_plugin_manifest_inner(&app, &worker, file_path, installed_at, enabled)
-    })
-    .await
-    .map_err(|err| err.to_string())?;
-    Ok(ApiResponse::from_result(result))
 }
 
 fn build_local_plugin_manifest_inner(
@@ -513,33 +470,14 @@ fn build_local_plugin_manifest_inner(
         screenshots: metadata.screenshots.unwrap_or_default(),
         capabilities,
         permissions: metadata.permissions.unwrap_or_default(),
+        playback_bar: metadata.playback_bar,
+        sidebar: metadata.sidebar,
         config_schema: metadata.config_schema,
         source_url: Some(file_path),
         source_kind: "local".to_string(),
         installed_at,
         enabled,
     })
-}
-
-#[tauri::command]
-pub fn remove_plugin_package(app: AppHandle, plugin_id: String) -> ApiResponse<()> {
-    ApiResponse::from_empty_result((|| {
-        let path = plugin_package_dir(&app, &plugin_id)?;
-        if path.is_dir() {
-            fs::remove_dir_all(path).map_err(|err| err.to_string())?;
-        }
-        Ok(())
-    })())
-}
-
-#[tauri::command]
-pub fn read_local_plugin_manifest(file_path: String) -> ApiResponse<String> {
-    ApiResponse::from_result((|| {
-        if !file_path.to_ascii_lowercase().ends_with(".json") {
-            return Err("歌词渲染插件 manifest 必须是 JSON 文件".to_string());
-        }
-        fs::read_to_string(file_path).map_err(|err| err.to_string())
-    })())
 }
 
 #[tauri::command]
@@ -1221,7 +1159,8 @@ fn normalize_plugin_playback_source(
         duration,
         artwork,
         lyrics,
-        quality,
+        quality: quality.clone(),
+        actual_quality: response.get("actualQuality").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).or_else(|| Some(quality)),
         source_id,
         source_name: plugin.name.clone(),
         source_provider_id: plugin.id.clone(),
@@ -1651,6 +1590,8 @@ fn normalize_catalog_item_value(value: Value) -> Option<PluginCatalogItem> {
         .ok()?,
         source_url,
         source_kind,
+        playback_bar: value.get("playbackBar").filter(|v| v.is_object()).cloned(),
+        sidebar: value.get("sidebar").filter(|v| v.is_object()).cloned(),
         config_schema: normalize_config_schema(
             value
                 .get("configSchema")
@@ -1714,6 +1655,8 @@ fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        playback_bar: value.get("playbackBar").filter(|v| v.is_object()).cloned(),
+        sidebar: value.get("sidebar").filter(|v| v.is_object()).cloned(),
         config_schema: normalize_config_schema(
             value
                 .get("configSchema")
@@ -1749,6 +1692,8 @@ fn build_plugin_catalog_item_from_entry(
         permissions: metadata.permissions.unwrap_or_default(),
         source_kind,
         source_url,
+        playback_bar: metadata.playback_bar,
+        sidebar: metadata.sidebar,
         config_schema: metadata.config_schema,
     })
 }
@@ -1829,6 +1774,8 @@ fn normalize_plugin_metadata(metadata: PluginMetadata) -> Result<PluginMetadata,
         permissions: Some(normalize_permissions(
             metadata.permissions.unwrap_or_default(),
         )?),
+        playback_bar: metadata.playback_bar.filter(|v| v.is_object()),
+        sidebar: metadata.sidebar.filter(|v| v.is_object()),
         config_schema: normalize_config_schema(metadata.config_schema),
     })
 }
@@ -1980,7 +1927,7 @@ fn normalize_runtime(runtime: Option<String>) -> Option<String> {
 
 fn normalize_kind(kind: String) -> Option<String> {
     match kind.trim() {
-        "music" | "lyrics" | "lyrics-renderer" | "metadata" | "playlist" | "theme"
+        "music" | "lyrics" | "lyrics-renderer" | "desktop-lyrics" | "metadata" | "playlist" | "theme"
         | "integration" | "tool" => Some(kind.trim().to_string()),
         _ => None,
     }
@@ -2007,7 +1954,7 @@ fn normalize_capability(capability: &str) -> Option<String> {
     match capability.trim() {
         "search" | "play" | "lyrics" | "metadata" | "cover" | "album" | "playlist-import"
         | "playlist-export" | "theme" | "scrobble" | "history-sync" | "batch-rename"
-        | "lyric-convert" | "lyric-translate" | "lyrics-renderer" | "stem-separation" | "speaker-control" => {
+        | "lyric-convert" | "lyric-translate" | "lyrics-renderer" | "desktop-lyrics" | "stem-separation" | "speaker-control" => {
             Some(capability.trim().to_string())
         }
         _ => None,
@@ -2480,20 +2427,6 @@ where
     Ok(attempts)
 }
 
-#[tauri::command]
-pub async fn fetch_plugin_catalog(
-    app: AppHandle,
-    url: String,
-) -> Result<ApiResponse<String>, String> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        worker.fetch_plugin_catalog(url)
-    })
-    .await
-    .map_err(|err| err.to_string())?;
-    Ok(ApiResponse::from_result(result))
-}
-
 pub(crate) fn fetch_plugin_catalog_backend(url: String) -> Result<String, String> {
     if !url.starts_with("https://") && !url.starts_with("http://") {
         return Err("plugin catalog url must start with http:// or https://".to_string());
@@ -2741,6 +2674,16 @@ fn is_sensitive_header(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn actual_quality_falls_back_to_response_quality() {
+        let plugin = serde_json::from_value(serde_json::json!({"id":"provider","name":"Provider","enabled":true,"capabilities":["play"]})).unwrap();
+        for actual in [serde_json::Value::Null, serde_json::json!(""), serde_json::json!("  "), serde_json::json!("standard")] {
+            let result = super::normalize_plugin_playback_source(serde_json::json!({"url":"https://audio.test/song","quality":"lossless","actualQuality":actual}), "high", &serde_json::json!({}), &plugin).unwrap();
+            assert_eq!(result.quality, "lossless");
+            assert_eq!(result.actual_quality.as_deref(), Some(actual.as_str().map(str::trim).filter(|s| !s.is_empty()).unwrap_or("lossless")));
+        }
+    }
+
     use super::*;
     use serde_json::json;
 

@@ -36,6 +36,7 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
     playerError: props.playerError,
     playerQuery: props.playerQuery,
     recentAddedTrackCount: props.recentAddedTrackCount,
+    showDownloads: props.showDownloads,
     visibleTracks: props.visibleTracks,
   }));
 
@@ -44,6 +45,9 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
     onOpenArtistFromTrack: (...args) => emit('openArtistFromTrack', ...args),
     onOpenLocalFolderFromPanel: (...args) => emit('openLocalFolderFromPanel', ...args),
     onOpenRecentAddedFromPanel: () => emit('openRecentAddedFromPanel'),
+    onOpenRecentPlayedFromPanel: () => emit('openRecentPlayedFromPanel'),
+    onOpenDownloads: () => emit('openDownloads'),
+    onOpenArtists: () => emit('openArtists'),
     onOpenScanDialog: () => emit('openScanDialog'),
     onOpenTrackContextMenu: (...args) => emit('openTrackContextMenu', ...args),
     onPlayFavoriteTracks: () => emit('playFavoriteTracks'),
@@ -114,6 +118,7 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
   }));
 
   const artistsPageOutletListeners: AppArtistsPageOutletListeners = {
+    onOpenLibrary: () => emit('returnToLocalLibrary'),
     'onUpdate:modelValue': (...args) => emit('updatePlayerQuery', ...args),
     onOpenTrackMenu: (...args) => emit('openTrackContextMenu', ...args),
     onPlayTrack: (...args) => emit('playTrack', ...args),
@@ -126,7 +131,6 @@ export function useAppPageOutletBindings(props: AppPageOutletProps, emit: AppPag
     activeTrack: props.activeTrack,
     favoriteTrackIds: props.favoriteTrackIds,
     isPlaying: props.isAudioPlaying,
-    items: props.downloadItems,
   }));
 
   const downloadsPageOutletListeners: AppDownloadsPageOutletListeners = {

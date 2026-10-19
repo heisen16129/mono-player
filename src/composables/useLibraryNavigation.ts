@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 
-export type AppView = 'library' | 'discover' | 'artists' | 'settings' | 'themes' | 'plugins' | 'downloads';
+export type AppView = 'library' | 'discover' | 'artists' | 'settings' | 'themes' | 'plugins' | 'downloads' | 'plugin-page';
 export type LibraryCollection = 'all' | 'favorites';
 export type LibraryFilter = 'all' | 'recentAdded' | 'recentPlayed';
 
@@ -13,8 +13,20 @@ export function useLibraryNavigation(getDefaultArtistName: () => string | null) 
   const activeFolderPath = ref<string | null>(null);
   const activePlaylistId = ref<string | null>(null);
   const activeArtistName = ref<string | null>(null);
+  let libraryReturnState: { view: 'library' | 'downloads'; filter: LibraryFilter; folder: string | null } | null = null;
+
+  function rememberLibraryLocation() {
+    if (activeView.value === 'downloads' || (activeView.value === 'library' && isLibraryPanelMode.value)) {
+      libraryReturnState = {
+        view: activeView.value,
+        filter: activeLibraryFilter.value,
+        folder: activeFolderPath.value,
+      };
+    }
+  }
 
   function openLibraryView() {
+    const previous = activeView.value === 'artists' ? libraryReturnState : null;
     activeView.value = 'library';
     activeCollection.value = 'all';
     activeLibraryFilter.value = 'all';
@@ -22,6 +34,11 @@ export function useLibraryNavigation(getDefaultArtistName: () => string | null) 
     activeFolderPath.value = null;
     activePlaylistId.value = null;
     activeArtistName.value = null;
+    if (previous) {
+      activeView.value = previous.view;
+      activeLibraryFilter.value = previous.filter;
+      activeFolderPath.value = previous.folder;
+    }
   }
 
   function openDiscoverView() {
@@ -64,6 +81,16 @@ export function useLibraryNavigation(getDefaultArtistName: () => string | null) 
     activeArtistName.value = null;
   }
 
+  function openRecentPlayedInLibrary() {
+    activeView.value = 'library';
+    activeCollection.value = 'all';
+    activeLibraryFilter.value = 'recentPlayed';
+    isLibraryPanelMode.value = true;
+    activeFolderPath.value = null;
+    activePlaylistId.value = null;
+    activeArtistName.value = null;
+  }
+
   function openRecentAdded() {
     activeView.value = 'library';
     activeCollection.value = 'all';
@@ -85,6 +112,7 @@ export function useLibraryNavigation(getDefaultArtistName: () => string | null) 
   }
 
   function openArtistsView() {
+    rememberLibraryLocation();
     activeView.value = 'artists';
     activeCollection.value = 'all';
     activeLibraryFilter.value = 'all';
@@ -139,6 +167,7 @@ export function useLibraryNavigation(getDefaultArtistName: () => string | null) 
   }
 
   function openArtistFromTrack(name: string) {
+    rememberLibraryLocation();
     activeView.value = 'artists';
     activeCollection.value = 'all';
     activeLibraryFilter.value = 'all';
@@ -171,6 +200,7 @@ export function useLibraryNavigation(getDefaultArtistName: () => string | null) 
     openPluginsView,
     openRecentAdded,
     openRecentAddedInLibrary,
+    openRecentPlayedInLibrary,
     openRecentPlayed,
     openSettingsView,
     openThemeView,

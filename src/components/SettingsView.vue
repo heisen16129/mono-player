@@ -63,6 +63,7 @@ function selectSettingsTab(tab: string | null) {
 }
 
 .settings-view :deep(details > summary) {
+  cursor: pointer;
   position: relative;
   display: flex;
   min-height: 52px;
@@ -226,6 +227,7 @@ function selectSettingsTab(tab: string | null) {
 }
 
 .settings-content :deep(.option-row:has(input:checked)),
+.settings-content :deep(.toggle-button[aria-pressed='true']),
 .settings-content :deep(.source-action.active) {
   z-index: 1;
   border-color: var(--smw-border-strong);

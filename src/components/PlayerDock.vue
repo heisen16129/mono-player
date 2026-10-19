@@ -14,6 +14,7 @@ import { useQueuePopover } from '../composables/useQueuePopover';
 import { useSleepTimer } from '../composables/useSleepTimer';
 import type { PlayerDockEmits, PlayerDockProps } from '../types/playerDock';
 import type { PlayerDockController } from '../types/playerDockController';
+import SleepTimerDialog from './player-dock/SleepTimerDialog.vue';
 import NowPlayingInfo from './player-dock/NowPlayingInfo.vue';
 import PlaybackErrorToast from './player-dock/PlaybackErrorToast.vue';
 import PlaybackMetaControls from './player-dock/PlaybackMetaControls.vue';
@@ -111,7 +112,6 @@ const {
   volume,
 } = usePlayerDockRuntime({
   activeTrack: computed(() => props.activeTrack),
-  canControlPlayback: computed(() => props.canControlPlayback),
   isPlaying,
   isPreparingActiveTrack: computed(() => props.isPreparingActiveTrack),
   playbackRate,
@@ -132,7 +132,6 @@ const {
   onPlaybackError: showPlaybackError,
   onPlaybackNotice: (message) => showPlaybackNotice(`播放失败：${message}`),
   onPlaybackStateChange: (playing) => emit('playbackStateChange', playing),
-  onRequestInitialPlayback: (startTime) => emit('requestInitialPlayback', startTime),
   onSeamlessAdvance: (track) => emit('seamlessAdvance', track),
 });
 
@@ -350,6 +349,26 @@ defineExpose({ getController: () => playerDockController });
       @update-volume="changeVolume"
     />
 
+  <SleepTimerDialog
+    :action="player.settings.sleepTimerAction"
+    :hours="sleepTimerHours"
+    :is-active="isSleepTimerActive"
+    :is-open="isSleepTimerDialogOpen"
+    :is-paused="isSleepTimerPaused"
+    :minutes="sleepTimerMinutes"
+    :preset-minutes="sleepTimerPresetMinutes"
+    @clear="clearSleepTimer"
+    @close="closeSleepTimerDialog"
+    @pause="pauseSleepTimer"
+    @resume="resumeSleepTimer"
+    @set-action="player.setSleepTimerAction"
+    @set-hours="sleepTimerHours = $event"
+    @set-minutes="sleepTimerMinutes = $event"
+    @set-preset="setSleepTimerPreset"
+    @start="startSleepTimer"
+  />
+
+
   <Teleport to=".mono-window">
     <PlaybackQueuePanel
       v-if="isQueueOpen"
@@ -365,7 +384,10 @@ defineExpose({ getController: () => playerDockController });
 
 <style scoped>
 .player-dock {
-  position: relative;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 30;
   grid-row: 2;
   display: grid;
@@ -384,6 +406,4 @@ defineExpose({ getController: () => playerDockController });
   will-change: transform, opacity;
 }
 
-
 </style>
-

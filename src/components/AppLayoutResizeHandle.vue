@@ -26,7 +26,7 @@ defineEmits<{
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--library-width) - 4px);
+  left: max(0px, calc(var(--library-width) - 4px));
   z-index: 12;
   width: 8px;
   cursor: col-resize;

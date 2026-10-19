@@ -996,3 +996,19 @@ target/wasm32-unknown-unknown/release/mono_plugin_example.wasm
 - 音乐插件的 `play` 能返回可播放的 `url`。
 - 歌词插件或音乐插件的 `lyrics` 能返回 `defaultFormat` 和非空 `lyrics[]`。
 - 需要网络时，所有请求都通过 `hostRequest`，并且 metadata 声明了 `network` 权限。
+
+
+### 播放响应的实际音质
+
+所有音乐来源插件的 `play` 响应包含：
+
+```json
+{"url":"https://example.com/song.flac","quality":"lossless","actualQuality":"standard"}
+```
+
+`quality` 为本次请求的音质（可能是 Host 降级重试后的请求），`actualQuality` 为上游对当前播放地址明确返回的实际音质，使用插件音质标识。缺少可靠字段时返回 `null`，不可用请求值、默认值或扩展名代替。Host 不再把菜单默认值当成实际播放音质。
+
+Host 将实际音质传入播放队列并写入音频缓存元数据；旧缓存缺失该字段时显示“音质未知”。菜单仍使用 `qualities` 返回的名称和可用状态，当前标识来自播放响应。
+
+
+Host 音质兜底：插件的 `actualQuality` 缺失、为 null 或空字符串时，使用同一响应的 `quality` 值；响应连 `quality` 也未提供时，使用本次请求音质。显式返回的实际音质优先。结果随队列及新缓存保存。

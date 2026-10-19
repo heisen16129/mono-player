@@ -20,7 +20,7 @@ const emit = defineEmits<{
     <span class="quick-icon"><slot name="icon" /></span>
     <span class="quick-copy">
       <strong>{{ title }}</strong>
-      <small>{{ countLabel }}</small>
+      <small v-if="countLabel">{{ countLabel }}</small>
     </span>
   </button>
 </template>
@@ -28,16 +28,20 @@ const emit = defineEmits<{
 <style scoped>
 .quick-row {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  column-gap: 12px;
+  grid-template-columns: 58px minmax(0, 1fr);
+  column-gap: 4px;
   align-items: center;
-  min-height: 58px;
-  padding: 6px 8px;
+  height: 48px;
+  padding: 0;
+  box-sizing: border-box;
   border: 0;
   border-radius: 8px;
   background: transparent;
+  color: var(--smw-text-body);
+  font-family: inherit;
   cursor: pointer;
   text-align: left;
+  transition: background-color 160ms ease, color 180ms ease;
 }
 
 .quick-row:hover,
@@ -47,12 +51,15 @@ const emit = defineEmits<{
 
 .quick-icon {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 58px;
+  height: 48px;
   place-items: center;
-  border: 1px solid var(--smw-border);
   border-radius: 8px;
-  background: var(--smw-bg-input);
+}
+
+.quick-icon :deep(svg) {
+  width: 22px;
+  height: 22px;
 }
 
 .quick-copy {

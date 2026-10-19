@@ -56,6 +56,8 @@ pub(crate) struct OnlineAudioCacheIdentity {
     pub(crate) provider_id: String,
     pub(crate) track_id: String,
     pub(crate) quality: String,
+    #[serde(default)]
+    pub(crate) actual_quality: Option<String>,
 }
 
 pub(crate) struct OnlineAudioCacheLookup {
@@ -1225,6 +1227,8 @@ struct ReusableAudioCacheMetadata {
     provider_id: String,
     track_id: String,
     quality: String,
+    #[serde(default)]
+    actual_quality: Option<String>,
     url: String,
     content_length: Option<u64>,
     completed: bool,
@@ -1798,6 +1802,7 @@ fn reusable_cache_target(
         provider_id,
         track_id,
         quality,
+        actual_quality: identity.actual_quality,
     };
     let cache_key = reusable_cache_key(&identity);
     Some(ReusableAudioCacheTarget {
@@ -1858,6 +1863,7 @@ fn completed_cache_for_track(
             provider_id: provider_id.to_string(),
             track_id: track_id.to_string(),
             quality: quality.to_string(),
+            actual_quality: None,
         };
         let target = reusable_cache_target(cache_dir, identity)?;
         return completed_cache_lookup_for_target(&target);
@@ -1882,6 +1888,7 @@ fn completed_cache_for_track(
                     provider_id: metadata.provider_id.clone(),
                     track_id: metadata.track_id.clone(),
                     quality: metadata.quality.clone(),
+                    actual_quality: metadata.actual_quality.clone(),
                 },
             )?;
             let lookup = completed_cache_lookup_for_target(&target)?;
@@ -1908,10 +1915,11 @@ fn completed_cache_lookup_for_target(
             return None;
         }
     }
+    let actual_quality = metadata.actual_quality.clone();
     touch_reusable_cache_metadata(target, metadata);
     Some(OnlineAudioCacheLookup {
         path: target.audio_path.clone(),
-        identity: target.identity.clone(),
+        identity: OnlineAudioCacheIdentity { actual_quality, ..target.identity.clone() },
     })
 }
 
@@ -1946,6 +1954,7 @@ fn write_reusable_cache_metadata(
         provider_id: target.identity.provider_id.clone(),
         track_id: target.identity.track_id.clone(),
         quality: target.identity.quality.clone(),
+        actual_quality: target.identity.actual_quality.clone(),
         url: url.to_string(),
         content_length,
         completed: true,
@@ -2073,6 +2082,22 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn actual_quality_survives_cache_metadata_and_old_cache_is_unknown() {
+        let identity: super::OnlineAudioCacheIdentity = serde_json::from_value(serde_json::json!({"providerId":"p","trackId":"t","quality":"lossless"})).unwrap();
+        assert!(identity.actual_quality.is_none());
+        let mut identity = identity;
+        identity.actual_quality = Some("standard".into());
+        let dir = std::env::temp_dir().join(format!("mono-quality-test-{}", uuid::Uuid::new_v4()));
+        let target = super::reusable_cache_target(&dir, identity).unwrap();
+        std::fs::create_dir_all(target.audio_path.parent().unwrap()).unwrap();
+        std::fs::write(&target.audio_path, b"audio").unwrap();
+        super::write_reusable_cache_metadata(&target, "https://audio.test/song", Some(5), 1);
+        let found = super::completed_cache_for_track(&dir, "p", "t", Some("lossless")).unwrap();
+        assert_eq!(found.identity.actual_quality.as_deref(), Some("standard"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     use super::*;
 
     #[test]

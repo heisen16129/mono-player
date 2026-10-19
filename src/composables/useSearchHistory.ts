@@ -1,57 +1,25 @@
 import { ref, watch, type Ref } from 'vue';
-import { readPersistentValue, writePersistentValue } from '../services/persistentStore';
-
-const SEARCH_HISTORY_KEY = 'search.history';
-const EXCLUDED_SEARCH_HISTORY_KEYWORDS = new Set(['热门歌曲', '热门歌手']);
+import { updateSearchHistory } from '../services/searchHistory';
 
 export function useSearchHistory(limit: Ref<number>) {
   const searchHistory = ref<string[]>([]);
+  let pending = Promise.resolve();
 
-  async function loadSearchHistory() {
-    const storedHistory = await readPersistentValue<string[]>(SEARCH_HISTORY_KEY);
-    searchHistory.value = (storedHistory ?? [])
-      .filter((item): item is string => typeof item === 'string')
-      .map((item) => item.trim())
-      .filter((item) => Boolean(item) && !EXCLUDED_SEARCH_HISTORY_KEYWORDS.has(item))
-      .slice(0, limit.value);
-    await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
+  function update(action: 'list' | 'record' | 'remove' | 'clear', keyword?: string) {
+    const requestedLimit = limit.value;
+    const operation = pending.then(async () => {
+      searchHistory.value = await updateSearchHistory(action, requestedLimit, keyword);
+    });
+    pending = operation.catch(() => {});
+    return operation;
   }
 
-  async function saveSearchHistory(keyword: string) {
-    const normalizedKeyword = keyword.trim();
-    if (!normalizedKeyword || EXCLUDED_SEARCH_HISTORY_KEYWORDS.has(normalizedKeyword)) return;
+  const loadSearchHistory = () => update('list');
+  const saveSearchHistory = (keyword: string) => update('record', keyword);
+  const removeSearchHistory = (keyword: string) => update('remove', keyword);
+  const clearSearchHistory = () => update('clear');
 
-    searchHistory.value = [
-      normalizedKeyword,
-      ...searchHistory.value.filter((item) => item !== normalizedKeyword),
-    ].slice(0, limit.value);
-    await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
-  }
+  watch(limit, () => { void loadSearchHistory().catch(error => console.error('[search-history]', error)); });
 
-  async function removeSearchHistory(keyword: string) {
-    const normalizedKeyword = keyword.trim();
-    if (!normalizedKeyword) return;
-
-    searchHistory.value = searchHistory.value.filter((item) => item !== normalizedKeyword);
-    await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
-  }
-
-  async function clearSearchHistory() {
-    searchHistory.value = [];
-    await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
-  }
-
-  watch(limit, async (nextLimit) => {
-    if (searchHistory.value.length <= nextLimit) return;
-    searchHistory.value = searchHistory.value.slice(0, nextLimit);
-    await writePersistentValue(SEARCH_HISTORY_KEY, searchHistory.value);
-  });
-
-  return {
-    clearSearchHistory,
-    loadSearchHistory,
-    removeSearchHistory,
-    saveSearchHistory,
-    searchHistory,
-  };
+  return { clearSearchHistory, loadSearchHistory, removeSearchHistory, saveSearchHistory, searchHistory };
 }

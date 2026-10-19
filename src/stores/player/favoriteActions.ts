@@ -1,41 +1,52 @@
-import { computed, type Ref } from 'vue';
+import { computed, ref, type Ref } from 'vue';
 import type { Track } from '../../types/music';
-import { isFavoriteTrack, resolveFavoriteTracks, toggleFavoriteTrack } from './favorites';
+import type { FavoriteList } from '../../types/favorite';
+import { addFavorite, listFavorites, removeFavorite } from '../../services/favorites';
+import { favoriteIdentity } from '../../utils/favoriteIdentity';
+import { getErrorMessage } from '../../utils/error';
 
 interface PlayerFavoriteActionsOptions {
-  favoriteTrackIds: Ref<number[]>;
-  favoriteTrackSnapshots: Ref<Track[]>;
-  persistFavorites: () => void;
-  tracks: Ref<Track[]>;
+  error: Ref<string | null>;
 }
 
-export function createPlayerFavoriteActions({
-  favoriteTrackIds,
-  favoriteTrackSnapshots,
-  persistFavorites,
-  tracks,
-}: PlayerFavoriteActionsOptions) {
-  const favoriteTracks = computed(() => {
-    return resolveFavoriteTracks(favoriteTrackIds.value, tracks.value, favoriteTrackSnapshots.value);
-  });
+export function createPlayerFavoriteActions({ error }: PlayerFavoriteActionsOptions) {
+  const result = ref<FavoriteList>({ items: [], statistics: { count: 0, totalSeconds: 0 } });
+  const favorites = computed(() => result.value.items);
+  const favoriteStatistics = computed(() => result.value.statistics);
+  let pending: Promise<unknown> = Promise.resolve();
+  const byIdentity = computed(() => new Map(favorites.value.map(item => [item.identityKey, item])));
+  const favoriteTracks = computed(() => favorites.value.map(item => item.track));
+  const favoriteTrackIds = computed(() => favoriteTracks.value.map(track => track.id));
 
   function isFavorite(track: Track | null) {
-    return isFavoriteTrack(track, favoriteTrackIds.value, favoriteTrackSnapshots.value, tracks.value);
+    return Boolean(track && byIdentity.value.has(favoriteIdentity(track)));
   }
 
-  function toggleFavorite(track: Track | null) {
-    if (!track) return false;
+  function reloadFavorites() {
+    const operation = pending.then(async () => { result.value = await listFavorites(); });
+    pending = operation.catch(() => {});
+    return operation;
+  }
 
-    const result = toggleFavoriteTrack(track, favoriteTrackIds.value, favoriteTrackSnapshots.value, tracks.value);
-    favoriteTrackIds.value = result.favoriteIds;
-    favoriteTrackSnapshots.value = result.snapshots;
-    persistFavorites();
-    return result.isFavorite;
+  function updateFavorite(track: Track | null, desired?: boolean): Promise<boolean | undefined> {
+    if (!track) return Promise.resolve(undefined);
+    const operation = pending.then(async () => {
+      const existing = byIdentity.value.get(favoriteIdentity(track));
+      const next = desired ?? !existing;
+      if (next === Boolean(existing)) return next;
+      result.value = next ? await addFavorite(track) : await removeFavorite(existing!.id);
+      return next;
+    }).catch(err => {
+      error.value = getErrorMessage(err);
+      return undefined;
+    });
+    pending = operation;
+    return operation;
   }
 
   return {
-    favoriteTracks,
-    isFavorite,
-    toggleFavorite,
+    favoriteStatistics, favoriteTracks, favoriteTrackIds, isFavorite, reloadFavorites,
+    toggleFavorite: (track: Track | null) => updateFavorite(track),
+    addFavoriteTrack: (track: Track) => updateFavorite(track, true),
   };
 }

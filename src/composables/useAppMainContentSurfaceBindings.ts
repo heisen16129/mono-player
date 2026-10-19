@@ -2,7 +2,7 @@ import type { Ref, StyleValue } from 'vue';
 import type { usePlayerStore } from '../stores/player';
 import type { AppMainContentListeners, AppMainContentProps } from '../types/appMainContent';
 import type { ArtistGroup, LocalFolderItem } from '../types/library';
-import type { DownloadItem, Track } from '../types/music';
+import type { Track } from '../types/music';
 import type { AppView, LibraryCollection, LibraryFilter } from './useLibraryNavigation';
 import { useAppMainContentBindings } from './useAppMainContentBindings';
 
@@ -21,7 +21,6 @@ interface UseAppMainContentSurfaceBindingsState {
   appGridStyle: ReadonlyRefValue<StyleValue>;
   artistGroups: ReadonlyRefValue<ArtistGroup[]>;
   downloadedTrackKeys: ReadonlyRefValue<string[]>;
-  downloadItems: ReadonlyRefValue<DownloadItem[]>;
   isAudioPlaying: ReadonlyRefValue<boolean>;
   isLibraryPanelMode: ReadonlyRefValue<boolean>;
   isLibraryVisible: ReadonlyRefValue<boolean>;
@@ -65,6 +64,7 @@ interface UseAppMainContentSurfaceBindingsActions {
   openPluginsView: AppMainContentListeners['onOpenPluginsView'];
   openRecentAdded: AppMainContentListeners['onOpenRecentAdded'];
   openRecentAddedFromPanel: AppMainContentListeners['onOpenRecentAddedFromPanel'];
+  openRecentPlayedFromPanel: AppMainContentListeners['onOpenRecentPlayedFromPanel'];
   openRecentPlayed: AppMainContentListeners['onOpenRecentPlayed'];
   openScanDialog: AppMainContentListeners['onOpenScanDialog'];
   openSettingsView: AppMainContentListeners['onOpenSettingsView'];
@@ -110,7 +110,6 @@ export function useAppMainContentSurfaceBindings({
       appGridStyle: () => state.appGridStyle.value,
       artistGroups: () => state.artistGroups.value,
       downloadedTrackKeys: () => state.downloadedTrackKeys.value,
-      downloadItems: () => state.downloadItems.value,
       enablePlugins: () => player.settings.enablePlugins,
       favoriteTrackIds: () => player.favoriteTrackIds,
       isAudioPlaying: () => state.isAudioPlaying.value,
@@ -130,7 +129,7 @@ export function useAppMainContentSurfaceBindings({
       pendingDownloadTrackKeys: () => state.pendingDownloadTrackKeys.value,
       playerError: () => player.error,
       playerQuery: () => player.query,
-      playlists: () => player.settings.playlists ?? [],
+      playlists: () => player.playlists ?? [],
       recentAddedTrackCount: () => state.recentAddedTrackCount.value,
       shouldShowDownloadsMenu: () => state.shouldShowDownloadsMenu.value,
       shouldShowLibraryResizeHandle: () => state.shouldShowLibraryResizeHandle.value,
@@ -157,6 +156,7 @@ export function useAppMainContentSurfaceBindings({
       onOpenPluginsView: actions.openPluginsView,
       onOpenRecentAdded: actions.openRecentAdded,
       onOpenRecentAddedFromPanel: actions.openRecentAddedFromPanel,
+      onOpenRecentPlayedFromPanel: actions.openRecentPlayedFromPanel,
       onOpenRecentPlayed: actions.openRecentPlayed,
       onOpenScanDialog: actions.openScanDialog,
       onOpenSettingsView: actions.openSettingsView,

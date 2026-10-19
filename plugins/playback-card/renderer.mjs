@@ -22,7 +22,9 @@ var styles_default = `*{box-sizing:border-box}html,body{margin:0;width:100%;heig
 \r
 .header-actions{display:flex;align-items:center;gap:2px}.style-toolbar[hidden]{display:none}\r
 \r
-.card-shell{position:relative;flex:none;width:300px;padding-top:40px}\r
+.card-shell{position:relative;flex:none;width:300px;padding-top:40px}
+.desktop .settings-toggle,.desktop .style-toolbar{display:none}
+.desktop .card-shell{padding-top:0}
 `;
 
 // src/seek.mjs

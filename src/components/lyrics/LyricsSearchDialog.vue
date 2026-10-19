@@ -7,6 +7,8 @@ import LyricsSearchInput from './LyricsSearchInput.vue';
 import LyricsSearchResultsList from './LyricsSearchResultsList.vue';
 
 defineProps<{
+  label?: string;
+  zIndex?: number;
   isLoadingMore: boolean;
   isSearching: boolean;
   providerId: string | null;
@@ -31,7 +33,7 @@ const emit = defineEmits<{
 
 <template>
   <BaseDialog
-    label="搜索歌词"
+    :label="label || '搜索歌词'"
     close-label="关闭"
     close-on-overlay
     grid-template-rows="auto auto minmax(0, 1fr)"
@@ -40,13 +42,13 @@ const emit = defineEmits<{
     overflow="hidden"
     panel-class="lyrics-search-dialog"
     width="min(660px, calc(100vw - 32px))"
-    :z-index="240"
+    :z-index="zIndex || 240"
     @close="emit('close')"
   >
     <template #header>
       <LyricsSearchInput
         :model-value="query"
-        placeholder="搜索歌词"
+        :placeholder="label || '搜索歌词'"
         @update:model-value="emit('update:query', $event)"
         @submit="emit('search')"
       />
@@ -54,13 +56,14 @@ const emit = defineEmits<{
 
     <LyricsProviderTabs
       v-if="providers.length > 0"
-      label="歌词来源"
+      :label="label === '搜索封面' ? '封面来源' : '歌词来源'"
       :items="tabItems"
       :model-value="providerId"
       @select="emit('selectProvider', $event)"
     />
 
     <LyricsSearchResultsList
+      :searching-text="label === '搜索封面' ? '正在搜索封面...' : undefined"
       :is-loading-more="isLoadingMore"
       :is-searching="isSearching"
       :resolving-track-key="resolvingTrackKey"

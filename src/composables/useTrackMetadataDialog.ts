@@ -115,10 +115,6 @@ export function useTrackMetadataDialog({
     player.tracks = player.tracks.map(patch);
     player.queue = player.queue.map(patch);
     rustPlaybackQueue.value = rustPlaybackQueue.value.map(patch);
-    player.settings.playlists = player.settings.playlists.map((playlist) => ({
-      ...playlist,
-      tracks: (playlist.tracks ?? []).map(patch),
-    }));
 
     if (player.currentTrack?.id === trackId) {
       player.setCurrentTrack(patch(player.currentTrack));
@@ -140,10 +136,6 @@ export function useTrackMetadataDialog({
     player.tracks = player.tracks.map(patch);
     player.queue = player.queue.map(patch);
     rustPlaybackQueue.value = rustPlaybackQueue.value.map(patch);
-    player.settings.playlists = player.settings.playlists.map((playlist) => ({
-      ...playlist,
-      tracks: (playlist.tracks ?? []).map(patch),
-    }));
 
     if (player.currentTrack?.id === trackId) {
       player.setCurrentTrack(patch(player.currentTrack));

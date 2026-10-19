@@ -374,7 +374,7 @@ fn list_albums(app: &AppHandle) -> Result<Value, String> {
 }
 
 fn list_playlists(app: &AppHandle) -> Result<Value, String> {
-    let playlists = read_store_playlists(app)?;
+    let playlists = read_database_playlists(app)?;
     Ok(json!({
         "playlists": playlists
             .iter()
@@ -400,45 +400,13 @@ fn get_playlist(app: &AppHandle, params: Value) -> Result<Value, String> {
         .get("id")
         .and_then(Value::as_str)
         .ok_or_else(|| "mono_get_playlist requires string argument: id".to_string())?;
-    let playlists = read_store_playlists(app)?;
+    let playlists = read_database_playlists(app)?;
     let playlist = playlists
         .into_iter()
         .find(|playlist| playlist.get("id").and_then(Value::as_str) == Some(id))
         .ok_or_else(|| format!("Playlist not found: {id}"))?;
 
-    let tracks = read_app_tracks(app)?;
-    let tracks_by_id = tracks
-        .into_iter()
-        .map(|track| (track.id, track))
-        .collect::<BTreeMap<_, _>>();
-    let snapshot_by_id = playlist
-        .get("tracks")
-        .and_then(Value::as_array)
-        .map(|tracks| {
-            tracks
-                .iter()
-                .filter_map(|track| {
-                    track
-                        .get("id")
-                        .and_then(Value::as_i64)
-                        .map(|id| (id, track))
-                })
-                .collect::<BTreeMap<_, _>>()
-        })
-        .unwrap_or_default();
-    let playlist_tracks = playlist
-        .get("trackIds")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_i64)
-        .filter_map(|id| {
-            tracks_by_id
-                .get(&id)
-                .map(|track| json!(track))
-                .or_else(|| snapshot_by_id.get(&id).cloned().cloned())
-        })
-        .collect::<Vec<_>>();
+    let playlist_tracks = playlist.get("tracks").cloned().unwrap_or(json!([]));
 
     Ok(json!({
         "playlist": {
@@ -736,6 +704,7 @@ fn online_track_from_params(params: Value) -> Result<Track, String> {
         source_provider_id: Some(source_provider_id),
         added_at: None,
         scan_id: None,
+        last_played_at: None,
         year: None,
         genre: None,
         track_number: None,
@@ -1020,14 +989,11 @@ fn normalize_search_track(plugin: &McpPluginManifest, raw_track: Value) -> Value
     Value::Object(track)
 }
 
-fn read_store_playlists(app: &AppHandle) -> Result<Vec<Value>, String> {
-    let store = read_store(app)?;
-    Ok(store
-        .get("mono-player-settings")
-        .and_then(|settings| settings.get("playlists"))
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default())
+fn read_database_playlists(app: &AppHandle) -> Result<Vec<Value>, String> {
+    let state = app.state::<crate::state::AppState>();
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    crate::database::playlists::read_playlists(&db)?.into_iter()
+        .map(|playlist| serde_json::to_value(playlist).map_err(|e| e.to_string())).collect()
 }
 
 fn read_download_dir(app: &AppHandle) -> Result<Option<String>, String> {

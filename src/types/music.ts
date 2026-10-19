@@ -15,6 +15,7 @@ export interface TrackLyricVariant {
 }
 
 export interface Track {
+  actualQuality?: string | null;
   id: number;
   path: string;
   title: string;
@@ -22,6 +23,7 @@ export interface Track {
   album: string | null;
   duration: number | null;
   addedAt?: string | null;
+  lastPlayedAt?: number | null;
   scanId?: string | null;
   year?: number | null;
   genre?: string | null;
@@ -135,9 +137,6 @@ export interface LyricsBackgroundSettings {
 export interface PlayerSettings {
   musicDir: string;
   musicDirs: string[];
-  lastAddedMusicDir: string;
-  lastAddedTrackIds: number[];
-  playlists: UserPlaylist[];
   theme: AppTheme;
   closeAction: 'exit' | 'tray';
   locale: Locale;
@@ -180,10 +179,10 @@ export interface PlaybackSession {
   queueTracks: Track[];
   currentTime: number;
   playbackMode: PlaybackMode;
-  savedAt: number;
 }
 
 export interface UserPlaylist {
+  statistics: TrackStatistics;
   id: string;
   name: string;
   cover?: string | null;
@@ -193,3 +192,8 @@ export interface UserPlaylist {
 }
 
 export type PlaybackMode = 'shuffle' | 'repeat' | 'fixed';
+
+export interface TrackStatistics {
+  count: number;
+  totalSeconds: number;
+}

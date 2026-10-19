@@ -1,20 +1,30 @@
-import { computed, ref } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
+import { listen } from '@tauri-apps/api/event';
+import { isTauriRuntime } from '../services/music';
 import { open } from '@tauri-apps/plugin-dialog';
 import {
   clearRustBackendCache,
   getRustBackendCacheStatus,
   getRustBackendDefaultCacheDir,
   getRustBackendSystemTempCacheDir,
-  pruneRustBackendCache,
   type RustCacheStatusState,
 } from '../services/playerBackend';
 
 interface UseAudioCacheSettingsOptions {
-  getAudioCacheMaxMb: () => number;
   setAudioCacheDir: (cacheDir: string) => void;
 }
 
-export function useAudioCacheSettings({ getAudioCacheMaxMb, setAudioCacheDir }: UseAudioCacheSettingsOptions) {
+export function useAudioCacheSettings({ setAudioCacheDir }: UseAudioCacheSettingsOptions) {
+  let disposed = false;
+  let unlisten: (() => void) | undefined;
+  onMounted(async () => {
+    if (!isTauriRuntime()) return;
+    const stop = await listen('cache://changed', () => { void refreshCacheStatus(); });
+    if (disposed) stop();
+    else unlisten = stop;
+  });
+  onBeforeUnmount(() => { disposed = true; unlisten?.(); });
+
   const cacheCleanupMessage = ref('');
   const cacheStatus = ref<RustCacheStatusState>({ files: 0, bytes: 0, path: '', directories: [] });
   const cacheUsedLabel = computed(() => `${(cacheStatus.value.bytes / 1024 / 1024).toFixed(1)} MB`);
@@ -45,11 +55,6 @@ export function useAudioCacheSettings({ getAudioCacheMaxMb, setAudioCacheDir }: 
     setAudioCacheDir(await getRustBackendSystemTempCacheDir());
   }
 
-  async function pruneAudioCache() {
-    const result = await pruneRustBackendCache(getAudioCacheMaxMb() * 1024 * 1024);
-    cacheCleanupMessage.value = `已按上限清理 ${result.removedFiles} 个文件，当前约 ${(result.remainingBytes / 1024 / 1024).toFixed(1)} MB`;
-  }
-
   async function refreshCacheStatus() {
     cacheStatus.value = await getRustBackendCacheStatus();
   }
@@ -62,7 +67,6 @@ export function useAudioCacheSettings({ getAudioCacheMaxMb, setAudioCacheDir }: 
     useDefaultCacheDir,
     useSystemTempCacheDir,
     clearAudioCache,
-    pruneAudioCache,
     refreshCacheStatus,
   };
 }

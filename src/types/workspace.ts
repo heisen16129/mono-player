@@ -10,7 +10,7 @@ export interface WorkspaceViewProps {
   isPlaying: boolean;
   preparingTrackId?: number | null;
   libraryFilter: LibraryFilter;
-  libraryMeta: { count: number; minutes: number };
+  libraryMeta: { count: number; minutes: number; totalSeconds: number };
   libraryTitle: string;
   isPlaylistView?: boolean;
   modelValue: string;

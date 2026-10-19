@@ -87,22 +87,40 @@ pub(crate) fn show_tray_menu_window(app: &AppHandle, x: f64, y: f64) -> Result<(
 }
 
 #[tauri::command]
-pub(crate) fn tray_popup_action(app: AppHandle, action: String) -> ApiResponse<()> {
+pub(crate) async fn tray_popup_action(app: AppHandle, action: String) -> ApiResponse<()> {
     if let Some(window) = app.get_webview_window("tray-menu") {
         let _ = window.hide();
     }
 
-    match action.as_str() {
-        "show" => show_main_window(&app),
-        "settings" => {
-            show_main_window(&app);
-            emit_tray_action(&app, "settings");
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        match action.as_str() {
+            "show" => show_main_window(&app),
+            "settings" => { show_main_window(&app); emit_tray_action(&app, "settings"); }
+            "exit" => app.exit(0),
+            "toggle-play" => {
+                if crate::player::mcp_player_state(&app)?.is_playing { crate::player::mcp_pause(&app)?; }
+                else { crate::player::mcp_resume(&app)?; }
+            }
+            "next" => { crate::player::mcp_next(&app)?; }
+            "previous" => { crate::player::mcp_previous(&app)?; }
+            "mode-shuffle" | "mode-repeat" | "mode-fixed" => {
+                let response = crate::player::player_set_playback_mode(app.clone(), app.state::<crate::player::PlayerState>(), action.trim_start_matches("mode-").into());
+                if response.code != 1 { return Err(response.message); }
+            }
+            _ => return Err("未知托盘操作".into()),
         }
-        "exit" => app.exit(0),
-        value => emit_tray_action(&app, value),
-    }
+        Ok(())
+    }).await.map_err(|e| e.to_string()).and_then(|r| r);
+    ApiResponse::from_empty_result(result)
+}
 
-    ApiResponse::ok()
+#[tauri::command]
+pub(crate) fn tray_snapshot(app: AppHandle) -> ApiResponse<serde_json::Value> {
+    ApiResponse::from_result((|| {
+        let (title, artist) = crate::player::current_track_labels(&app)?;
+        let audio = crate::player::mcp_player_state(&app)?;
+        Ok(serde_json::json!({"title":title,"artist":artist,"isPlaying":audio.is_playing}))
+    })())
 }
 
 pub(crate) fn update_tray_now_playing_in_background(app: &AppHandle, title: String) {

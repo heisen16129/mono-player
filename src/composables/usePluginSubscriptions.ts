@@ -1,13 +1,5 @@
 import { ref, type ComputedRef, type Ref } from 'vue';
-import {
-  addPluginSubscription,
-  fetchAllPluginCatalogs,
-  fetchPluginCatalog,
-  listPluginSubscriptions,
-  restoreDeletedPluginsFromCatalog,
-  saveCachedPluginCatalog,
-  savePluginSubscriptions,
-} from '../services/plugins';
+import { pluginCatalog, listPluginSubscriptions, type PluginCatalogSnapshot } from '../services/plugins';
 import type { PluginCatalogItem, PluginSubscription } from '../types/plugin';
 import type { PluginRow } from '../components/plugin-manager/types';
 import { getErrorMessage } from '../utils/error';
@@ -15,7 +7,6 @@ import { getErrorMessage } from '../utils/error';
 interface UsePluginSubscriptionsOptions {
   catalogPlugins: Ref<PluginCatalogItem[]>;
   loadDeletedPluginIds: () => Promise<void>;
-  mergeCatalogPlugins: (currentPlugins: PluginCatalogItem[], nextPlugins: PluginCatalogItem[]) => PluginCatalogItem[];
   notify: (message: string) => void;
   officialCatalogPlugins: Ref<PluginCatalogItem[]>;
   pruneSelection: () => void;
@@ -25,7 +16,6 @@ interface UsePluginSubscriptionsOptions {
 export function usePluginSubscriptions({
   catalogPlugins,
   loadDeletedPluginIds,
-  mergeCatalogPlugins,
   notify,
   officialCatalogPlugins,
   pruneSelection,
@@ -61,16 +51,8 @@ export function usePluginSubscriptions({
     isAddingSubscription.value = true;
 
     try {
-      subscriptions.value = await addPluginSubscription(url);
-      const subscription = subscriptions.value.find((item) => item.url === url);
-      if (!subscription) throw new Error('订阅保存失败');
-      const addedPlugins = await fetchPluginCatalog(subscription);
-      catalogPlugins.value = mergeCatalogPlugins(catalogPlugins.value, addedPlugins);
-      await saveCachedPluginCatalog(catalogPlugins.value);
-      await restoreDeletedPluginsFromCatalog(addedPlugins);
-      await loadDeletedPluginIds();
-      const visibleCount = visiblePlugins.value.length;
-      notify(`已添加 ${addedPlugins.length} 个插件，当前共 ${visibleCount} 个可显示插件`);
+      await applySnapshot(await pluginCatalog('add', undefined, url));
+      notify(`订阅已保存，当前共 ${visiblePlugins.value.length} 个可显示插件`);
     } catch (error) {
       notify(`订阅失败：${getErrorMessage(error, '订阅失败')}`);
     } finally {
@@ -78,22 +60,21 @@ export function usePluginSubscriptions({
     }
   }
 
-  async function removeSubscription(subscription: PluginSubscription) {
-    const nextSubscriptions = subscriptions.value.filter((item) => item.id !== subscription.id);
-    subscriptions.value = nextSubscriptions;
-    await savePluginSubscriptions(nextSubscriptions);
+  async function applySnapshot(result: PluginCatalogSnapshot) {
+    subscriptions.value = result.subscriptions;
+    catalogPlugins.value = result.catalog;
+    officialCatalogPlugins.value = result.official;
+    await loadDeletedPluginIds();
+    pruneSelection();
+    if (result.errors.length) throw new Error(result.errors.map(e => `${e.url}：${e.error}`).join('；'));
+  }
 
+  async function removeSubscription(subscription: PluginSubscription) {
     try {
-      const subscriptionPlugins = await fetchAllPluginCatalogs(nextSubscriptions);
-      catalogPlugins.value = mergeCatalogPlugins(officialCatalogPlugins.value, subscriptionPlugins);
-      await saveCachedPluginCatalog(catalogPlugins.value);
+      await applySnapshot(await pluginCatalog('remove', subscription.id));
       notify(`已删除订阅 ${subscription.name}`);
     } catch (error) {
-      catalogPlugins.value = officialCatalogPlugins.value;
-      await saveCachedPluginCatalog(catalogPlugins.value);
-      notify(`已删除订阅 ${subscription.name}，剩余订阅刷新失败：${getErrorMessage(error, '刷新失败')}`);
-    } finally {
-      pruneSelection();
+      notify(`删除订阅失败：${getErrorMessage(error, '删除失败')}`);
     }
   }
 
@@ -103,12 +84,8 @@ export function usePluginSubscriptions({
     notify(`正在同步订阅 ${subscription.name}`);
 
     try {
-      const syncedPlugins = await fetchPluginCatalog(subscription);
-      catalogPlugins.value = mergeCatalogPlugins(catalogPlugins.value, syncedPlugins);
-      await saveCachedPluginCatalog(catalogPlugins.value);
-      await restoreDeletedPluginsFromCatalog(syncedPlugins);
-      await loadDeletedPluginIds();
-      notify(`已同步订阅 ${subscription.name}，更新 ${syncedPlugins.length} 个插件`);
+      await applySnapshot(await pluginCatalog('refresh', subscription.id));
+      notify(`已同步订阅 ${subscription.name}`);
     } catch (error) {
       notify(`同步订阅失败：${getErrorMessage(error, '同步失败')}`);
     } finally {

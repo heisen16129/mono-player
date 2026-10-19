@@ -45,11 +45,14 @@ impl ScanTaskHandle {
 }
 
 impl ScanWorkerState {
+    pub(crate) fn reset_cancel(&self) { self.inner.cancel_requested.store(false, Ordering::SeqCst); }
+    pub(crate) fn is_canceled(&self) -> bool { self.inner.cancel_requested.load(Ordering::SeqCst) }
+
     pub(crate) fn run_scan<F>(&self, path: String, mut on_track: F) -> Result<(), String>
     where
         F: FnMut(Track) -> Result<(), String>,
     {
-        self.inner.cancel_requested.store(false, Ordering::SeqCst);
+        if self.is_canceled() { return Err("Scan canceled.".into()); }
         let mut worker = WorkerProcess::spawn_current_exe("scan", SCAN_WORKER_FLAG, &[])?;
         let pid = worker.id();
         self.register_current_task(ScanTaskHandle::new(pid))?;
@@ -63,7 +66,6 @@ impl ScanWorkerState {
 
         match result {
             Err(_) if self.inner.cancel_requested.load(Ordering::SeqCst) => {
-                self.inner.cancel_requested.store(false, Ordering::SeqCst);
                 Err("Scan canceled.".to_string())
             }
             result => result,
@@ -92,9 +94,9 @@ impl ScanWorkerState {
             .lock()
             .map_err(|err| err.to_string())?;
         if current.is_some() {
-            self.inner.cancel_requested.store(false, Ordering::SeqCst);
             return Err("A music scan is already running.".to_string());
         }
+        if self.is_canceled() { return Err("Scan canceled.".into()); }
         *current = Some(task);
         Ok(())
     }

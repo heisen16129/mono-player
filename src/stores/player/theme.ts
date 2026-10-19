@@ -1,32 +1,37 @@
+import { listThemes, saveCustomTheme, deleteCustomTheme, selectTheme, type ThemeSnapshot } from '../../services/themes';
+import { saveSettings } from '../../services/settings';
 import type { Ref } from 'vue';
 import { resolveLocale } from '../../i18n';
 import { writePersistentValue } from '../../services/persistentStore';
 import type { CustomTheme, PlayerSettings } from '../../types/music';
-import { CUSTOM_THEMES_KEY, SETTINGS_KEY, STARTUP_BG_KEY, STARTUP_THEME_KEY } from './constants';
+import { STARTUP_BG_KEY } from './constants';
 import { isCustomTheme } from './normalizers';
 import { themeAssetSrc } from './themeAssets';
 
 interface PlayerThemeControllerOptions {
   settings: Ref<PlayerSettings>;
   customThemes: Ref<CustomTheme[]>;
+  onSettingsError: (error: unknown) => void;
 }
 
-export function createPlayerThemeController({ settings, customThemes }: PlayerThemeControllerOptions) {
+export function createPlayerThemeController({ settings, customThemes, onSettingsError }: PlayerThemeControllerOptions) {
   const appliedCustomThemeVariables = new Set<string>();
 
-  function persistSettings(refreshTheme = true) {
-    void writePersistentValue(SETTINGS_KEY, settings.value);
-    if (refreshTheme) applySettingsSideEffects();
-  }
+  let saveQueue: Promise<void> = Promise.resolve();
 
-  function persistCustomThemes() {
-    void writePersistentValue(CUSTOM_THEMES_KEY, customThemes.value);
+  function persistSettings(refreshTheme = true) {
+    const snapshot = JSON.stringify(settings.value);
+    saveQueue = saveQueue.then(async () => {
+      const normalized = await saveSettings(JSON.parse(snapshot));
+      // Do not replace edits or previews made while this save was in flight.
+      if (JSON.stringify(settings.value) === snapshot) settings.value = normalized;
+      if (refreshTheme) applySettingsSideEffects();
+    }).catch(onSettingsError);
   }
 
   function applySettingsSideEffects() {
     document.documentElement.dataset.theme = isCustomTheme(settings.value.theme) ? 'custom' : settings.value.theme;
     document.documentElement.lang = resolveLocale(settings.value.locale);
-    void writePersistentValue(STARTUP_THEME_KEY, settings.value.theme);
     applyCustomThemeVariables();
     persistStartupBackground();
   }
@@ -40,33 +45,27 @@ export function createPlayerThemeController({ settings, customThemes }: PlayerTh
     });
   }
 
-  function setTheme(theme: PlayerSettings['theme']) {
-    if (settings.value.theme === theme) {
-      applyCustomThemeVariables();
-      return;
-    }
+  function mutateTheme(action: () => Promise<ThemeSnapshot>) {
+    const mutation = saveQueue.then(async () => {
+      const snapshot = await action();
+      customThemes.value = snapshot.themes;
+      settings.value.theme = snapshot.activeTheme;
+      applySettingsSideEffects();
+    });
+    saveQueue = mutation.catch(onSettingsError);
+    return mutation;
+  }
 
-    settings.value.theme = theme;
-    persistSettings();
+  function setTheme(theme: PlayerSettings['theme']) {
+    return mutateTheme(() => selectTheme(theme));
   }
 
   function addCustomTheme(theme: CustomTheme, useImmediately = true) {
-    customThemes.value = [theme, ...customThemes.value.filter((item) => item.id !== theme.id)];
-    persistCustomThemes();
-    if (useImmediately) {
-      setTheme(theme.id);
-    }
+    return mutateTheme(() => saveCustomTheme(theme, useImmediately));
   }
 
   function removeCustomTheme(themeId: CustomTheme['id']) {
-    customThemes.value = customThemes.value.filter((theme) => theme.id !== themeId);
-    persistCustomThemes();
-    if (settings.value.theme === themeId) {
-      setTheme('blueWhite');
-      return;
-    }
-
-    applyCustomThemeVariables();
+    return mutateTheme(() => deleteCustomTheme(themeId));
   }
 
   function applyCustomThemeVariables() {
@@ -98,9 +97,9 @@ export function createPlayerThemeController({ settings, customThemes }: PlayerTh
   }
 
   return {
+    reloadThemes: () => mutateTheme(listThemes),
     addCustomTheme,
     applySettingsSideEffects,
-    persistCustomThemes,
     persistSettings,
     removeCustomTheme,
     setTheme,

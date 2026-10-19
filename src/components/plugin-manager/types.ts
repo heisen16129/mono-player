@@ -4,7 +4,6 @@ export interface PluginRow {
   id: string;
   name: string;
   version: string;
-  latestVersion: string;
   author: string;
   runtime: PluginRuntime;
   capabilities: PluginCapability[];

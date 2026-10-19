@@ -1,3 +1,5 @@
+#[path = "../../shared/playback_quality.rs"]
+mod playback_quality;
 use serde_json::{json, Value};
 use std::cell::Cell;
 
@@ -205,12 +207,12 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
     let Some(mut url) = string_field(source, &["url", "playUrl", "src"]).filter(|value| is_http_url(value)) else {
         return json!({ "error": format!("{} did not return a playable url.", PROVIDER_NAME) });
     };
+    let actual_quality = playback_quality::actual_quality(&payload, &url);
     if let Some(id) = netease_outer_url_id(&url) {
         url = format!("{API_BASE}?type=url&id={}", url_encode(&id));
     }
     let track = request.get("track").unwrap_or(&Value::Null);
-    let quality = string_field(source, &["level", "quality"])
-        .unwrap_or_else(|| configured_default_quality(request).to_string());
+    let quality = request.get("quality").and_then(Value::as_str).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| configured_default_quality(request));
     json!({
         "url": url,
         "path": url,
@@ -220,6 +222,7 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         "duration": normalize_seconds(track.get("duration")),
         "artwork": track.get("artwork").cloned().unwrap_or(Value::Null),
         "quality": quality,
+        "actualQuality": actual_quality,
         "lyrics": Value::Null,
         "sourceId": source_id_value(track),
         "sourceName": PROVIDER_NAME,

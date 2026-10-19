@@ -19,7 +19,6 @@ interface UsePlaybackLyricsRuntimeOptions {
   onlineActiveTrackKey: ReadonlyRefValue<string | null>;
   playbackTime: Ref<number>;
   player: ReturnType<typeof usePlayerStore>;
-  rustPlaybackQueue: Ref<Track[]>;
   selectedTrack: Ref<Track | null>;
   getOnlineTrackKey: (track: PluginSearchTrack) => string;
   isRemoteTrack: (track: Track) => boolean;
@@ -38,7 +37,6 @@ export function usePlaybackLyricsRuntime({
   onlineActiveTrackKey,
   playbackTime,
   player,
-  rustPlaybackQueue,
   selectedTrack,
   getOnlineTrackKey,
   isRemoteTrack,
@@ -46,7 +44,6 @@ export function usePlaybackLyricsRuntime({
 }: UsePlaybackLyricsRuntimeOptions) {
   const {
     activeLyricsViewStatus,
-    hasTrackSourceLyrics,
     lyricsTrackKey,
     lyricsViewState,
     syncLyricsViewStateForTrack,
@@ -62,7 +59,6 @@ export function usePlaybackLyricsRuntime({
     currentPlaybackTrack,
     onlineActiveTrack,
     player,
-    rustPlaybackQueue,
     selectedTrack,
     updateLyricsViewStateForRequest,
   });
@@ -73,6 +69,7 @@ export function usePlaybackLyricsRuntime({
     updateCurrentLocalTrackLyrics,
   } = usePlaybackLyricsActions({
     activeTrack,
+    currentPlaybackTrack,
     isRemoteTrack,
     onlineActiveTrack,
     player,
@@ -87,13 +84,6 @@ export function usePlaybackLyricsRuntime({
     activeTrack,
     applyLocalTrackLyrics: updateCurrentLocalTrackLyrics,
     isRemoteTrack,
-    knownTracks: computed(() => [
-      player.currentTrack,
-      selectedTrack.value,
-      ...rustPlaybackQueue.value,
-      ...player.queue,
-      ...player.tracks,
-    ]),
     onlineActiveTrack,
     updateLyricsViewStateForRequest,
   });
@@ -103,7 +93,6 @@ export function usePlaybackLyricsRuntime({
   } = useOnlineLyricsLoader({
     activeTrack,
     getOnlineTrackKey,
-    hasTrackSourceLyrics,
     loadLocalTrackLyricsInBackground,
     onlineActiveTrackKey,
     updateActiveTrackSourceLyrics,
@@ -144,7 +133,6 @@ export function usePlaybackLyricsRuntime({
     broadcastCurrentDesktopLyricsState,
     changeLyricFormat,
     clearActiveTrackLyrics,
-    hasTrackSourceLyrics,
     loadLocalTrackLyricsInBackground,
     loadPlaybackTrackLyricsInBackground,
     lyricsTrackKey,

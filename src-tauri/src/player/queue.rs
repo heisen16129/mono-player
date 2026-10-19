@@ -18,6 +18,9 @@ pub(super) struct PlayerBackend {
     pub(super) queue_index: Option<usize>,
     pub(super) queued_next_source: Option<String>,
     pub(super) playback_generation: u64,
+    pub(super) session_position: f64,
+    pub(super) session_source: Option<String>,
+    pub(super) session_initialized: bool,
     playback_mode: String,
     crossfade_playback: bool,
     crossfade_duration: Duration,
@@ -43,6 +46,8 @@ pub(crate) struct QueueTrack {
     pub(super) source_name: Option<String>,
     pub(super) source_provider_id: Option<String>,
     pub(super) source_raw: Option<serde_json::Value>,
+    #[serde(default)]
+    pub(super) actual_quality: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -58,6 +63,9 @@ pub(crate) struct QueueSnapshot {
 impl Default for PlayerBackend {
     fn default() -> Self {
         Self {
+            session_position: 0.0,
+            session_source: None,
+            session_initialized: false,
             current_source: None,
             queue_tracks: Vec::new(),
             queue_sources: Vec::new(),
@@ -80,9 +88,11 @@ pub(super) fn set_queue_backend(
     crossfade_playback: bool,
     crossfade_duration_ms: u64,
 ) {
+    let mut seen = std::collections::HashSet::new();
     let next_queue_tracks: Vec<QueueTrack> = tracks
         .into_iter()
         .filter_map(normalize_queue_track)
+        .filter(|track| seen.insert(queue_identity(track)))
         .collect();
     let next_playback_mode = normalize_playback_mode(playback_mode);
     let active_source = current_source
@@ -283,6 +293,12 @@ pub(super) fn normalize_queue_source(source: &str) -> Option<String> {
     }
 }
 
+fn queue_identity(track: &QueueTrack) -> String {
+    let key = queue_track_source_key(track);
+    if is_rust_playable_url(&key) || is_plugin_queue_source(&key) { key }
+    else { crate::database::normalized_track_path(&key) }
+}
+
 pub(super) fn normalize_queue_track(mut track: QueueTrack) -> Option<QueueTrack> {
     track.path = track.path.trim().to_string();
     if is_rust_playable_source(&track.path)
@@ -395,7 +411,8 @@ pub(super) fn queue_source_key_for_source(tracks: &[QueueTrack], source: &str) -
 
     tracks.iter().find_map(|track| {
         let key = queue_track_source_key(track);
-        (key == source || track.path == source).then_some(key)
+        (key == source || track.path == source || (!key.contains("://") && !source.contains("://")
+            && crate::database::normalized_track_path(&key) == crate::database::normalized_track_path(source))).then_some(key)
     })
 }
 
@@ -655,6 +672,17 @@ fn random_usize(max: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn queue_deduplicates_local_paths_but_preserves_url_case() {
+        let track = |id, path: &str| serde_json::from_value::<super::QueueTrack>(serde_json::json!({"id":id,"path":path,"title":"Song"})).unwrap();
+        let mut backend = super::PlayerBackend::default();
+        super::set_queue_backend(&mut backend, vec![track(1,"C:/Music/Song.flac"),track(2,"c:/music/song.flac"),track(3,""),track(4,"https://x/A"),track(5,"https://x/a")], None, "repeat".into(), false, false, 3000);
+        assert_eq!(backend.queue_tracks.len(),3);
+        assert_eq!(backend.queue_tracks[0].id,1);
+        assert_eq!(super::queue_source_key_for_source(&backend.queue_tracks,"c:/music/song.flac"),Some("C:/Music/Song.flac".into()));
+        assert_eq!(backend.queue_tracks[2].path,"https://x/a");
+    }
+
     use super::*;
     use std::{
         fs::{remove_file, File},
@@ -677,6 +705,7 @@ mod tests {
 
     fn plugin_track(source_id: Option<&str>, provider_id: Option<&str>) -> QueueTrack {
         QueueTrack {
+            actual_quality: None,
             id: -1,
             path: "plugin://provider/song-1".to_string(),
             title: "Song".to_string(),

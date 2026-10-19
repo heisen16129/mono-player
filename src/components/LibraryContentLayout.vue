@@ -21,9 +21,16 @@
 }
 
 .library-panel-slot {
+  visibility: var(--library-panel-visibility, visible);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+@media (min-width: 821px) {
+  .library-panel-slot > :deep(*) {
+    min-width: 220px;
+  }
 }
 
 .library-panel-slide-enter-active,

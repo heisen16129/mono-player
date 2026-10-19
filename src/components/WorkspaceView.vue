@@ -18,7 +18,7 @@ const player = usePlayerStore();
 const locale = computed(() => player.settings.locale);
 const activePlaylistCover = computed(() => {
   if (!props.isPlaylistView || !props.activePlaylistId) return null;
-  return player.settings.playlists.find((playlist) => playlist.id === props.activePlaylistId)?.cover ?? null;
+  return player.playlists.find((playlist) => playlist.id === props.activePlaylistId)?.cover ?? null;
 });
 const {
   canLocateActiveTrack,

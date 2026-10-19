@@ -1,4 +1,4 @@
-use crate::{database, models::Track, state::AppState, store, workers::plugin::PluginWorkerState};
+use crate::{database, database::{favorites, playlists}, models::Track, state::AppState, store, workers::plugin::PluginWorkerState};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Emitter, Manager};
@@ -19,17 +19,12 @@ fn write(app: &AppHandle, key: &str, value: Value) -> Result<(), String> {
 fn snapshot(app: &AppHandle) -> Result<Value, String> {
     let state = app.state::<AppState>();
     let tracks = database::read_tracks(&*state.db.lock().map_err(|e| e.to_string())?)?;
-    let settings = read(app, "mono-player-settings", json!({}))?;
-    let favorites = read(app, "mono-player-favorites", json!({"ids":[],"tracks":[]}))?;
-    let favorites = if favorites.is_array() {
-        json!({"ids":favorites,"tracks":[]})
-    } else {
-        favorites
-    };
-    let playlists = settings["playlists"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let entries = favorites::read_favorites(&*state.db.lock().map_err(|e| e.to_string())?)?;
+    let favorite_tracks = entries.into_iter().map(|entry| entry.track).collect::<Vec<_>>();
+    let favorites = json!({"ids":favorite_tracks.iter().map(|track| track.id).collect::<Vec<_>>(),"tracks":favorite_tracks});
+    let playlists = playlists::read_playlists(&*state.db.lock().map_err(|e| e.to_string())?)?
+        .into_iter().map(|playlist| serde_json::to_value(playlist).map_err(|e| e.to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
     let remote = read(app, "miot.remote-tracks", json!([]))?;
     let mut all = BTreeMap::new();
     for value in favorites["tracks"]
@@ -236,48 +231,53 @@ pub(crate) fn request(app: &AppHandle, method: &str, params: Value) -> Result<Va
         "playlist_edit" => {
             let ids = params["ids"].as_array().ok_or("缺少歌曲列表")?;
             let add = params["add"] == true;
-            let key = if params["id"] == "__favorites" {
-                "mono-player-favorites"
-            } else {
-                "mono-player-settings"
-            };
-            let mut value = read(app, key, json!({}))?;
-            if value.is_array() {
-                value = json!({"ids":value,"tracks":[]});
-            }
-            let container = if key == "mono-player-favorites" {
-                &mut value
-            } else {
-                value["playlists"]
-                    .as_array_mut()
-                    .and_then(|ps| ps.iter_mut().find(|p| p["id"] == params["id"]))
-                    .ok_or("歌单不存在或不可编辑")?
-            };
-            let field = if key == "mono-player-favorites" {
-                "ids"
-            } else {
-                "trackIds"
-            };
-            let mut current = container[field].as_array().cloned().unwrap_or_default();
-            current.retain(|id| !ids.contains(id));
-            let mut snapshots = container["tracks"].as_array().cloned().unwrap_or_default();
-            snapshots.retain(|t| !ids.contains(&t["id"]));
-            if add {
-                for id in ids {
-                    let t = track(app, id.as_i64().ok_or("无效歌曲 ID")?)?;
-                    current.push(id.clone());
-                    snapshots.push(t);
+            if params["id"] == "__favorites" {
+                let songs = ids.iter().map(|id| {
+                    serde_json::from_value::<Track>(track(app, id.as_i64().ok_or("无效歌曲 ID")?)?)
+                        .map_err(|e| e.to_string())
+                }).collect::<Result<Vec<_>, String>>()?;
+                let state = app.state::<AppState>();
+                {
+                    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+                    let transaction = db.transaction().map_err(|e| e.to_string())?;
+                    for song in songs {
+                        if add {
+                            favorites::insert_favorite(&transaction, &song)?;
+                        } else {
+                            transaction.execute("DELETE FROM favorites WHERE identity_key = ?1", [favorites::identity_key(&song)])
+                                .map_err(|e| e.to_string())?;
+                        }
+                    }
+                    transaction.commit().map_err(|e| e.to_string())?;
                 }
+                let _ = app.emit("favorites-changed", ());
+                let _ = app.emit("miot-library-changed", ());
+                return Ok(json!({}));
             }
-            container[field] = json!(current);
-            container["tracks"] = json!(snapshots);
-            write(app, key, value)?;
+            let playlist_id = params["id"].as_str().ok_or("缺少歌单 ID")?;
+            let songs = ids.iter().map(|id| {
+                serde_json::from_value::<Track>(track(app, id.as_i64().ok_or("无效歌曲 ID")?)?)
+                    .map_err(|e| e.to_string())
+            }).collect::<Result<Vec<_>, String>>()?;
+            {
+                let state = app.state::<AppState>();
+                let mut db = state.db.lock().map_err(|e| e.to_string())?;
+                let tx = db.transaction().map_err(|e| e.to_string())?;
+                playlists::edit_tracks(&tx, playlist_id, &songs, add)?;
+                tx.commit().map_err(|e| e.to_string())?;
+            }
+            let _ = app.emit("playlists-changed", ());
+            let _ = app.emit("miot-library-changed", ());
             Ok(json!({}))
         }
         "delete_song" => {
             // This operation removes library records only; it never deletes source audio.
             let id = params["id"].as_i64().ok_or("缺少歌曲 ID")?;
+            let song: Track = serde_json::from_value(track(app, id)?).map_err(|e| e.to_string())?;
             let state = app.state::<AppState>();
+            state.db.lock().map_err(|e| e.to_string())?
+                .execute("DELETE FROM playlist_tracks WHERE identity_key=?1", [favorites::identity_key(&song)])
+                .map_err(|e| e.to_string())?;
             state
                 .db
                 .lock()
@@ -290,43 +290,14 @@ pub(crate) fn request(app: &AppHandle, method: &str, params: Value) -> Result<Va
                 .unwrap_or_default();
             remote.retain(|t| t["id"] != id);
             write(app, "miot.remote-tracks", json!(remote))?;
-            let mut favorites = read(app, "mono-player-favorites", json!({}))?;
-            if let Some(ids) = favorites.as_array_mut() {
-                ids.retain(|v| v != id);
-            } else {
-                remove_song_reference(&mut favorites, "ids", id);
-            }
-            write(app, "mono-player-favorites", favorites)?;
-            let mut settings = read(app, "mono-player-settings", json!({}))?;
-            if let Some(lists) = settings["playlists"].as_array_mut() {
-                for list in lists {
-                    remove_song_reference(list, "trackIds", id);
-                }
-            }
-            write(app, "mono-player-settings", settings)?;
             Ok(json!({}))
         }
         "played" => {
-            let mut ids = read(app, "mono-player-recent-played-track-ids", json!([]))?
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            ids.retain(|id| id != &params["id"]);
-            ids.insert(0, params["id"].clone());
-            ids.truncate(200);
-            write(app, "mono-player-recent-played-track-ids", json!(ids))?;
+            let song = track(app, params["id"].as_i64().ok_or("缺少歌曲 ID")?)?;
+            crate::recent_played::record(app, song["path"].as_str().ok_or("缺少歌曲路径")?)?;
             Ok(json!({}))
         }
         _ => Err("不支持的音箱宿主请求".into()),
-    }
-}
-
-fn remove_song_reference(container: &mut Value, field: &str, id: i64) {
-    if let Some(ids) = container[field].as_array_mut() {
-        ids.retain(|v| v != id);
-    }
-    if let Some(tracks) = container["tracks"].as_array_mut() {
-        tracks.retain(|v| v["id"] != id);
     }
 }
 

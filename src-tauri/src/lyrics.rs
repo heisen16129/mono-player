@@ -411,7 +411,7 @@ fn parse_lyrics(content: &str, format: Option<&str>) -> Vec<LyricLine> {
                 })
                 .collect::<Vec<_>>()
         })
-        .filter(|line| line.text.trim() != "//")
+        .filter(|line| !matches!(line.text.trim(), "" | "//" | "..." | "…"))
         .collect::<Vec<_>>();
 
     lines.sort_by(|left, right| match (left.time, right.time) {
@@ -793,6 +793,32 @@ mod tests {
             std::fs::remove_file(translation).unwrap();
         }
         std::fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn filters_blank_and_ellipsis_lines_preserving_text_and_timing() {
+        for format in [None, Some("lrc"), Some("trans"), Some("txt")] {
+            let lines = parse_lyrics_content_with_format(
+                "[00:01]   \n[00:02] ... \n[00:03] … \n[00:04]等你...\n[00:05]…回来",
+                format,
+            );
+            assert_eq!(lines.len(), 2);
+            assert_eq!(lines[0].text, "等你...");
+            assert_eq!(lines[0].time, Some(4.0));
+            assert_eq!(lines[1].text, "…回来");
+            assert_eq!(lines[1].time, Some(5.0));
+        }
+        let lines = parse_lyrics_content_with_format(
+            "[1000,900](1000,300,0).(1300,300,0).(1600,300,0).\n[4000,600](4000,300,0)你(4300,300,0)好",
+            Some("yrc"),
+        );
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].text, "你好");
+        assert_eq!(lines[0].time, Some(4.0));
+        let words = lines[0].words.as_ref().unwrap();
+        assert_eq!(words.len(), 2);
+        assert_eq!(words[1].time, 4.3);
+        assert_eq!(words[1].text, "好");
     }
 
     #[test]

@@ -17,7 +17,7 @@ export function usePlayerDockLabels(options: PlayerDockLabelsOptions) {
   const playbackRateLabel = computed(() => `${toValue(options.playbackRate)}x`);
   const onlineQualityLabel = computed(() => {
     const quality = toValue(options.onlineQuality);
-    return toValue(options.onlineQualityOptions).find((option) => option.id === quality)?.name ?? quality;
+    return toValue(options.onlineQualityOptions).find((option) => option.id === quality)?.name ?? (quality || (toValue(options.locale) === 'en-US' ? 'Unknown quality' : '音质未知'));
   });
   const lyricFormatLabel = computed(() => {
     return toValue(options.lyricFormat)?.trim().toLowerCase() || toValue(options.lyricFormats)[0] || '';

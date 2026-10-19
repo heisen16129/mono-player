@@ -25,7 +25,6 @@ pub(crate) mod methods {
     pub(crate) const DOWNLOAD_ENQUEUE: &str = "download.enqueue";
     pub(crate) const DOWNLOAD_EVENT: &str = "download.event";
 
-    pub(crate) const PLUGIN_FETCH_CATALOG: &str = "plugin.fetchCatalog";
     pub(crate) const PLUGIN_READ_WASM_BYTES: &str = "plugin.readWasmBytes";
     pub(crate) const PLUGIN_HTTP_REQUEST: &str = "plugin.httpRequest";
     pub(crate) const PLUGIN_INVOKE: &str = "plugin.invoke";

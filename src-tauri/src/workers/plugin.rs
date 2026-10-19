@@ -91,18 +91,6 @@ impl PluginWorkerState {
         })
     }
 
-    pub(crate) fn fetch_plugin_catalog(&self, url: String) -> Result<String, String> {
-        log_plugin_args(
-            "PluginWorkerState::fetch_plugin_catalog",
-            json!({ "url": url }),
-        );
-        self.deserialize_response(WorkerRequest {
-            id: "plugin-fetch-catalog".to_string(),
-            method: methods::PLUGIN_FETCH_CATALOG.to_string(),
-            payload: json!({ "url": url }),
-        })
-    }
-
     pub(crate) fn refresh_plugin_wasm_cache(&self, entry: String) -> Result<(), String> {
         if !entry.starts_with("http://") && !entry.starts_with("https://") {
             return Ok(());
@@ -432,12 +420,6 @@ fn handle_request(request: WorkerRequest, started_at_ms: u128, cache_dir: &Path)
             )),
             error: None,
         },
-        methods::PLUGIN_FETCH_CATALOG => response_from_result(request.id, || {
-            let payload = serde_json::from_value::<FetchCatalogPayload>(request.payload)
-                .map_err(|err| err.to_string())?;
-            validate_http_url(&payload.url, "plugin catalog url")?;
-            crate::plugins::fetch_plugin_catalog_backend(payload.url).map(|value| json!(value))
-        }),
         methods::PLUGIN_READ_WASM_BYTES => response_from_result(request.id, || {
             let payload = serde_json::from_value::<ReadWasmPayload>(request.payload)
                 .map_err(|err| err.to_string())?;
@@ -474,12 +456,6 @@ fn handle_request(request: WorkerRequest, started_at_ms: u128, cache_dir: &Path)
             error: Some(format!("unsupported plugin worker method: {method}")),
         },
     }
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct FetchCatalogPayload {
-    url: String,
 }
 
 #[derive(Deserialize)]

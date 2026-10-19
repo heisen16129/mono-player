@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue';
+import { ref, type Ref } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useContextMenus } from './useContextMenus';
 import { usePlaylistDialogs } from './usePlaylistDialogs';
@@ -6,7 +6,6 @@ import { appendRustBackendQueue, insertRustBackendQueueNext, type RustQueueSnaps
 import { cropCoverImage, isTauriRuntime, openTrackInFolder } from '../services/music';
 import type { usePlayerStore } from '../stores/player';
 import type { Track, UserPlaylist } from '../types/music';
-import { resolveLocale } from '../i18n';
 import { getErrorMessage } from '../utils/error';
 import { filePathToArtworkUrl } from '../utils/artwork';
 
@@ -46,15 +45,8 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
   const playlistCoverCropTargetId = ref<string | null>(null);
   const isSavingPlaylistCoverCrop = ref(false);
 
-  const trackById = computed(() => {
-    return new Map(player.tracks.map((track) => [track.id, track]));
-  });
-
   function tracksForPlaylist(playlist: UserPlaylist) {
-    const snapshotById = new Map((playlist.tracks ?? []).map((track) => [track.id, track]));
-    return playlist.trackIds
-      .map((id) => trackById.value.get(id) ?? snapshotById.get(id))
-      .filter((track): track is Track => Boolean(track));
+    return playlist.tracks ?? [];
   }
 
   function openCreatePlaylistDialog() {
@@ -69,13 +61,12 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
     closeCreatePlaylistDialogState();
   }
 
-  function confirmCreatePlaylist() {
+  async function confirmCreatePlaylist() {
     const name = newPlaylistName.value.trim();
     if (!name) return;
 
     if (editingPlaylistId.value) {
-      if (!player.renamePlaylist(editingPlaylistId.value, name)) {
-        player.error = resolveLocale(player.settings.locale) === 'en-US' ? 'A playlist with this name already exists.' : '已存在同名歌单。';
+      if (!await player.renamePlaylist(editingPlaylistId.value, name)) {
         return;
       }
       closeCreatePlaylistDialog();
@@ -83,8 +74,7 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
     }
 
     const playlistTracks = addToPlaylistTrack.value ? [addToPlaylistTrack.value] : [];
-    if (!player.createPlaylist(name, playlistTracks, newPlaylistCover.value)) {
-      player.error = resolveLocale(player.settings.locale) === 'en-US' ? 'A playlist with this name already exists.' : '已存在同名歌单。';
+    if (!await player.createPlaylist(name, playlistTracks, newPlaylistCover.value)) {
       return;
     }
     closeCreatePlaylistDialog();
@@ -142,7 +132,7 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
       const cropped = await cropCoverImage({ imagePath: playlistCoverCropImagePath.value, ...payload });
       const cover = filePathToArtworkUrl(cropped.path);
       if (playlistCoverCropTargetId.value) {
-        player.updatePlaylistCover(playlistCoverCropTargetId.value, cover);
+        if (!await player.updatePlaylistCover(playlistCoverCropTargetId.value, cover)) return;
       } else {
         newPlaylistCover.value = cover;
       }
@@ -164,9 +154,9 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
     openRenamePlaylistDialog(playlist);
   }
 
-  function deletePlaylist(playlist: UserPlaylist) {
+  async function deletePlaylist(playlist: UserPlaylist) {
     const deletedActivePlaylist = activePlaylistId.value === playlist.id;
-    if (player.deletePlaylist(playlist.id) && deletedActivePlaylist) {
+    if (await player.deletePlaylist(playlist.id) && deletedActivePlaylist) {
       openLibraryView();
     }
     closePlaylistContextMenu();
@@ -194,19 +184,19 @@ export function usePlaylistActions({ activePlaylistId, onQueueSnapshot, openLibr
     closeTrackContextMenu();
   }
 
-  function addTrackToPlaylist(track: Track, playlist: UserPlaylist) {
-    player.addTrackToPlaylist(track, playlist.id);
+  async function addTrackToPlaylist(track: Track, playlist: UserPlaylist) {
+    if (!await player.addTrackToPlaylist(track, playlist.id)) return;
     closeTrackContextMenu();
     closeAddToPlaylistDialog();
   }
 
-  function removeTrackFromActivePlaylist(track: Track) {
+  async function removeTrackFromActivePlaylist(track: Track) {
     if (!activePlaylistId.value) {
       closeTrackContextMenu();
       return;
     }
 
-    player.removeTrackFromPlaylist(track, activePlaylistId.value);
+    if (!await player.removeTrackFromPlaylist(track, activePlaylistId.value)) return;
     closeTrackContextMenu();
   }
 

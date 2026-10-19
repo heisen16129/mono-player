@@ -2,21 +2,6 @@ import { resolveLocale } from '../i18n';
 import type { Locale, Track } from '../types/music';
 import { getErrorMessage } from './error';
 
-export function normalizePlaybackQueuePath(path: string) {
-  const normalized = path.split('\\').join('/');
-  return (normalized.startsWith('//?/') ? normalized.slice(4) : normalized).toLocaleLowerCase();
-}
-
-export function dedupePlaybackQueue(tracks: Track[]) {
-  const seenPaths = new Set<string>();
-  return tracks.filter((track) => {
-    const path = normalizePlaybackQueuePath(track.path);
-    if (!path || seenPaths.has(path)) return false;
-    seenPaths.add(path);
-    return true;
-  });
-}
-
 export function isRemoteTrack(track: Track) {
   return track.path.startsWith('plugin://') || /^https?:\/\//i.test(track.path);
 }

@@ -5,7 +5,6 @@ import { useSearchHistory } from '../composables/useSearchHistory';
 import { resolveLocale } from '../i18n';
 import { usePlayerStore } from '../stores/player';
 import type { OnlineSearchSnapshot } from '../types/onlineSearch';
-import type { PluginSearchTrack } from '../types/plugin';
 import type { DiscoverMusicPageEmits, DiscoverMusicPageProps, PluginSearchViewProps } from '../types/discoverMusicPage';
 import { getErrorMessage } from '../utils/error';
 import { createOnlineQueueTrack } from '../utils/onlineTrack';
@@ -45,7 +44,6 @@ const {
   normalizeErrorMessage: normalizeOnlineErrorMessage,
   onError: (message) => emit('notify', message),
   searchErrorFallback: () => (resolveLocale(player.settings.locale) === 'en-US' ? 'Plugin search failed.' : '插件搜索失败'),
-  trackKey: getOnlineTrackKey,
 });
 
 watch(
@@ -79,9 +77,6 @@ function normalizeOnlineErrorMessage(error: unknown, fallback: string) {
   return message || fallback;
 }
 
-function getOnlineTrackKey(track: PluginSearchTrack) {
-  return `${track.providerId}:${track.id}`;
-}
 
 function createSearchSnapshot(): OnlineSearchSnapshot {
   return {

@@ -2,12 +2,13 @@
 import { Settings, Shirt } from '@lucide/vue';
 import { t } from '../../i18n';
 import type { Locale } from '../../types/music';
+import type { AppView } from '../../composables/useLibraryNavigation';
 import SidebarAccountActionButton from './SidebarAccountActionButton.vue';
 import SidebarAccountAvatar from './SidebarAccountAvatar.vue';
 import SidebarAccountMeta from './SidebarAccountMeta.vue';
 
 defineProps<{
-  activeView: 'library' | 'discover' | 'artists' | 'settings' | 'themes' | 'plugins' | 'downloads';
+  activeView: AppView;
   collapsed: boolean;
   locale: Locale;
 }>();
@@ -156,4 +157,5 @@ const emit = defineEmits<{
   transition-delay: 35ms;
   transform: translateX(0);
 }
+
 </style>

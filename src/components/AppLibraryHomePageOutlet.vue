@@ -11,6 +11,9 @@ const libraryHomePageListeners: LibraryHomePageListeners = {
   onOpenArtistFromTrack: (...args) => emit('openArtistFromTrack', ...args),
   onOpenLocalFolderFromPanel: (...args) => emit('openLocalFolderFromPanel', ...args),
   onOpenRecentAddedFromPanel: () => emit('openRecentAddedFromPanel'),
+  onOpenRecentPlayedFromPanel: () => emit('openRecentPlayedFromPanel'),
+  onOpenDownloads: () => emit('openDownloads'),
+  onOpenArtists: () => emit('openArtists'),
   onOpenScanDialog: () => emit('openScanDialog'),
   onOpenTrackContextMenu: (...args) => emit('openTrackContextMenu', ...args),
   onPlayFavoriteTracks: () => emit('playFavoriteTracks'),
@@ -26,7 +29,9 @@ const libraryHomePageListeners: LibraryHomePageListeners = {
 <template>
   <LibraryHomePage
     v-bind="{ ...props, ...libraryHomePageListeners }"
-  />
+  >
+    <template v-if="$slots.detail" #detail><slot name="detail" /></template>
+  </LibraryHomePage>
 </template>
 
 

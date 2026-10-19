@@ -30,7 +30,6 @@ interface BuildOnlinePlaybackQueueOptions {
   queueTracks?: Track[];
   searchResults: PluginSearchTrack[];
   findPluginTrack: (track: Track) => PluginSearchTrack | null;
-  dedupeTracks: (tracks: Track[]) => Track[];
 }
 
 export function createOnlineQueueTrack(track: PluginSearchTrack, source?: OnlinePlaybackSource): Track {
@@ -108,14 +107,14 @@ export function buildOnlinePlaybackQueue(
       return pluginTrack && pluginSearchTrackKey(pluginTrack) === sourceKey ? playbackTrack : track;
     }) ?? [];
   if (contextQueue.length > 0) {
-    return options.dedupeTracks(contextQueue);
+    return contextQueue;
   }
 
   const searchQueue = options.searchResults.map((item) => (
     pluginSearchTrackKey(item) === sourceKey ? playbackTrack : createOnlineQueueTrack(item)
   ));
 
-  return options.dedupeTracks(searchQueue.length > 0 ? searchQueue : [playbackTrack]);
+  return searchQueue.length > 0 ? searchQueue : [playbackTrack];
 }
 
 export function isSameOnlineTrackIdentity(left: Track, right: Track) {

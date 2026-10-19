@@ -13,12 +13,6 @@ const ONLINE_AUDIO_CACHE_DIR: &str = "online-audio-cache";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct CacheDirSnapshot {
-    pub(crate) cache_dir: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub(crate) struct CacheCleanupSnapshot {
     pub(crate) removed_files: usize,
     pub(crate) removed_bytes: u64,

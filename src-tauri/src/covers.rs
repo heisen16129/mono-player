@@ -44,6 +44,28 @@ pub(crate) struct CachedCoverFiles {
 }
 
 #[tauri::command]
+pub(crate) fn read_remote_cover(url: String) -> ApiResponse<CoverImage> {
+    use std::io::Read;
+    ApiResponse::from_result((|| {
+        let url = Url::parse(url.trim()).map_err(|err| err.to_string())?;
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err("封面地址必须使用 HTTP 或 HTTPS".to_string());
+        }
+        let response = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .user_agent("Mono Player/0.1.0")
+            .build().map_err(|err| err.to_string())?
+            .get(url).send().map_err(|err| err.to_string())?
+            .error_for_status().map_err(|err| err.to_string())?;
+        let mut data = Vec::new();
+        response.take(32 * 1024 * 1024 + 1).read_to_end(&mut data).map_err(|err| err.to_string())?;
+        if data.len() > 32 * 1024 * 1024 { return Err("封面图片过大".to_string()); }
+        let format = image::guess_format(&data).map_err(|_| "无法识别封面图片格式".to_string())?;
+        Ok(CoverImage { mime_type: format.to_mime_type().to_string(), data })
+    })())
+}
+
+#[tauri::command]
 pub(crate) fn read_artwork_file(artwork: String) -> ApiResponse<Option<CoverImage>> {
     ApiResponse::from_result((|| {
         let artwork = artwork.trim();

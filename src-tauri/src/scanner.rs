@@ -1,7 +1,7 @@
+pub(crate) mod batch;
 use crate::api_response::ApiResponse;
 use crate::database::{
-    delete_missing_tracks_for_dir, delete_tracks_without_files, read_latest_added_tracks,
-    read_tracks, upsert_track,
+    delete_missing_tracks_for_dir, delete_tracks_without_files, upsert_track,
 };
 use crate::models::Track;
 use crate::state::AppState;
@@ -10,36 +10,22 @@ use lofty::prelude::Accessor;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 use walkdir::WalkDir;
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ScanMusicDirResult {
+    pub(crate) music_dirs: Vec<String>,
+    pub(crate) music_dir: String,
     pub(crate) tracks: Vec<Track>,
-    #[serde(rename = "addedTracks")]
-    pub(crate) added_tracks: Vec<Track>,
-    #[serde(rename = "addedTrackIds")]
-    pub(crate) added_track_ids: Vec<i64>,
+    pub(crate) canceled: bool,
 }
 
-#[tauri::command]
-pub(crate) async fn scan_music_dir(
-    path: String,
-    app: AppHandle,
-    state: State<'_, AppState>,
-    scan_worker: State<'_, crate::workers::scanner::ScanWorkerState>,
-) -> Result<ApiResponse<ScanMusicDirResult>, String> {
-    Ok(ApiResponse::from_result(
-        scan_music_dir_inner(path, app, state, scan_worker).await,
-    ))
-}
-
-async fn scan_music_dir_inner(
-    path: String,
-    app: AppHandle,
-    state: State<'_, AppState>,
-    scan_worker: State<'_, crate::workers::scanner::ScanWorkerState>,
-) -> Result<ScanMusicDirResult, String> {
+async fn scan_music_dir_inner(path: String, app: AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let scan_worker = app.state::<crate::workers::scanner::ScanWorkerState>();
+    if scan_worker.is_canceled() { return Err("Scan canceled.".into()); }
     let root = PathBuf::from(&path);
     if !root.is_dir() {
         return Err("Music directory does not exist or is not a folder.".to_string());
@@ -49,41 +35,29 @@ async fn scan_music_dir_inner(
     let scanned_tracks =
         scan_music_dir_in_worker(path, app.clone(), cache_root, scan_worker.inner().clone())
             .await?;
+    if scan_worker.is_canceled() { return Err("Scan canceled.".into()); }
     let _ = app.emit("scan://done", scanned_tracks.len());
     let scanned_paths = scanned_tracks
         .iter()
         .map(|track| track.path.clone())
         .collect::<HashSet<_>>();
 
-    let (tracks, added_tracks, removed_sources) = {
+    let removed_sources = {
         let db = state.db.lock().map_err(|err| err.to_string())?;
         for track in scanned_tracks {
             upsert_track(&db, &track, Some(&scan_id), Some(&root))?;
         }
         let mut removed_sources = delete_missing_tracks_for_dir(&db, &root, &scanned_paths)?;
         removed_sources.extend(delete_tracks_without_files(&db)?);
-        let tracks = read_tracks(&db)?;
-        let added_tracks = read_latest_added_tracks(&db)?;
-        (tracks, added_tracks, removed_sources)
+        removed_sources
     };
     crate::player::remove_library_queue_sources(&app, removed_sources)?;
-    let added_track_ids = added_tracks
-        .iter()
-        .map(|track| track.id)
-        .collect::<Vec<_>>();
-
-    Ok(ScanMusicDirResult {
-        tracks,
-        added_tracks,
-        added_track_ids,
-    })
+    Ok(())
 }
 
 #[tauri::command]
-pub(crate) fn cancel_scan_music_dir(
-    scan_worker: State<'_, crate::workers::scanner::ScanWorkerState>,
-) -> ApiResponse<bool> {
-    ApiResponse::from_result(scan_worker.cancel())
+pub(crate) fn cancel_scan_music_dir(app: AppHandle) -> ApiResponse<bool> {
+    ApiResponse::from_result(batch::cancel(&app))
 }
 
 async fn scan_music_dir_in_worker(
@@ -106,6 +80,7 @@ async fn scan_music_dir_in_worker(
                         None
                     }
                 };
+            batch::track_scanned(&app);
             let _ = app.emit("scan://track", &track);
             tracks.push(track);
             Ok(())
@@ -176,6 +151,7 @@ fn read_track_metadata(path: &Path) -> Result<Track, String> {
             .or_else(|| read_audio_duration(path)),
         added_at: None,
         scan_id: None,
+        last_played_at: None,
         year: None,
         genre: None,
         track_number: None,
@@ -215,6 +191,7 @@ fn fallback_track_metadata(path: &Path) -> Track {
         duration: read_audio_duration(path),
         added_at: None,
         scan_id: None,
+        last_played_at: None,
         year: None,
         genre: None,
         track_number: None,

@@ -39,13 +39,21 @@ function configFields(plugin: PluginManifest) {
   return plugin.configSchema?.fields ?? [];
 }
 
-function updatePluginConfig(plugin: PluginManifest, nextConfig: PluginConfig) {
+const configRevisions = new Map<string, number>();
+
+async function updatePluginConfig(plugin: PluginManifest, nextConfig: PluginConfig) {
+  const revision = (configRevisions.get(plugin.id) ?? 0) + 1;
+  configRevisions.set(plugin.id, revision);
+  const previous = pluginConfigs.value[plugin.id];
   pluginConfigs.value = { ...pluginConfigs.value, [plugin.id]: nextConfig };
-  if (plugin.kind === 'lyrics-renderer') {
-    if (!saveLyricsRendererConfig(plugin.id, nextConfig)) {
-      void savePluginConfig(`lyrics-renderer.${plugin.id}`, nextConfig);
-    }
-  } else void savePluginConfig(plugin.id, nextConfig);
+  try {
+    if (plugin.kind === 'lyrics-renderer' && await saveLyricsRendererConfig(plugin.id, nextConfig)) return;
+    const saved = await savePluginConfig(plugin.kind === 'lyrics-renderer' ? `lyrics-renderer.${plugin.id}` : plugin.id, nextConfig);
+    if (configRevisions.get(plugin.id) === revision) pluginConfigs.value[plugin.id] = saved;
+  } catch (error) {
+    if (configRevisions.get(plugin.id) === revision) pluginConfigs.value[plugin.id] = previous;
+    player.error = error instanceof Error ? error.message : String(error);
+  }
 }
 
 onMounted(() => {

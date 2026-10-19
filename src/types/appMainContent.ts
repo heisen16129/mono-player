@@ -16,7 +16,6 @@ export interface AppMainContentProps {
   appGridStyle: StyleValue;
   artistGroups: ArtistGroup[];
   downloadedTrackKeys: string[];
-  downloadItems: DownloadItem[];
   enablePlugins: boolean;
   favoriteTrackIds: number[];
   isAudioPlaying: boolean;
@@ -26,7 +25,7 @@ export interface AppMainContentProps {
   isPreparingActiveTrack: boolean;
   isResizingLibraryPanel: boolean;
   isSidebarCollapsed: boolean;
-  libraryMeta: { count: number; minutes: number };
+  libraryMeta: { count: number; minutes: number; totalSeconds: number };
   libraryTitle: string;
   localFolderTrackCount: number;
   localFolders: LocalFolderItem[];
@@ -67,6 +66,7 @@ export interface AppMainContentEmits {
   openPluginsView: [];
   openRecentAdded: [];
   openRecentAddedFromPanel: [];
+  openRecentPlayedFromPanel: [];
   openRecentPlayed: [];
   openScanDialog: [];
   openSettingsView: [];
@@ -111,6 +111,7 @@ export interface AppMainContentListeners {
   onOpenPluginsView: () => void;
   onOpenRecentAdded: () => void;
   onOpenRecentAddedFromPanel: () => void;
+  onOpenRecentPlayedFromPanel: () => void;
   onOpenRecentPlayed: () => void;
   onOpenScanDialog: () => void;
   onOpenSettingsView: () => void;

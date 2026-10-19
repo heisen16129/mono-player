@@ -24,7 +24,7 @@ const offsetY = ref(0);
 const dragging = ref(false);
 const dragStart = ref({ x: 0, y: 0, offsetX: 0, offsetY: 0 });
 
-const imageSrc = computed(() => props.imagePath ? convertFileSrc(props.imagePath) : '');
+const imageSrc = computed(() => props.imagePath.startsWith('data:image/') ? props.imagePath : props.imagePath ? convertFileSrc(props.imagePath) : '');
 const imageSizeLabel = computed(() => naturalWidth.value && naturalHeight.value ? `${naturalWidth.value} × ${naturalHeight.value}` : '');
 const ready = computed(() => Boolean(naturalWidth.value && naturalHeight.value));
 const cropInsetX = computed(() => (props.viewWidth - props.cropSize) / 2);

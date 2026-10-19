@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ImagePlus } from '@lucide/vue';
-import { ref } from 'vue';
+import { ImagePlus, Search } from '@lucide/vue';
+import { ref, watch } from 'vue';
+import CoverSearchDialog from './CoverSearchDialog.vue';
 import BaseDialog from './BaseDialog.vue';
 import CoverCropEditor from './CoverCropEditor.vue';
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
+  searchQuery?: string;
   canChooseImage?: boolean;
   imagePath: string;
   saving: boolean;
@@ -20,12 +22,22 @@ const emit = defineEmits<{
 
 const editor = ref<InstanceType<typeof CoverCropEditor> | null>(null);
 const isExporting = ref(false);
+const searchOpen = ref(false);
+const searchedImage = ref('');
+const exportError = ref('');
+watch(() => props.imagePath, () => { searchedImage.value = ''; });
 
 async function confirm() {
   const crop = editor.value?.getCrop();
   if (!crop || isExporting.value) return;
   isExporting.value = true;
+  exportError.value = '';
   const imageDataUrl = await editor.value?.exportCropDataUrl();
+  if (searchedImage.value && !imageDataUrl) {
+    exportError.value = '封面导出失败，请重新选择图片后再试';
+    isExporting.value = false;
+    return;
+  }
   emit('confirm', { ...crop, imageDataUrl: imageDataUrl ?? undefined });
   isExporting.value = false;
 }
@@ -52,11 +64,13 @@ async function confirm() {
 
     <div class="cover-crop-body">
       <div class="cover-crop-editor">
-        <CoverCropEditor ref="editor" :image-path="imagePath" :saving="saving" />
+        <CoverCropEditor ref="editor" :image-path="searchedImage || imagePath" :saving="saving" />
       </div>
 
       <footer class="cover-crop-actions">
+        <span v-if="exportError" role="alert">{{ exportError }}</span>
         <span class="cover-crop-size">{{ editor?.imageSizeLabel }}</span>
+        <button v-if="canChooseImage" class="secondary-button choose-image-button" type="button" :disabled="saving || isExporting" @click="searchOpen = true"><Search :size="16" aria-hidden="true" />搜索封面</button>
         <button
           v-if="canChooseImage"
           class="secondary-button choose-image-button"
@@ -74,6 +88,7 @@ async function confirm() {
       </footer>
     </div>
   </BaseDialog>
+  <CoverSearchDialog v-if="searchOpen" :initial-query="searchQuery || ''" @close="searchOpen = false" @select="searchedImage = $event; searchOpen = false" />
 </template>
 
 <style scoped>

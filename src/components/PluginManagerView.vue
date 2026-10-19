@@ -52,7 +52,6 @@ const {
   loadCachedCatalogPlugins,
   loadDeletedPluginIds,
   loadInstalledPlugins,
-  mergeCatalogPlugins,
   refreshOfficialCatalogInBackground,
   registerPluginCatalogSelectionPruner,
   startPluginCatalogFocusRefresh,
@@ -208,7 +207,6 @@ const {
 } = usePluginSubscriptions({
   catalogPlugins,
   loadDeletedPluginIds,
-  mergeCatalogPlugins,
   notify: notifyPlugin,
   officialCatalogPlugins,
   pruneSelection,

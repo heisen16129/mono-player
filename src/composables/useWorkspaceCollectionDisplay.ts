@@ -10,24 +10,24 @@ type WorkspaceCollectionDisplayOptions = {
   activeTrack: Ref<Track | null>;
   isPlaylistView: Ref<boolean | undefined>;
   libraryFilter: Ref<LibraryFilter>;
-  libraryMeta: Ref<{ count: number; minutes: number }>;
+  libraryMeta: Ref<{ count: number; minutes: number; totalSeconds: number }>;
   libraryTitle: Ref<string>;
   locale: Ref<Locale>;
   tracks: Ref<Track[]>;
 };
 
-function trackStats(locale: Locale, tracks: Track[]) {
-  const totalSeconds = tracks.reduce((sum, track) => sum + (track.duration ?? 0), 0);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.round((totalSeconds % 3600) / 60);
+function trackStats(locale: Locale, statistics: { count: number; totalSeconds: number }) {
+  const totalMinutes = Math.round(statistics.totalSeconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
   const duration = durationText(locale, hours, minutes);
 
-  return `${songCountLong(locale, tracks.length)} · ${duration} · ${t(locale, 'localLibrary')}`;
+  return `${songCountLong(locale, statistics.count)} · ${duration} · ${t(locale, 'localLibrary')}`;
 }
 
 export function useWorkspaceCollectionDisplay(options: WorkspaceCollectionDisplayOptions) {
-  const favoriteStats = computed(() => trackStats(options.locale.value, options.tracks.value));
-  const collectionStats = computed(() => trackStats(options.locale.value, options.tracks.value));
+  const favoriteStats = computed(() => trackStats(options.locale.value, options.libraryMeta.value));
+  const collectionStats = computed(() => trackStats(options.locale.value, options.libraryMeta.value));
   const isWideCollection = computed(() => true);
 
   const collectionTitle = computed(() => {

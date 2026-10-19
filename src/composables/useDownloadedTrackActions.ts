@@ -2,7 +2,7 @@ import type { Ref } from 'vue';
 import type { DownloadTrackOptions } from './useDownloadController';
 import type { DownloadItem, Track } from '../types/music';
 import { createDownloadTrack } from '../utils/downloadedTrack';
-import { dedupePlaybackQueue, isRemoteTrack } from '../utils/playback';
+import { isRemoteTrack } from '../utils/playback';
 
 interface ReadonlyRefValue<T> {
   readonly value: T;
@@ -34,10 +34,14 @@ export function useDownloadedTrackActions({
   }
 
   async function playDownloadedTrack(track: Track) {
+    if (!track.path) return;
+    const selectedItem = downloadItems.value.find((item) => createDownloadTrack(item).id === track.id);
+    if (selectedItem?.status !== 'downloaded' || !selectedItem.filePath) return;
     const queue = downloadItems.value
       .filter((item) => item.status === 'downloaded' && item.filePath)
-      .map(createDownloadTrack);
-    rustPlaybackQueue.value = dedupePlaybackQueue(queue.length > 0 ? queue : [track]);
+      .map(createDownloadTrack)
+      .filter((item) => Boolean(item.path));
+    rustPlaybackQueue.value = queue.length > 0 ? queue : [track];
     await startRustPlaybackQueue(rustPlaybackQueue.value, track);
   }
 

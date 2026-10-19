@@ -1,3 +1,5 @@
+#[path = "../../shared/playback_quality.rs"]
+mod playback_quality;
 use serde_json::{json, Value};
 use std::cell::Cell;
 
@@ -239,11 +241,9 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
     let Some(url) = playable_url_from_response(&payload) else {
         return json!({ "error": format!("{} did not return a playable url.", PROVIDER_NAME) });
     };
+    let actual_quality = playback_quality::actual_quality(&payload, &url);
     let track = request.get("track").unwrap_or(&Value::Null);
-    let quality = payload
-        .get("br")
-        .and_then(|value| value_to_string(Some(value)))
-        .unwrap_or_else(|| quality_to_br(configured_default_quality(request)));
+    let quality = request.get("quality").and_then(Value::as_str).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| configured_default_quality(request));
     json!({
         "url": url,
         "path": url,
@@ -253,6 +253,7 @@ fn parse_play_response(request: &Value, body: &str) -> Value {
         "duration": normalize_seconds(track.get("duration")),
         "artwork": Value::Null,
         "quality": quality,
+        "actualQuality": actual_quality,
         "lyrics": Value::Null,
         "sourceId": source_id_value(track),
         "sourceName": PROVIDER_NAME,

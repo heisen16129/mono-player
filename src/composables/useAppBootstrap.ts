@@ -1,5 +1,4 @@
 import { onMounted, type Ref } from 'vue';
-import { getRustBackendDefaultCacheDir, setRustBackendCacheDir } from '../services/playerBackend';
 import type { usePlayerStore } from '../stores/player';
 import type { Track } from '../types/music';
 import { getErrorMessage } from '../utils/error';
@@ -13,7 +12,6 @@ interface RestoredPlaybackSession {
 }
 
 interface UseAppBootstrapOptions {
-  dedupePlaybackQueue: (tracks: Track[]) => Track[];
   isAppReady: Ref<boolean>;
   loadDownloadItems: () => Promise<void>;
   loadLibraryPanelWidth: () => Promise<void>;
@@ -28,7 +26,6 @@ interface UseAppBootstrapOptions {
 }
 
 export function useAppBootstrap({
-  dedupePlaybackQueue,
   isAppReady,
   loadDownloadItems,
   loadLibraryPanelWidth,
@@ -48,18 +45,6 @@ export function useAppBootstrap({
       traceStartup('preferences-ready');
       await loadLibraryPanelWidth();
       await startRustQueueEventListener();
-      // The shell only needs persisted preferences; library and queue restoration can follow.
-      isAppReady.value = true;
-      traceStartup('shell-ready');
-      if (!player.settings.audioCacheDir) {
-        const defaultCacheDir = await getRustBackendDefaultCacheDir();
-        if (defaultCacheDir) {
-          player.setAudioCacheDir(defaultCacheDir);
-        }
-      }
-      traceStartup('cache-dir-start');
-      await setRustBackendCacheDir(player.settings.audioCacheDir || null);
-      traceStartup('cache-dir-ready');
       await loadDownloadItems();
       traceStartup('downloads-ready');
       await player.loadLibrary();
@@ -69,17 +54,19 @@ export function useAppBootstrap({
         if (restored) {
           await restoreRustPlaybackQueue(restored.track, restored.currentTime);
         } else {
-          rustPlaybackQueue.value = dedupePlaybackQueue(player.queue.filter((track) => track.path));
+          rustPlaybackQueue.value = player.queue;
         }
       }
       traceStartup('queue-ready');
+      await player.prepareStartupView();
+      await startDesktopLyricsActionListener();
+      await startDesktopLyricsReadyListener();
+      await startDownloadEventListener();
+      traceStartup('shell-ready');
     } finally {
       isAppReady.value = true;
     }
 
-    await startDesktopLyricsActionListener();
-    await startDesktopLyricsReadyListener();
-    await startDownloadEventListener();
   }
 
   onMounted(() => {

@@ -126,7 +126,7 @@ const messages: Record<AppLocale, Record<MessageKey, string>> = {
     maxHistory: '搜索历史记录最多保存条数',
     mcp: 'MCP',
     minimizeToTray: '最小化到托盘',
-    musicLibrary: '音乐库',
+    musicLibrary: '音乐池',
     network: '网络',
     noMusic: '暂无音乐',
     noLyrics: '暂无歌词',

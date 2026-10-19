@@ -31,23 +31,19 @@ export function useFavoriteTrackActions({
     void removeTrackFromRustQueue(track);
   }
 
-  function toggleFavoriteTrack() {
+  async function toggleFavoriteTrack() {
     const track = activeTrack.value;
-    const wasFavorite = player.isFavorite(track);
-    player.toggleFavorite(track);
-    if (wasFavorite) syncRemovedFavoriteTrack(track);
+    const isFavorite = await player.toggleFavorite(track);
+    if (isFavorite === false) syncRemovedFavoriteTrack(track);
   }
 
-  function toggleFavoriteForTrack(track: Track) {
-    const wasFavorite = player.isFavorite(track);
-    player.toggleFavorite(track);
-    if (wasFavorite) syncRemovedFavoriteTrack(track);
+  async function toggleFavoriteForTrack(track: Track) {
+    const isFavorite = await player.toggleFavorite(track);
+    if (isFavorite === false) syncRemovedFavoriteTrack(track);
   }
 
   function addTrackToFavorites(track: Track) {
-    if (!player.isFavorite(track)) {
-      player.toggleFavorite(track);
-    }
+    void player.addFavoriteTrack(track);
     closeContextMenus();
   }
 

@@ -10,6 +10,7 @@ export const DESKTOP_CARD_LABEL = 'desktop-playback-card';
 export const DESKTOP_CARD_UPDATE = 'desktop-card://update';
 export const DESKTOP_CARD_CONFIG = 'desktop-card://config';
 let cardWindow: WebviewWindow | null = null;
+let cardRendererId = 'playback-card';
 let cardManifestPath: string | undefined;
 let opening: Promise<void> | null = null;
 const cardConfigId = 'lyrics-renderer.playback-card';
@@ -19,16 +20,21 @@ export function saveDesktopCardStyle(cardStyle: string) {
   savingStyle = savingStyle.catch(() => {}).then(async () => {
     const config = await getPluginConfig(cardConfigId);
     await savePluginConfig(cardConfigId, { ...config, cardStyle });
+    if (cardWindow && cardRendererId === 'playback-card') {
+      await emitTo(DESKTOP_CARD_LABEL, DESKTOP_CARD_CONFIG, { cardStyle });
+    }
   });
   return savingStyle;
 }
 
-export async function openDesktopPlaybackCard(entry: string, manifestPath?: string, config: PluginConfig = {}) {
+export async function openDesktopPlaybackCard(entry: string, manifestPath?: string, config: PluginConfig = {}, rendererId = 'playback-card') {
   if (!isTauriRuntime()) throw new Error('请在 Mono 桌面应用中打开播放卡片。');
-  if (!manifestPath) throw new Error('请先安装本地播放卡片插件。');
+  if (!manifestPath && entry !== 'builtin:playback-card') throw new Error('请先安装本地播放卡片插件。');
   if (opening) return opening;
   opening = (async () => {
-    const existing = await WebviewWindow.getByLabel(DESKTOP_CARD_LABEL);
+    let existing = await WebviewWindow.getByLabel(DESKTOP_CARD_LABEL);
+    if (existing && cardRendererId !== rendererId) { await existing.close(); existing = null; }
+    cardRendererId = rendererId;
     if (existing) {
       if (!cardWindow) {
         cardWindow = existing;
@@ -39,7 +45,7 @@ export async function openDesktopPlaybackCard(entry: string, manifestPath?: stri
       return;
     }
     await savingStyle;
-    config = { ...config, ...await getPluginConfig(cardConfigId) };
+    config = { ...config, ...await getPluginConfig(rendererId === 'playback-card' ? cardConfigId : rendererId) };
     const monitor = await currentMonitor() ?? await primaryMonitor();
     const width = 316, height = 483;
     const area = monitor?.workArea;
@@ -48,7 +54,7 @@ export async function openDesktopPlaybackCard(entry: string, manifestPath?: stri
       x: (area.position.x + Math.max(0, area.size.width - (width + 20) * scale)) / scale,
       y: (area.position.y + Math.max(0, area.size.height - (height + 20) * scale)) / scale,
     } : {};
-    const query = new URLSearchParams({ desktopCard: '', entry, manifestPath, cardStyle: String(config.cardStyle || 'minimal') });
+    const query = new URLSearchParams({ desktopCard: '', entry, manifestPath: manifestPath || '', rendererId, cardStyle: String(config.cardStyle || 'minimal') });
     const card = new WebviewWindow(DESKTOP_CARD_LABEL, {
       url: `/?${query}`, title: 'Mono 播放卡片', width, height, ...position,
       decorations: false, transparent: true, backgroundColor: '#00000000',

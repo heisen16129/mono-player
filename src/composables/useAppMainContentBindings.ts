@@ -22,7 +22,6 @@ export function useAppMainContentBindings({ listeners, props }: UseAppMainConten
     appGridStyle: props.appGridStyle(),
     artistGroups: props.artistGroups(),
     downloadedTrackKeys: props.downloadedTrackKeys(),
-    downloadItems: props.downloadItems(),
     enablePlugins: props.enablePlugins(),
     favoriteTrackIds: props.favoriteTrackIds(),
     isAudioPlaying: props.isAudioPlaying(),

@@ -13,8 +13,12 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod cache;
+pub(crate) mod cache_settings;
 pub(crate) mod karaoke_source;
 mod queue;
+mod recent_playback;
+mod resume;
+pub(crate) mod session;
 
 use crate::workers::audio::OnlineAudioCacheIdentity;
 use cache::*;
@@ -363,39 +367,6 @@ pub(crate) fn write_cached_plugin_lyrics_metadata(
 }
 
 #[tauri::command]
-pub(crate) async fn player_set_cache_dir(
-    app: AppHandle,
-    cache_dir: Option<String>,
-) -> ApiResponse<CacheDirSnapshot> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<PlayerState>();
-        let audio_worker = app.state::<crate::workers::audio::AudioWorkerState>();
-        let next_cache_dir = match cache_dir
-            .as_deref()
-            .map(str::trim)
-            .filter(|path| !path.is_empty())
-        {
-            Some(path) => PathBuf::from(normalize_cache_dir_path(path)),
-            None => state.default_cache_dir.clone(),
-        };
-
-        fs::create_dir_all(&next_cache_dir).map_err(|err| err.to_string())?;
-        let mut current_cache_dir = state.cache_dir.lock().map_err(|err| err.to_string())?;
-        if *current_cache_dir == next_cache_dir {
-            return Ok(CacheDirSnapshot {
-                cache_dir: next_cache_dir.to_string_lossy().to_string(),
-            });
-        }
-        *current_cache_dir = next_cache_dir.clone();
-        audio_worker.set_cache_dir(online_audio_cache_dir(&next_cache_dir))?;
-        Ok(CacheDirSnapshot {
-            cache_dir: next_cache_dir.to_string_lossy().to_string(),
-        })
-    }).await.map_err(|err| err.to_string()).and_then(|result| result);
-    ApiResponse::from_result(result)
-}
-
-#[tauri::command]
 pub(crate) fn player_clear_cache(
     state: State<'_, PlayerState>,
 ) -> ApiResponse<CacheCleanupSnapshot> {
@@ -404,20 +375,6 @@ pub(crate) fn player_clear_cache(
         let active_paths = active_cache_paths();
         Ok(clear_cache_files(&cache_dir, &active_paths))
     })())
-}
-
-#[tauri::command]
-pub(crate) async fn player_prune_cache(
-    app: AppHandle,
-    max_bytes: u64,
-) -> ApiResponse<CacheCleanupSnapshot> {
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<PlayerState>();
-        let cache_dir = state.cache_dir()?;
-        let active_paths = active_cache_paths();
-        Ok(prune_cache_files(&cache_dir, &active_paths, max_bytes))
-    }).await.map_err(|err| err.to_string()).and_then(|result| result);
-    ApiResponse::from_result(result)
 }
 
 #[tauri::command]
@@ -503,6 +460,12 @@ struct PlaybackAdvancedEvent {
 }
 
 fn emit_playback_advanced(app: &AppHandle, event: PlaybackAdvancedEvent) {
+    if let Ok(mut backend) = app.state::<PlayerState>().inner.lock() {
+        backend.session_position = event.position.max(0.0);
+        backend.session_source = Some(event.source.clone());
+        backend.session_initialized = true;
+    }
+    session::save_logged(app);
     let tray_title = event
         .track
         .as_ref()
@@ -523,6 +486,10 @@ fn emit_playback_advanced(app: &AppHandle, event: PlaybackAdvancedEvent) {
 }
 
 fn emit_queue_snapshot(app: &AppHandle, reason: &str, snapshot: &QueueSnapshot) {
+    if let Ok(mut backend) = app.state::<PlayerState>().inner.lock() {
+        if reason != "cover_changed" { backend.session_initialized = true; }
+    }
+    session::save_logged(app);
     match app.emit("player://queue", snapshot) {
         Ok(()) => eprintln!("[player://queue] emit reason={reason}"),
         Err(error) => eprintln!("[player://queue] emit failed reason={reason} error={error}"),
@@ -592,12 +559,17 @@ pub(crate) fn player_restore_queue(
 
 #[tauri::command]
 pub(crate) fn player_set_playback_mode(
+    app: AppHandle,
     state: State<'_, PlayerState>,
     playback_mode: String,
 ) -> ApiResponse<()> {
     ApiResponse::from_empty_result((|| {
         let mut backend = state.inner.lock().map_err(|err| err.to_string())?;
         set_playback_mode_backend(&mut backend, playback_mode);
+        drop(backend);
+        session::save(&app)?;
+        let snapshot = queue_snapshot(&state.inner)?;
+        emit_queue_snapshot(&app, "playback_mode", &snapshot);
         Ok(())
     })())
 }
@@ -896,17 +868,10 @@ pub(crate) fn player_pause(
 }
 
 #[tauri::command]
-pub(crate) fn player_resume(
-    state: State<'_, PlayerState>,
-    audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
-    app: AppHandle,
-) -> ApiResponse<()> {
-    ApiResponse::from_empty_result((|| {
-        audio_worker.resume()?;
-        let generation = current_playback_generation(&state.inner)?;
-        spawn_audio_worker_state_watcher(app, Some(generation));
-        Ok(())
-    })())
+pub(crate) async fn player_resume(app: AppHandle) -> Result<ApiResponse<()>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || resume::resume(&app))
+        .await.map_err(|error| error.to_string())?;
+    Ok(ApiResponse::from_empty_result(result))
 }
 
 #[tauri::command]
@@ -930,10 +895,17 @@ pub(crate) fn player_stop(
 
 #[tauri::command]
 pub(crate) fn player_seek(
+    app: AppHandle,
     audio_worker: State<'_, crate::workers::audio::AudioWorkerState>,
     seconds: f64,
 ) -> ApiResponse<()> {
-    ApiResponse::from_empty_result(audio_worker.seek(seconds))
+    ApiResponse::from_empty_result((|| {
+        audio_worker.seek(seconds)?;
+        if let Ok(mut backend) = app.state::<PlayerState>().inner.lock() {
+            backend.session_position = seconds.max(0.0);
+        }
+        session::save(&app)
+    })())
 }
 
 #[tauri::command]
@@ -955,6 +927,13 @@ pub(crate) fn player_set_speed(
 pub(crate) fn mcp_player_state(app: &AppHandle) -> Result<PlayerSnapshot, String> {
     app.state::<crate::workers::audio::AudioWorkerState>()
         .state()
+}
+
+pub(crate) fn current_track_labels(app: &AppHandle) -> Result<(String, String), String> {
+    let state = app.state::<PlayerState>();
+    let backend = state.inner.lock().map_err(|e| e.to_string())?;
+    let track = backend.current_source.as_deref().and_then(|source| queue_track_for_source(&backend, source));
+    Ok(track.map(|track| (track.title, track.artist.unwrap_or_default())).unwrap_or_else(|| ("Mono Player".into(), String::new())))
 }
 
 pub(crate) fn mcp_queue_snapshot(app: &AppHandle) -> Result<QueueSnapshot, String> {
@@ -983,6 +962,7 @@ pub(crate) fn is_current_plugin_queue_track(
 
 fn model_track_to_queue_track(track: Track) -> QueueTrack {
     QueueTrack {
+        actual_quality: None,
         id: track.id,
         path: track.path,
         title: track.title,
@@ -1051,8 +1031,7 @@ pub(crate) fn mcp_pause(app: &AppHandle) -> Result<(), String> {
 }
 
 pub(crate) fn mcp_resume(app: &AppHandle) -> Result<(), String> {
-    app.state::<crate::workers::audio::AudioWorkerState>()
-        .resume()
+    resume::resume(app)
 }
 
 pub(crate) fn mcp_stop(app: &AppHandle) -> Result<(), String> {
@@ -1106,8 +1085,11 @@ pub(crate) fn mcp_previous(app: &AppHandle) -> Result<QueueSnapshot, String> {
 }
 
 pub(crate) fn mcp_seek(app: &AppHandle, seconds: f64) -> Result<(), String> {
-    app.state::<crate::workers::audio::AudioWorkerState>()
-        .seek(seconds)
+    app.state::<crate::workers::audio::AudioWorkerState>().seek(seconds)?;
+    if let Ok(mut backend) = app.state::<PlayerState>().inner.lock() {
+        backend.session_position = seconds.max(0.0);
+    }
+    session::save(app)
 }
 
 pub(crate) fn mcp_set_volume(app: &AppHandle, volume: f32) -> Result<(), String> {
@@ -1123,6 +1105,7 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
         let mut last_online_position = 0.0_f64;
         let mut online_stalled_ticks = 0_u16;
         let mut last_audio_frame_sequence = 0_u64;
+        let mut recent_playback = recent_playback::RecentPlaybackTracker::default();
         loop {
             if let Some(expected_generation) = generation {
                 let player_state = app.state::<PlayerState>();
@@ -1141,6 +1124,26 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
                 }
             };
 
+            if let Some(path) = recent_playback.observe(
+                snapshot.current_path.as_deref(), snapshot.is_playing,
+                snapshot.is_buffering, snapshot.last_error.as_deref().is_some_and(|error| !error.trim().is_empty()),
+            ) {
+                if let Err(error) = crate::recent_played::record(&app, &path) {
+                    eprintln!("[recently-played] {error}");
+                }
+            }
+
+            {
+                let state = app.state::<PlayerState>();
+                if let Ok(mut backend) = state.inner.lock() {
+                    if generation.is_some_and(|value| value != backend.playback_generation) { break; }
+                    if snapshot.current_path.is_some() && snapshot.position.is_finite()
+                        && backend.session_source == backend.current_source {
+                        backend.session_position = snapshot.position.max(0.0);
+                    }
+                };
+            }
+            if state_ticks % 30 == 0 { session::save_logged(&app); }
             state_ticks = state_ticks.wrapping_add(1);
             if let Some(audio_frame) = snapshot.audio_frame.as_ref() {
                 if audio_frame.sequence != last_audio_frame_sequence {
@@ -1231,6 +1234,7 @@ fn spawn_audio_worker_state_watcher(app: AppHandle, generation: Option<u64>) {
 
             thread::sleep(PLAYER_AUDIO_FRAME_POLL_INTERVAL);
         }
+        session::save_logged(&app);
     });
 }
 
@@ -1465,6 +1469,14 @@ fn resolve_queue_source_for_playback(
             preferred_quality.as_deref(),
         );
     if let Some(cached_source) = cached_source {
+        {
+            let mut backend = state.lock().map_err(|e| e.to_string())?;
+            for item in &mut backend.queue_tracks {
+                if item.source_provider_id == track.source_provider_id && item.source_id == track.source_id {
+                    item.actual_quality = cached_source.identity.actual_quality.clone();
+                }
+            }
+        }
         if let Some(track_id) = track
             .source_id
             .as_deref()
@@ -1544,6 +1556,7 @@ fn resolve_queue_source_for_playback(
         provider_id: source_result.source_provider_id.clone(),
         track_id: cache_track_id,
         quality: source_result.quality.clone(),
+        actual_quality: source_result.actual_quality.clone(),
     });
 
     ensure_current_playback_generation(state, generation)?;
@@ -1660,6 +1673,7 @@ fn apply_plugin_playback_source(
     source_result: &crate::plugins::PluginPlaybackSource,
     resolved_source: &str,
 ) {
+    queue_track.actual_quality = source_result.actual_quality.clone();
     queue_track.path = resolved_source.to_string();
     queue_track.title = if source_result.title.trim().is_empty() {
         queue_track.title.clone()

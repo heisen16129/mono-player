@@ -23,10 +23,6 @@ export interface RustAudioFrame {
   samples: number[];
 }
 
-export interface RustCacheDirState {
-  cacheDir: string;
-}
-
 export interface RustAudioOutputDevice {
   id: string;
   name: string;
@@ -124,28 +120,12 @@ export function getRustBackendDefaultCacheDir(): Promise<string> {
   return invokeApi<string>('player_default_cache_dir');
 }
 
-export function setRustBackendCacheDir(cacheDir: string | null): Promise<RustCacheDirState> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve({ cacheDir: cacheDir ?? '' });
-  }
-
-  return invokeApi<RustCacheDirState>('player_set_cache_dir', { cacheDir });
-}
-
 export function clearRustBackendCache(): Promise<RustCacheCleanupState> {
   if (!isTauriRuntime()) {
     return Promise.resolve({ removedFiles: 0, removedBytes: 0, remainingBytes: 0 });
   }
 
   return invokeApi<RustCacheCleanupState>('player_clear_cache');
-}
-
-export function pruneRustBackendCache(maxBytes: number): Promise<RustCacheCleanupState> {
-  if (!isTauriRuntime()) {
-    return Promise.resolve({ removedFiles: 0, removedBytes: 0, remainingBytes: 0 });
-  }
-
-  return invokeApi<RustCacheCleanupState>('player_prune_cache', { maxBytes });
 }
 
 export function getRustBackendCacheStatus(): Promise<RustCacheStatusState> {

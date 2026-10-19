@@ -4,6 +4,7 @@ import PlayerDock from './PlayerDock.vue';
 import type { PlayerDockListeners, PlayerDockProps } from '../types/playerDock';
 import type { PlayerDockController } from '../types/playerDockController';
 
+
 const dockRef = ref<{ getController: () => PlayerDockController } | null>(null);
 
 defineProps<{

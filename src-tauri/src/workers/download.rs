@@ -15,7 +15,7 @@ use std::io::{self, BufRead, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use tauri::Emitter;
+
 
 pub(crate) struct DownloadWorkerState {
     stdin: Arc<Mutex<std::process::ChildStdin>>,
@@ -58,6 +58,18 @@ impl DownloadWorkerState {
                 error: Some(error), ..
             } => Err(error),
             message => Err(format!("unexpected download worker response: {message:?}")),
+        }
+    }
+
+    pub(crate) fn control(&self, task_id: &str, action: &str) -> Result<(), String> {
+        let response = self.request(WorkerRequest {
+            id: format!("download-control-{}", uuid::Uuid::new_v4()),
+            method: "download.control".into(), payload: json!({"taskId":task_id,"action":action}),
+        })?;
+        match response {
+            WorkerMessage::Response { ok: true, .. } => Ok(()),
+            WorkerMessage::Response { error: Some(error), .. } => Err(error),
+            _ => Err("Invalid download control response".into()),
         }
     }
 
@@ -132,10 +144,12 @@ fn start_download_reader(
         let mut line = String::new();
         let Ok(bytes_read) = stdout.read_line(&mut line) else {
             fail_pending_download_requests(&pending);
+            crate::download_records::worker_stopped(&app);
             break;
         };
         if bytes_read == 0 {
             fail_pending_download_requests(&pending);
+            crate::download_records::worker_stopped(&app);
             break;
         }
         let Ok(message) = crate::workers::protocol::decode_message(line.trim_end()) else {
@@ -180,7 +194,7 @@ fn emit_worker_event(app: &tauri::AppHandle, message: WorkerMessage) {
         return;
     }
     if let Ok(event) = serde_json::from_value::<DownloadQueueEvent>(payload) {
-        let _ = app.emit("download://event", event);
+        crate::download_records::handle_event(app, event);
     }
 }
 
@@ -188,7 +202,8 @@ pub(crate) fn run() -> Result<(), String> {
     let stdin = io::stdin();
     let stdout = Arc::new(Mutex::new(io::stdout()));
     let started_at_ms = crate::workers::worker_started_at_ms();
-    let queue_sender = start_worker_download_queue(Arc::clone(&stdout));
+    let controls = Arc::new(super::download_control::Controls::default());
+    let queue_sender = start_worker_download_queue(Arc::clone(&stdout), controls.clone());
 
     for line in stdin.lock().lines() {
         let line = line.map_err(|err| err.to_string())?;
@@ -199,7 +214,7 @@ pub(crate) fn run() -> Result<(), String> {
         let response = match decode_request(&line) {
             Ok(request) => {
                 let request_id = request.id.clone();
-                match handle_request(&queue_sender, request, started_at_ms) {
+                match handle_request(&queue_sender, &controls, request, started_at_ms) {
                     Ok(response) => response,
                     Err(error) => WorkerMessage::Response {
                         id: request_id,
@@ -237,6 +252,7 @@ pub(crate) fn run() -> Result<(), String> {
 
 fn handle_request(
     queue_sender: &mpsc::Sender<DownloadTrackPayload>,
+    controls: &super::download_control::Controls,
     request: WorkerRequest,
     started_at_ms: u128,
 ) -> Result<WorkerMessage, String> {
@@ -262,6 +278,13 @@ fn handle_request(
             )),
             error: None,
         }),
+        "download.control" => {
+            let id = request.payload["taskId"].as_str().ok_or("Missing task ID")?;
+            let action = request.payload["action"].as_str().ok_or("Missing action")?;
+            if !matches!(action, "pause" | "resume" | "cancel") { return Err("Invalid download control".into()); }
+            controls.get(id).set(action);
+            Ok(WorkerMessage::Response { id: request.id, ok: true, payload: None, error: None })
+        }
         methods::DOWNLOAD_ENQUEUE => {
             let payload = serde_json::from_value::<DownloadTrackPayload>(request.payload)
                 .map_err(|err| err.to_string())?;
@@ -291,13 +314,14 @@ struct DownloadTrackPayload {
 
 fn start_worker_download_queue(
     stdout: Arc<Mutex<io::Stdout>>,
+    controls: Arc<super::download_control::Controls>,
 ) -> mpsc::Sender<DownloadTrackPayload> {
     let (sender, receiver) = mpsc::channel::<DownloadTrackPayload>();
     thread::spawn(move || {
         for payload in receiver {
             let task_id = payload.task_id.clone();
             if let Err(error) = catch_unwind(AssertUnwindSafe(|| {
-                let _ = download_track(&stdout, "download-queued".to_string(), payload);
+                let _ = download_track(&stdout, "download-queued".to_string(), payload, controls.get(&task_id));
             })) {
                 let _ = write_shared_download_event(
                     &stdout,
@@ -309,6 +333,7 @@ fn start_worker_download_queue(
                     Some(format!("download task panicked: {}", panic_message(error))),
                 );
             }
+            controls.remove(&task_id);
         }
     });
     sender
@@ -328,14 +353,16 @@ fn download_track(
     stdout: &Arc<Mutex<io::Stdout>>,
     request_id: String,
     payload: DownloadTrackPayload,
+    control: Arc<super::download_control::Control>,
 ) -> WorkerMessage {
     let mut last_progress = 0;
     let task_id = payload.task_id;
     let _ = write_shared_download_event(stdout, &task_id, "downloading", 0, None, None, None);
 
-    let result = download_online_track_blocking_with_progress(payload.request, |progress| {
+    let result = control.wait().and_then(|_| download_online_track_blocking_with_progress(payload.request, |progress| {
+        control.wait()?;
         if progress == last_progress {
-            return;
+            return Ok(());
         }
         last_progress = progress;
         let _ = write_shared_download_event(
@@ -347,7 +374,8 @@ fn download_track(
             None,
             None,
         );
-    });
+        Ok(())
+    }));
 
     match result {
         Ok(result) => {
@@ -458,6 +486,7 @@ mod tests {
         let (queue_sender, _queue_receiver) = mpsc::channel::<DownloadTrackPayload>();
         let response = handle_request(
             &queue_sender,
+            &super::super::download_control::Controls::default(),
             WorkerRequest {
                 id: "ping-1".to_string(),
                 method: methods::WORKER_PING.to_string(),

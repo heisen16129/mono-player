@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { invokeApi } from '../../services/api';
-defineProps<{ disabled?: boolean }>();
+defineProps<{ pluginId?: string; disabled?: boolean }>();
 const visible = ref(false);
 const url = ref('');
 const error = ref('');
@@ -14,7 +14,9 @@ async function open() {
 }
 </script>
 <template>
-  <button class="miot-launcher" type="button" :disabled="disabled" @click.stop="open">音箱</button>
+  <slot :open="open">
+    <button class="miot-launcher" type="button" :disabled="disabled" @click.stop="open">音箱</button>
+  </slot>
   <Teleport to="body">
     <div v-if="visible" class="miot-backdrop" @click.self="visible = false">
       <section class="miot-dialog" role="dialog" aria-modal="true" aria-label="小爱音箱" @keydown.esc="visible = false">

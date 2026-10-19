@@ -7,6 +7,7 @@ const props = defineProps<AppArtistsPageOutletProps>();
 const emit = defineEmits<AppArtistsPageOutletEmits>();
 
 const artistsViewListeners: ArtistsViewListeners = {
+  onOpenLibrary: () => emit('openLibrary'),
   'onUpdate:modelValue': (...args) => emit('update:modelValue', ...args),
   onOpenTrackMenu: (...args) => emit('openTrackMenu', ...args),
   onPlayTrack: (...args) => emit('playTrack', ...args),

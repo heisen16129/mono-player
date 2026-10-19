@@ -35,7 +35,7 @@ export function parseRawLyrics(rawLyrics?: string | null): LyricLine[] {
     }
   }
 
-  return lines.sort((left, right) => {
+  return lines.filter((line) => !['', '...', '…'].includes(line.text.trim())).sort((left, right) => {
     if (left.time === null && right.time === null) return 0;
     if (left.time === null) return 1;
     if (right.time === null) return -1;

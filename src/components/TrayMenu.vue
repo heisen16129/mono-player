@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Pause, Play, Settings, SkipBack, SkipForward, X } from '@lucide/vue';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { invokeApi } from '../services/api';
 import { readPersistentValue } from '../services/persistentStore';
@@ -7,7 +8,6 @@ import TrayMenuActionButton from './TrayMenuActionButton.vue';
 import TrayMenuNowPlayingButton from './TrayMenuNowPlayingButton.vue';
 import TrayMenuPlaybackModeSubmenu from './TrayMenuPlaybackModeSubmenu.vue';
 
-const TRAY_STATE_KEY = 'mono-player-tray-state';
 const SETTINGS_KEY = 'mono-player-settings';
 
 const fallbackState = {
@@ -35,7 +35,7 @@ async function runAction(action: string) {
 
 async function refreshTrayState() {
   const [nextState, settings] = await Promise.all([
-    readJson(TRAY_STATE_KEY, fallbackState),
+    invokeApi<typeof fallbackState>('tray_snapshot'),
     readJson(SETTINGS_KEY, { theme: 'blueWhite' }),
   ]);
   state.value = nextState;
@@ -43,13 +43,24 @@ async function refreshTrayState() {
   document.documentElement.dataset.theme = theme.startsWith('custom:') ? 'custom' : 'blueWhite';
 }
 
+const listeners: UnlistenFn[] = [];
+let disposed = false;
 onMounted(async () => {
+  const stop = await listen<{ isPlaying: boolean }>('player://state', event => { state.value.isPlaying = event.payload.isPlaying; });
+  if (disposed) { stop(); return; }
+  listeners.push(stop);
+  const stopQueue = await listen('player://queue', () => { void refreshTrayState(); });
+  if (disposed) { stopQueue(); return; }
+  listeners.push(stopQueue);
   await refreshTrayState();
+  if (disposed) return;
   document.body.classList.add('tray-menu-page');
   window.addEventListener('focus', refreshTrayState);
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
+  listeners.forEach(stop => stop());
   window.removeEventListener('focus', refreshTrayState);
   document.body.classList.remove('tray-menu-page');
 });

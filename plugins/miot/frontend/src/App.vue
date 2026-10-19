@@ -8,6 +8,8 @@ import ConfirmDialog from './views/ConfirmDialog.vue';
 import { detectHostMode, installHostBack, navigation } from './runtime';
 import { disposeStore, initialize, state } from './store';
 
+const monoSidebar = new URLSearchParams(window.location.search).get('monoSidebar') === '1';
+
 onMounted(() => {
   detectHostMode();
   installHostBack();
@@ -25,7 +27,7 @@ onUnmounted(disposeStore);
 </script>
 
 <template>
-  <div class="miot-app">
+  <div class="miot-app" :class="{ 'mono-sidebar-page': monoSidebar }">
     <div v-if="state.loading" class="app-state-page">
       <span class="loading-spinner" aria-hidden="true"></span>
       <p>正在加载</p>

@@ -59,7 +59,7 @@ export async function loadExternalLyricsRenderers(refresh = false) {
         const manifests = await listInstalledPluginManifests();
         const enabled = manifests
           .filter((manifest) => manifest.enabled && ['module', 'wasm'].includes(manifest.runtime) && manifest.kind === 'lyrics-renderer')
-          .filter((manifest) => manifest.capabilities.includes('lyrics-renderer'));
+          .filter((manifest) => manifest.id !== 'playback-card' && manifest.capabilities.includes('lyrics-renderer'));
         const enabledIds = new Set(enabled.map(manifest => manifest.id));
         for (const id of loadedRendererIds.keys()) {
           if (!enabledIds.has(id)) {

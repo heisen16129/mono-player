@@ -5,7 +5,6 @@ import type { Track } from '../types/music';
 import type { PluginSearchTrack } from '../types/plugin';
 import { isSameQueueSource } from '../utils/queueSource';
 import { mergeTrackRuntimeMetadata } from '../utils/trackRuntimeMetadata';
-import { normalizeTrackLyrics } from '../utils/trackLyrics';
 
 interface UseRustQueueSnapshotControllerOptions {
   currentPlaybackTrack: Ref<Track | null>;
@@ -18,7 +17,6 @@ interface UseRustQueueSnapshotControllerOptions {
   rustPlaybackQueue: Ref<Track[]>;
   selectedTrack: Ref<Track | null>;
   player: ReturnType<typeof usePlayerStore>;
-  dedupePlaybackQueue: (tracks: Track[]) => Track[];
   findPluginTrackForQueueTrack: (track: Track) => PluginSearchTrack | null;
   getOnlineTrackKey: (track: PluginSearchTrack) => string;
   loadLocalTrackLyricsInBackground: (track: Track) => Promise<void> | void;
@@ -37,7 +35,6 @@ export function useRustQueueSnapshotController({
   rustPlaybackQueue,
   selectedTrack,
   player,
-  dedupePlaybackQueue,
   findPluginTrackForQueueTrack,
   getOnlineTrackKey,
   loadLocalTrackLyricsInBackground,
@@ -80,14 +77,13 @@ export function useRustQueueSnapshotController({
       onlineActivePluginTrack.value = null;
       onlinePlaybackSource.value = '';
       onlineActiveTrackKey.value = null;
-      if (!isSamePlaybackTrack && !normalizeTrackLyrics(nextTrack)?.lyrics.length) {
+      if (!isSamePlaybackTrack) {
         void loadLocalTrackLyricsInBackground(nextTrack);
       }
     }
 
     syncLyricsViewStateForTrack(nextTrack);
     selectedTrack.value = nextTrack;
-    player.recordRecentlyPlayed(nextTrack);
   }
 
   function clearActivePlaybackState() {
@@ -105,13 +101,15 @@ export function useRustQueueSnapshotController({
 
   function syncRustQueueSnapshot(snapshot: RustQueueSnapshot) {
     const mergedTracks = mergeQueueRuntimeMetadata(snapshot.tracks);
-    rustPlaybackQueue.value = dedupePlaybackQueue(mergedTracks);
+    rustPlaybackQueue.value = mergedTracks;
+    player.queue = mergedTracks;
     return mergedTracks;
   }
 
   function handleRustQueueSnapshot(snapshot: RustQueueSnapshot) {
     syncRustQueueSnapshot(snapshot);
-    if (!snapshot.currentSource && rustPlaybackQueue.value.length === 0) {
+    player.playbackMode = snapshot.playbackMode as typeof player.playbackMode;
+    if (!snapshot.currentSource) {
       clearActivePlaybackState();
     }
   }

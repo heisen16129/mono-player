@@ -1,4 +1,16 @@
+pub(crate) mod library_directories;
+pub(crate) mod plugin_management;
+pub(crate) mod custom_theme;
+pub(crate) mod download_record;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct Favorite {
+    pub(crate) id: i64,
+    pub(crate) identity_key: String,
+    pub(crate) track: Track,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct Track {
@@ -16,6 +28,8 @@ pub(crate) struct Track {
     pub(crate) duration: Option<u64>,
     #[serde(rename = "addedAt")]
     pub(crate) added_at: Option<String>,
+    #[serde(rename = "lastPlayedAt")]
+    pub(crate) last_played_at: Option<i64>,
     #[serde(rename = "scanId")]
     pub(crate) scan_id: Option<String>,
     pub(crate) year: Option<u32>,
@@ -197,5 +211,97 @@ mod tests {
                 "id": 1, "path": "plugin://song", "title": "song", "duration": duration
             })).is_err());
         }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UserPlaylist {
+    pub(crate) statistics: TrackStatistics,
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) cover: Option<String>,
+    pub(crate) track_ids: Vec<i64>,
+    pub(crate) tracks: Vec<Track>,
+    pub(crate) created_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArtistStatistics {
+    pub(crate) name: String,
+    pub(crate) count: usize,
+    pub(crate) total_seconds: u64,
+    pub(crate) tracks: Vec<Track>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct FolderStatistics {
+    pub(crate) path: String,
+    pub(crate) title: String,
+    pub(crate) count: usize,
+    pub(crate) total_seconds: u64,
+    pub(crate) tracks: Vec<Track>,
+    pub(crate) filtered_count: usize,
+    pub(crate) filtered_total_seconds: u64,
+    pub(crate) filtered_tracks: Vec<Track>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryStatistics {
+    pub(crate) artists: Vec<ArtistStatistics>,
+    pub(crate) artist_count: usize,
+    pub(crate) artist_track_count: usize,
+    pub(crate) folders: Vec<FolderStatistics>,
+    pub(crate) folder_track_count: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibrarySearchResult {
+    pub(crate) statistics: LibraryListStatistics,
+    pub(crate) totals: LibraryListStatistics,
+    pub(crate) tracks: Vec<Track>,
+    pub(crate) latest_added_tracks: Vec<Track>,
+    pub(crate) recent_played_tracks: Vec<Track>,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TrackStatistics {
+    pub(crate) count: usize,
+    pub(crate) total_seconds: u64,
+}
+
+impl TrackStatistics {
+    pub(crate) fn from_tracks<'a>(tracks: impl IntoIterator<Item = &'a Track>) -> Self {
+        tracks.into_iter().fold(Self::default(), |mut result, track| {
+            result.count += 1;
+            result.total_seconds = result.total_seconds.saturating_add(track.duration.unwrap_or(0));
+            result
+        })
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryListStatistics {
+    pub(crate) tracks: TrackStatistics,
+    pub(crate) latest_added_tracks: TrackStatistics,
+    pub(crate) recent_played_tracks: TrackStatistics,
+}
+
+#[derive(Serialize)]
+pub(crate) struct FavoriteList {
+    pub(crate) items: Vec<Favorite>,
+    pub(crate) statistics: TrackStatistics,
+}
+
+impl From<Vec<Favorite>> for FavoriteList {
+    fn from(items: Vec<Favorite>) -> Self {
+        let statistics = TrackStatistics::from_tracks(items.iter().map(|item| &item.track));
+        Self { items, statistics }
     }
 }

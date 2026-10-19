@@ -7,7 +7,3 @@ export async function readPersistentValue<T>(key: string): Promise<T | null> {
 export async function writePersistentValue<T>(key: string, value: T): Promise<void> {
   await invokeApi<void>('store_set', { key, value });
 }
-
-export async function removePersistentValue(key: string): Promise<void> {
-  await invokeApi<void>('store_delete', { key });
-}

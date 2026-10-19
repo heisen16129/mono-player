@@ -362,7 +362,7 @@ const lyricsRendererContext = computed<LyricsRendererContext>(() => ({
     void setRustBackendVolume(rendererVolume.value / 100);
   },
   updateConfig: (config) => {
-    saveLyricsRendererConfig(activeRendererId.value, config);
+    void saveLyricsRendererConfig(activeRendererId.value, config).catch(error => { player.error = error instanceof Error ? error.message : String(error); });
   },
   openActionMenu,
 }));

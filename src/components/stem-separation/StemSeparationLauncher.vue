@@ -5,7 +5,9 @@ defineProps<{ pluginId: string; disabled?: boolean }>();
 const visible = ref(false);
 </script>
 <template>
-  <button class="separation-launcher" type="button" :disabled="disabled" @pointerdown.stop @click.stop="visible = true">分离</button>
+  <slot :open="() => { visible = true; }">
+    <button class="separation-launcher" type="button" :disabled="disabled" @pointerdown.stop @click.stop="visible = true">分离</button>
+  </slot>
   <Teleport to="body"><StemSeparationDialog v-if="visible" :plugin-id="pluginId" @close="visible = false" /></Teleport>
 </template>
 <style scoped>

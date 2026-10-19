@@ -13,13 +13,11 @@ interface ReadonlyRefValue<T> {
 interface UseOnlinePlaybackLookupOptions {
   activePluginTrack: ReadonlyRefValue<PluginSearchTrack | null>;
   onlineSearchResults: ReadonlyRefValue<PluginSearchTrack[]>;
-  dedupeTracks: (tracks: Track[]) => Track[];
 }
 
 export function useOnlinePlaybackLookup({
   activePluginTrack,
   onlineSearchResults,
-  dedupeTracks,
 }: UseOnlinePlaybackLookupOptions) {
   function getOnlineTrackKey(track: PluginSearchTrack) {
     return pluginSearchTrackKey(track);
@@ -37,8 +35,7 @@ export function useOnlinePlaybackLookup({
       queueTracks,
       searchResults: onlineSearchResults.value,
       findPluginTrack: findPluginTrackForQueueTrack,
-      dedupeTracks,
-    });
+        });
   }
 
   return {

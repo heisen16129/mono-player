@@ -499,7 +499,7 @@ watch(() => [props.entry, props.manifestPath], () => void loadSandboxEntry(), { 
     <div
       class="external-lyrics-window-drag-region"
       aria-hidden="true"
-      @pointerdown="startWindowDrag"
+      @mousedown="startWindowDrag"
     ></div>
     <iframe
       v-if="sandboxEntry"

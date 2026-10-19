@@ -24,7 +24,7 @@ const downloadTabs = [
   { id: 'downloaded', label: '已下载' },
   { id: 'downloading', label: '下载中' },
 ];
-const { downloadItemForTrack, visibleTracks } = useDownloadManagerItems(() => props.items, activeTab);
+const { downloadItemForTrack, visibleTracks } = useDownloadManagerItems(activeTab);
 
 const downloadEmptyMessage = computed(() => {
   return activeTab.value === 'downloaded' ? '还没有已下载歌曲' : '当前没有下载任务';
@@ -60,7 +60,9 @@ const downloadManagerContentProps = computed<DownloadManagerContentProps>(() => 
 
 const downloadManagerContentListeners: DownloadManagerContentListeners = {
   onOpenTrackMenu: openDownloadContextMenu,
-  onPlayTrack: (track) => emit('playTrack', track),
+  onPlayTrack: (track) => {
+    if (activeTab.value === 'downloaded') emit('playTrack', track);
+  },
   onSelectTrack: (track) => emit('selectTrack', track),
   onToggleFavorite: (track) => emit('toggleFavorite', track),
 };

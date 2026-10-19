@@ -18,7 +18,7 @@ export function useAppShellState({ activeCollection, activeView, isLibraryPanelM
   ));
 
   const shouldShowLibraryResizeHandle = computed(() => {
-    if (activeView.value === 'artists') return true;
+    if (activeView.value === 'artists' || activeView.value === 'downloads') return true;
     return activeView.value === 'library' && activeCollection.value === 'all' && isLibraryPanelMode.value;
   });
 

@@ -16,8 +16,12 @@ import { useDesktopLyricsWindowPosition } from '../composables/useDesktopLyricsW
 import { isTauriRuntime } from '../services/music';
 import DesktopLyricsControls from './desktop-lyrics/DesktopLyricsControls.vue';
 import DesktopLyricsText from './desktop-lyrics/DesktopLyricsText.vue';
+import { useDesktopLyricsAppearance } from '../composables/useDesktopLyricsAppearance';
+import { saveDesktopAppearance } from '../services/desktopLyricsAppearance';
+import { computed } from 'vue';
 
-const isLocked = ref(false);
+const { appearance, appearanceStyle } = useDesktopLyricsAppearance(880, 120);
+const isLocked = computed(() => appearance.value.locked);
 const isShellHovered = ref(false);
 let unlistenLyricsUpdate: UnlistenFn | null = null;
 let unlistenWindowMoved: UnlistenFn | null = null;
@@ -51,7 +55,7 @@ async function closeWindow() {
 }
 
 function toggleLocked() {
-  isLocked.value = !isLocked.value;
+  void saveDesktopAppearance({ ...appearance.value, locked: !isLocked.value });
 }
 
 async function runAction(action: DesktopLyricsAction) {
@@ -93,7 +97,7 @@ onBeforeUnmount(() => {
   <main
     class="desktop-lyrics-shell"
     :class="{ 'is-playing': isPlaying, 'is-locked': isLocked }"
-    :style="{ '--desktop-lyric-color': lyricColor }"
+    :style="{ ...appearanceStyle, '--desktop-lyric-color': lyricColor }"
     @mouseenter="isShellHovered = true"
     @mouseleave="isShellHovered = false"
     @pointerdown="startDrag"

@@ -1,8 +1,17 @@
+mod settings;
 mod api_response;
 mod app_error;
 mod covers;
+mod desktop_window;
 mod database;
 mod downloads;
+mod download_records;
+mod favorites;
+mod playlists;
+mod recent_played;
+mod library_statistics;
+mod library_search;
+mod search_history;
 mod lyrics;
 mod mcp;
 mod mcp_bridge;
@@ -20,15 +29,17 @@ mod startup;
 mod stem_separation;
 mod store;
 mod themes;
+mod custom_themes;
+mod library_directories;
 mod tray;
 mod wallpaper_engine;
 mod workers;
 
 use database::{
     init_database, list_latest_added_tracks, list_tracks, read_track_audio_info,
-    refresh_track_duration, remove_music_dir, update_track_cover, update_track_metadata,
+    refresh_track_duration, update_track_cover, update_track_metadata,
 };
-use scanner::{cancel_scan_music_dir, scan_music_dir};
+use scanner::cancel_scan_music_dir;
 use state::AppState;
 use std::fs;
 use std::sync::Mutex;
@@ -67,6 +78,10 @@ pub fn run() {
             fs::create_dir_all(&app_data_dir)?;
             let db = rusqlite::Connection::open(app_data_dir.join("music-player.sqlite"))?;
             init_database(&db)?;
+            store::migrate_download_records(app.handle(), &db).map_err(std::io::Error::other)?;
+            database::download_records::recover_interrupted(&db).map_err(std::io::Error::other)?;
+            store::migrate_search_history(app.handle(), &db).map_err(std::io::Error::other)?;
+            store::clear_legacy_playlists(app.handle()).map_err(std::io::Error::other)?;
             app.manage(AppState { db: Mutex::new(db) });
             mcp_bridge::start(app.handle().clone(), app_data_dir.clone())?;
             let mcp_bridge_file = mcp_bridge::bridge_file_path(&app_data_dir);
@@ -120,11 +135,15 @@ pub fn run() {
             app.manage(workers::audio::AudioWorkerState::start(
                 player::online_audio_cache_dir(&audio_cache_dir),
             )?);
+            player::cache_settings::initialize(app.handle()).map_err(std::io::Error::other)?;
             app.manage(workers::download::DownloadWorkerState::start(
                 app.handle().clone(),
             )?);
             app.manage(workers::plugin::PluginWorkerState::start(audio_cache_dir.clone())?);
             app.manage(workers::scanner::ScanWorkerState::default());
+            app.manage(scanner::batch::ScanBatchState::default());
+            app.manage(plugins::online_search::OnlineSearchState::default());
+            app.manage(plugins::online_search::LyricsSearchState::default());
             app.manage(sleep_timer::SleepTimerState::default());
             app.manage(miot::MiotState::default());
             app.manage(stem_separation::EnvironmentState::default());
@@ -169,18 +188,33 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             startup::startup_trace,
+            library_statistics::read_library_statistics,
+            library_search::search_library,
+            search_history::update_search_history,
+            recent_played::list_recently_played_tracks,
+            playlists::list_playlists,
+            playlists::create_playlist,
+            playlists::rename_playlist,
+            playlists::update_playlist_cover,
+            playlists::delete_playlist,
+            playlists::edit_playlist_tracks,
+            favorites::list_favorites,
+            favorites::add_favorite,
+            favorites::remove_favorite,
             list_tracks,
             list_latest_added_tracks,
-            remove_music_dir,
+            library_directories::update_library_directories,
             update_track_metadata,
             update_track_cover,
             refresh_track_duration,
             read_track_audio_info,
-            scan_music_dir,
+            scanner::batch::scan_music_dirs,
             cancel_scan_music_dir,
             lyrics::resolve_lyrics_source,
             lyrics::resolve_local_track_lyrics,
             covers::read_artwork_file,
+            covers::read_remote_cover,
+            desktop_window::resize_desktop_lyrics,
             covers::read_track_cover_original,
             covers::crop_cover_image,
             mcp_service::mcp_service_status,
@@ -188,21 +222,20 @@ pub fn run() {
             mcp_service::mcp_service_stop,
             mcp_service::mcp_service_restart,
             downloads::enqueue_download_online_track,
+            download_records::download_records_snapshot,
+            download_records::download_record_action,
             downloads::download_lyrics_file,
             downloads::download_cover_file,
-            downloads::delete_downloaded_track_file,
             downloads::open_downloaded_track_in_folder,
-            plugins::fetch_plugin_catalog,
-            plugins::fetch_plugin_catalog_items,
-            plugins::normalize_plugin_catalog_items,
-            plugins::normalize_plugin_manifests,
-            plugins::build_plugin_manifest_from_catalog,
-            plugins::build_local_plugin_manifest,
-            plugins::remove_plugin_package,
-            plugins::read_local_plugin_manifest,
+            plugins::management::plugin_list,
+            plugins::catalog::plugin_catalog,
+            plugins::management::plugin_action,
+            plugins::management::plugin_batch,
             plugins::read_local_renderer_module,
             plugins::read_remote_renderer_module,
             plugins::search_plugin,
+            plugins::online_search::search_online_music,
+            plugins::online_search::search_online_lyrics,
             plugins::resolve_plugin_playback_qualities,
             plugins::resolve_plugin_lyrics_metadata,
             miot::miot_open,
@@ -223,16 +256,16 @@ pub fn run() {
             stem_separation::stem_environment_status,
             stem_separation::stem_environment_cancel,
             stem_separation::stem_separation_cancel,
-            plugins::plugin_invoke,            tray::hide_main_window_to_tray,
+            plugins::plugin_invoke,
+            tray::hide_main_window_to_tray,
             player::player_default_cache_dir,
             player::player_system_temp_cache_dir,
-            player::player_set_cache_dir,
             player::player_clear_cache,
-            player::player_prune_cache,
             player::player_cache_status,
             player::player_start_queue,
             player::player_restore_queue,
             player::player_set_playback_mode,
+            player::session::player_read_session,
             player::player_next,
             player::player_previous,
             player::player_change_queue_track_quality,
@@ -255,10 +288,15 @@ pub fn run() {
             shell::open_track_in_folder,
             store::store_get,
             store::store_set,
-            store::store_delete,
+            store::settings_set,
+            custom_themes::theme_list,
+            custom_themes::theme_upsert,
+            custom_themes::theme_remove,
+            custom_themes::theme_select,
             store::plugin_config_get,
             store::plugin_config_set,
             tray::tray_popup_action,
+            tray::tray_snapshot,
             wallpaper_engine::wallpaper_engine_list_projects,
             wallpaper_engine::wallpaper_engine_start_scene,
             wallpaper_engine::wallpaper_engine_scene_status,
@@ -269,6 +307,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                player::session::save_logged(app);
                 app.state::<miot::MiotState>().shutdown();
                 app.state::<stem_separation::EnvironmentState>().shutdown();
                 let _ = app.state::<stem_separation::BatchState>().cancel(&app.state::<stem_separation::SeparationState>());

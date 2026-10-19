@@ -2,7 +2,7 @@ import type { PluginCatalogItem, PluginManifest } from '../types/plugin';
 import type { PluginMarketItem, PluginMarketKind, PluginMarketStatus } from './usePluginMarket';
 
 const OFFICIAL_PLUGIN_ENTRY_PREFIX = 'https://raw.githubusercontent.com/heisen16129/mono-plugin-store/';
-const MARKET_PLUGIN_KINDS = new Set<string>(['music', 'lyrics', 'lyrics-renderer', 'metadata', 'playlist', 'theme', 'integration', 'tool']);
+const MARKET_PLUGIN_KINDS = new Set<string>(['music', 'lyrics', 'lyrics-renderer', 'desktop-lyrics', 'metadata', 'playlist', 'theme', 'integration', 'tool']);
 
 export function isMarketPluginKind(kind: string): kind is PluginMarketKind {
   return MARKET_PLUGIN_KINDS.has(kind);
@@ -28,12 +28,6 @@ function pluginSourceLabel(catalogItem: PluginCatalogItem | null, manifest: Plug
   return '本地';
 }
 
-function pluginStatus(catalogItem: PluginCatalogItem | null, manifest: PluginManifest | null): PluginMarketStatus {
-  if (!manifest) return 'available';
-  if (catalogItem && catalogItem.version !== manifest.version) return 'update';
-  return 'installed';
-}
-
 function capabilityTag(capability: string) {
   const labels: Record<string, string> = {
     search: '搜索歌曲',
@@ -43,7 +37,7 @@ function capabilityTag(capability: string) {
   return labels[capability] ?? capability;
 }
 
-export function toRealMarketPlugin(catalogItem: PluginCatalogItem | null, manifest: PluginManifest | null): PluginMarketItem | null {
+export function toRealMarketPlugin(catalogItem: PluginCatalogItem | null, manifest: PluginManifest | null, status: PluginMarketStatus): PluginMarketItem | null {
   const source = catalogItem ?? manifest;
   if (!source) return null;
 
@@ -61,7 +55,7 @@ export function toRealMarketPlugin(catalogItem: PluginCatalogItem | null, manife
     description: catalogItem?.description ?? manifest?.description ?? '',
     source: pluginSourceLabel(catalogItem, manifest),
     updatedAt: catalogItem?.updatedAt ?? manifest?.updatedAt ?? '',
-    status: pluginStatus(catalogItem, manifest),
+    status,
     tags: catalogItem?.tags?.length ? catalogItem.tags : (manifest?.tags?.length ? manifest.tags : (source.capabilities ?? []).map(capabilityTag)),
     highlights: catalogItem?.highlights ?? manifest?.highlights ?? [],
     screenshots: catalogItem?.screenshots ?? manifest?.screenshots,

@@ -21,7 +21,6 @@ interface UseAppRustPlaybackRuntimeOptions {
   selectedTrack: Ref<Track | null>;
   player: ReturnType<typeof usePlayerStore>;
   clearPreparingPlaybackState: () => void;
-  dedupePlaybackQueue: (tracks: Track[]) => Track[];
   findPluginTrackForQueueTrack: (track: Track) => PluginSearchTrack | null;
   getOnlineTrackKey: (track: PluginSearchTrack) => string;
   loadLocalTrackLyricsInBackground: (track: Track) => Promise<void> | void;
@@ -43,7 +42,6 @@ export function useAppRustPlaybackRuntime({
   selectedTrack,
   player,
   clearPreparingPlaybackState,
-  dedupePlaybackQueue,
   findPluginTrackForQueueTrack,
   getOnlineTrackKey,
   loadLocalTrackLyricsInBackground,
@@ -77,8 +75,7 @@ export function useAppRustPlaybackRuntime({
     rustPlaybackQueue,
     selectedTrack,
     player,
-    dedupePlaybackQueue,
-    findPluginTrackForQueueTrack,
+      findPluginTrackForQueueTrack,
     getOnlineTrackKey,
     loadLocalTrackLyricsInBackground,
     loadPlaybackTrackLyricsInBackground,
@@ -87,7 +84,6 @@ export function useAppRustPlaybackRuntime({
 
   const {
     removeTrackFromRustQueue,
-    setPlaybackMode,
     togglePlaybackMode,
   } = useRustQueueCommands({
     handleRustQueueSnapshot,
@@ -103,8 +99,7 @@ export function useAppRustPlaybackRuntime({
     rustPlaybackQueue,
     player,
     crossfadeDurationMs,
-    dedupePlaybackQueue,
-    handleRustPlaybackAdvanced: ({ position, track }) => {
+      handleRustPlaybackAdvanced: ({ position, track }) => {
       if (!track) return;
       rustQueueSnapshotController.handleSeamlessAdvance(track);
       playbackTime.value = Math.max(0, position);
@@ -138,7 +133,6 @@ export function useAppRustPlaybackRuntime({
     removeTrackFromRustQueue,
     restoreRustPlaybackQueue,
     rustQueueSnapshotController,
-    setPlaybackMode,
     startRustPlaybackQueue,
     togglePlaybackMode,
   };

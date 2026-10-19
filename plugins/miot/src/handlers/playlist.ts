@@ -1,3 +1,4 @@
+import { deviceMedia, externalPlaybackStatus, type DeviceMedia } from '../player/device_display';
 // MIoT 智能音箱插件 - 歌单播放 Handler
 // 翻译自 Go 源码: plugins/songloft-plugin-xiaomi/handlers/playlist_handler.go
 
@@ -54,6 +55,7 @@ interface DeviceStatusCache {
   // 时长覆盖（本地元数据更可靠），这里保留设备原值，用于判断音箱在放的是不是我们推的流
   // （PlaylistManager.matchDeviceStream，songloft-org/songloft-plugin-miot#96）。
   streamDuration: number;
+  media?: DeviceMedia;
 }
 const deviceStatusCache: Map<string, DeviceStatusCache> = new Map();
 const deviceStatusInflight: Map<string, Promise<any>> = new Map();
@@ -75,6 +77,7 @@ export function updateDeviceStatusCache(accountId: string, deviceId: string, dat
     // 不继承旧的 streamDuration：外部写入多发生在刚推完一条新流之后，旧流长已失效，
     // 留着会让身份校验拿过期流长误判。0 = 未知，校验方会退回保守行为。
     streamDuration: data.streamDuration ?? 0,
+    media: data.media,
   });
 }
 
@@ -192,6 +195,16 @@ export async function resolvePlayerStatus(
   // 检查设备状态缓存（4秒内直接复用，避免多调用方重复查询设备）
   const cached = deviceStatusCache.get(cacheKey);
   if (cached && (now - cached.timestamp) < DEVICE_STATUS_TTL) {
+    const external = externalPlaybackStatus(localStatus, {
+      state: cached.state, position: cached.position, duration: cached.streamDuration,
+      volume: cached.volume, media: cached.media,
+    }, manager.matchDeviceStream({ status: 1, duration: cached.streamDuration }), manager.isVoiceSuspended());
+    if (cached.positionFromDevice && external) {
+      if (cached.state === 'playing' && cached.streamDuration > 0) {
+        external.position = Math.min(cached.position + (now - cached.timestamp) / 1000, cached.streamDuration);
+      }
+      return external;
+    }
     const duration = localStatus.duration > 0 ? localStatus.duration : cached.duration;
     // 设备实测的流内偏移要 × speed + seekOffset 才是曲内绝对位置；非设备实测值（乐观写入）已是绝对位置。
     const cachedAbsPosition = cached.positionFromDevice ? cached.position * speed + seekOffset : cached.position;
@@ -213,7 +226,7 @@ export async function resolvePlayerStatus(
     const reportState = resolveReportState(localStatus.state, cached.state);
     const reportPosition = resolveReportPosition(localStatus.state, cached.state, localStatus.position, position);
 
-    return { ...localStatus, state: reportState, position: reportPosition, duration, volume: cached.volume };
+    return { ...localStatus, state: reportState, is_playing: reportState === 'playing', position: reportPosition, duration, volume: cached.volume };
   }
 
   // 缓存过期，从设备获取真实播放状态
@@ -222,12 +235,14 @@ export async function resolvePlayerStatus(
   let realDuration = localStatus.duration;
   let realState = localStatus.state;
   let devicePosition = -1; // 设备 play_song_detail 上报的流内位置，-1 = 未上报
+  let media: DeviceMedia | undefined;
   let deviceStreamDuration = 0; // 设备上报的当前媒体流长（秒），0 = 未上报；不被本地时长覆盖
   try {
     const raw = await getOrFetchDeviceStatus(account_id, device_id, () => minaService.getPlayerStatus(account_id, device_id));
     const info = raw?.data?.info;
     if (typeof info === 'string') {
       const parsed = JSON.parse(info);
+      media = deviceMedia(parsed.play_song_detail);
       if (typeof parsed.volume === 'number') {
         if (!cached?.volumeLockedUntil || Date.now() > cached.volumeLockedUntil) {
           volume = parsed.volume;
@@ -254,6 +269,17 @@ export async function resolvePlayerStatus(
     songloft.log.warn('[player/status] getPlayerStatus failed: ' + String(e));
   }
 
+  // A voice command may change the local song while the cloud request is pending.
+  const latest = manager.getStatus();
+  if (latest.current_song?.id !== localStatus.current_song?.id || latest.state !== localStatus.state
+      || manager.getStreamSeekOffsetSec() !== seekOffset || manager.getPlaybackSpeed() !== speed
+      || deviceStatusCache.get(cacheKey) !== cached) {
+    return { ...latest, volume };
+  }
+  const external = devicePosition >= 0 ? externalPlaybackStatus(localStatus, {
+    state: realState, position: devicePosition, duration: deviceStreamDuration, volume, media,
+  }, manager.matchDeviceStream({ status: 1, duration: deviceStreamDuration }), manager.isVoiceSuspended()) : null;
+
   // 本地歌曲 duration（来自文件元数据）比设备报告的更可靠，
   // 设备在 MUSIC 模式（keepLight=true）下经常报告错误的 duration
   if (localStatus.duration > 0) {
@@ -271,7 +297,10 @@ export async function resolvePlayerStatus(
     volumeLockedUntil: cached?.volumeLockedUntil ?? 0,
     positionFromDevice: devicePosition >= 0,
     streamDuration: deviceStreamDuration,
+    media,
   });
+
+  if (external) return external;
 
   syncManagerFromDeviceState(manager, localStatus.state, realState, realPosition, devicePosition > 0, deviceStreamDuration);
 
@@ -279,7 +308,7 @@ export async function resolvePlayerStatus(
   const reportState = resolveReportState(localStatus.state, realState);
   const reportPosition = resolveReportPosition(localStatus.state, realState, localStatus.position, realPosition);
 
-  return { ...localStatus, state: reportState, position: reportPosition, duration: realDuration, volume };
+  return { ...localStatus, state: reportState, is_playing: reportState === 'playing', position: reportPosition, duration: realDuration, volume };
 }
 
 /**
@@ -515,6 +544,29 @@ export function registerPlaylistHandlers(
   });
 
   // POST /player/toggle - 切换播放/暂停状态
+  router.get('/player/queue', async (req: HTTPRequest) => {
+    try {
+      const { account_id, device_id } = parseQuery(req.query);
+      if (!account_id || !device_id) return jsonResponse({ success: false, error: 'account_id and device_id are required' });
+      const manager = await playlistManagerMap.getOrCreate(account_id, device_id);
+      return jsonResponse({ success: true, data: { songs: manager.getSongs() || [], playlist_id: manager.getStatus().playlist_id } });
+    } catch (error) { return jsonResponse({ success: false, error: String(error) }); }
+  });
+
+  router.post('/player/pause', async (req: HTTPRequest) => {
+    try {
+      const { account_id, device_id } = parseBody(req);
+      if (!account_id || !device_id) return jsonResponse({ success: false, error: 'account_id and device_id are required' });
+      const manager = await playlistManagerMap.getOrCreate(account_id, device_id);
+      const position = manager.getStatus().position;
+      await manager.pause();
+      updateDeviceStatusCache(account_id, device_id, { state: 'paused', position });
+      return jsonResponse({ success: true, data: { state: 'paused' } });
+    } catch (error) {
+      return jsonResponse({ success: false, error: String(error) });
+    }
+  });
+
   router.post('/player/toggle', async (req: HTTPRequest) => {
     try {
       const body = parseBody(req);
