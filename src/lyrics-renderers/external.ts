@@ -1,6 +1,6 @@
 import { defineComponent, h, type PropType } from 'vue';
-import { listInstalledPluginManifests } from '../services/plugins';
-import type { PluginManifest } from '../types/plugin';
+import { listPluginPackages } from '../services/pluginPackages';
+import type { InstalledPluginPackage } from '../types/pluginPackage';
 import type { LyricsRendererContext } from '../types/lyricsRenderer';
 import type { PlayerDockController } from '../types/playerDockController';
 import ExternalLyricsRenderer from '../components/lyrics/renderers/ExternalLyricsRenderer.vue';
@@ -10,7 +10,7 @@ const loadedRendererIds = new Map<string, string>();
 let externalRendererLoadRequest: Promise<void> | null = null;
 let reloadRequested = false;
 
-function registerExternalRenderer(manifest: PluginManifest) {
+function registerExternalRenderer(manifest: InstalledPluginPackage) {
   const signature = JSON.stringify(manifest);
   if (loadedRendererIds.get(manifest.id) === signature) return;
   // External packages cannot replace a built-in renderer with the same id.
@@ -23,13 +23,7 @@ function registerExternalRenderer(manifest: PluginManifest) {
     },
     setup(props) {
       return () => h(ExternalLyricsRenderer, {
-        entry: manifest.entry,
-        wasmPlugin: manifest.runtime === 'wasm' ? { id: manifest.id, permissions: manifest.permissions } : undefined,
-        manifestPath: manifest.sourceKind === 'local'
-          ? manifest.sourceUrl
-          : !/^https?:/i.test(manifest.entry)
-            ? manifest.entry.replace(/[^/\\]+$/, 'manifest.json')
-            : undefined,
+        plugin: manifest,
         context: props.context,
         playerDockController: props.playerDockController,
       });
@@ -56,10 +50,10 @@ export async function loadExternalLyricsRenderers(refresh = false) {
     do {
       reloadRequested = false;
       try {
-        const manifests = await listInstalledPluginManifests();
+        const manifests = await listPluginPackages();
         const enabled = manifests
-          .filter((manifest) => manifest.enabled && ['module', 'wasm'].includes(manifest.runtime) && manifest.kind === 'lyrics-renderer')
-          .filter((manifest) => manifest.id !== 'playback-card' && manifest.capabilities.includes('lyrics-renderer'));
+          .filter((manifest) => manifest.enabled && Boolean(manifest.entry.renderer) && manifest.kind === 'lyrics-renderer')
+          .filter((manifest) => manifest.capabilities.includes('lyrics-renderer'));
         const enabledIds = new Set(enabled.map(manifest => manifest.id));
         for (const id of loadedRendererIds.keys()) {
           if (!enabledIds.has(id)) {

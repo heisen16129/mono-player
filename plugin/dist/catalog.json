@@ -1,0 +1,1295 @@
+[
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "apple-music-lyrics",
+    "name": "Apple Music 歌词",
+    "version": "2.0.0",
+    "kind": "lyrics-renderer",
+    "author": "Mono Player",
+    "description": "Apple Music 风格的动态舞台、逐词歌词、播放队列与可持久化显示设置。",
+    "capabilities": [
+      "lyrics-renderer"
+    ],
+    "entry": {
+      "renderer": "ui/renderer.mjs"
+    },
+    "permissions": [
+      "player.read",
+      "player.control",
+      "lyrics.read",
+      "artwork.read",
+      "favorites.read",
+      "favorites.write",
+      "lyrics.write"
+    ],
+    "contributions": {},
+    "file": "apple-music-lyrics/apple-music-lyrics.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-wasm-aq-lyrics",
+    "name": "阿Q歌词",
+    "version": "1.0.0",
+    "kind": "lyrics",
+    "author": "Mono",
+    "description": "搜索并返回阿Q歌词 metadata，支持多格式歌词切换。",
+    "capabilities": [
+      "search",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "aq-lyrics/mono-wasm-aq-lyrics.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-wasm-ayun-lyrics",
+    "name": "阿云歌词",
+    "version": "1.0.0",
+    "kind": "lyrics",
+    "author": "Mono",
+    "description": "搜索并返回阿云歌词 metadata，用于播放时补全歌词。",
+    "capabilities": [
+      "search",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "ayun-lyrics/mono-wasm-ayun-lyrics.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "betterlyrics",
+    "name": "BetterLyrics 歌词",
+    "version": "1.2.0",
+    "kind": "lyrics-renderer",
+    "author": "Mono contributors · Based on jayfunc/BetterLyrics",
+    "description": "BetterLyrics 歌词页面移植：逐字高亮、长音发光与浮动、聚焦滚动、封面流动背景及窄屏布局。",
+    "capabilities": [
+      "lyrics-renderer"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "key": "verticalOffset",
+          "label": "竖排歌词上下位置",
+          "type": "range",
+          "min": 0,
+          "max": 60,
+          "step": 1,
+          "defaultValue": 0
+        },
+        {
+          "key": "fontSize",
+          "label": "歌词字号",
+          "type": "range",
+          "min": 20,
+          "max": 72,
+          "step": 1,
+          "defaultValue": 40
+        },
+        {
+          "key": "lineGap",
+          "label": "歌词行间距",
+          "type": "range",
+          "min": 0,
+          "max": 1.5,
+          "step": 0.05,
+          "defaultValue": 0.55
+        },
+        {
+          "key": "alignment",
+          "label": "歌词对齐",
+          "type": "select",
+          "defaultValue": "left",
+          "options": [
+            {
+              "label": "左对齐",
+              "value": "left"
+            },
+            {
+              "label": "居中",
+              "value": "center"
+            }
+          ]
+        },
+        {
+          "key": "backgroundMode",
+          "label": "背景模式",
+          "type": "select",
+          "defaultValue": "fluid",
+          "options": [
+            {
+              "label": "封面流动",
+              "value": "fluid"
+            },
+            {
+              "label": "封面模糊",
+              "value": "blur"
+            },
+            {
+              "label": "跟随播放器",
+              "value": "host"
+            }
+          ]
+        },
+        {
+          "key": "blur",
+          "label": "远处歌词模糊",
+          "type": "switch",
+          "defaultValue": true
+        },
+        {
+          "key": "glow",
+          "label": "逐字辉光",
+          "type": "switch",
+          "defaultValue": true
+        },
+        {
+          "key": "float",
+          "label": "逐字浮动",
+          "type": "switch",
+          "defaultValue": true
+        },
+        {
+          "key": "scale",
+          "label": "歌词缩放",
+          "type": "switch",
+          "defaultValue": true
+        },
+        {
+          "key": "showCover",
+          "label": "显示封面",
+          "type": "switch",
+          "defaultValue": true
+        },
+        {
+          "key": "lyricStyle",
+          "label": "歌词样式",
+          "defaultValue": "standard",
+          "type": "select",
+          "options": [
+            {
+              "value": "standard",
+              "label": "标准"
+            },
+            {
+              "value": "glow",
+              "label": "辉光上浮"
+            },
+            {
+              "value": "vertical",
+              "label": "竖排歌词"
+            },
+            {
+              "value": "perspective",
+              "label": "3D 透视"
+            }
+          ]
+        },
+        {
+          "key": "tiltAngle",
+          "min": -45,
+          "defaultValue": 25,
+          "step": 1,
+          "max": 45,
+          "label": "透视角度",
+          "type": "range"
+        },
+        {
+          "key": "glowAmount",
+          "min": 0,
+          "defaultValue": 8,
+          "step": 1,
+          "max": 24,
+          "label": "辉光强度",
+          "type": "range"
+        },
+        {
+          "key": "floatAmount",
+          "min": 0,
+          "defaultValue": 8,
+          "step": 1,
+          "max": 16,
+          "label": "上浮幅度",
+          "type": "range"
+        },
+        {
+          "key": "glowScope",
+          "label": "辉光范围",
+          "defaultValue": "long",
+          "type": "select",
+          "options": [
+            {
+              "value": "long",
+              "label": "仅长音"
+            },
+            {
+              "value": "all",
+              "label": "行首到当前字"
+            }
+          ]
+        }
+      ]
+    },
+    "entry": {
+      "renderer": "ui/renderer.mjs"
+    },
+    "permissions": [
+      "player.read",
+      "player.control",
+      "lyrics.read",
+      "artwork.read",
+      "favorites.read",
+      "favorites.write",
+      "lyrics.write"
+    ],
+    "contributions": {},
+    "file": "betterlyrics/betterlyrics.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "desktop-lyrics-example",
+    "name": "简约桌面歌词示例",
+    "version": "1.0.0",
+    "kind": "desktop-lyrics",
+    "author": "Mono",
+    "description": "可自行修改的桌面歌词插件示例",
+    "capabilities": [
+      "desktop-lyrics"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "key": "fontSize",
+          "label": "字号",
+          "type": "range",
+          "min": 16,
+          "max": 36,
+          "step": 1,
+          "defaultValue": 24
+        }
+      ]
+    },
+    "entry": {
+      "renderer": "ui/renderer.mjs"
+    },
+    "permissions": [
+      "player.read",
+      "player.control",
+      "lyrics.read",
+      "artwork.read"
+    ],
+    "contributions": {
+      "pages": [
+        {
+          "id": "lyrics",
+          "title": "简约桌面歌词示例",
+          "entry": "ui/index.html"
+        }
+      ]
+    },
+    "file": "desktop-lyrics-example/desktop-lyrics-example.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "fanlyrics",
+    "name": "扇形歌词",
+    "version": "1.1.1",
+    "kind": "lyrics-renderer",
+    "author": "Mono contributors · Based on jayfunc/BetterLyrics",
+    "description": "独立扇形歌词：统一圆弧排布、左侧弧形大封面与逐字高亮。",
+    "capabilities": [
+      "lyrics-renderer"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "key": "fontSize",
+          "label": "歌词字号",
+          "type": "range",
+          "min": 20,
+          "max": 72,
+          "step": 1,
+          "defaultValue": 40
+        },
+        {
+          "key": "lineGap",
+          "label": "歌词行间距",
+          "type": "range",
+          "min": 0,
+          "max": 1.5,
+          "step": 0.05,
+          "defaultValue": 0.55
+        },
+        {
+          "key": "blur",
+          "label": "远处歌词模糊",
+          "type": "switch",
+          "defaultValue": true
+        },
+        {
+          "key": "scale",
+          "label": "远处歌词缩放",
+          "type": "switch",
+          "defaultValue": true
+        },
+        {
+          "key": "showCover",
+          "label": "显示封面",
+          "type": "switch",
+          "defaultValue": true
+        },
+        {
+          "key": "fanAngle",
+          "min": -45,
+          "defaultValue": 30,
+          "step": 1,
+          "max": 45,
+          "label": "扇形角度",
+          "type": "range"
+        }
+      ]
+    },
+    "entry": {
+      "renderer": "ui/renderer.mjs"
+    },
+    "permissions": [
+      "player.read",
+      "player.control",
+      "lyrics.read",
+      "artwork.read",
+      "favorites.read",
+      "favorites.write",
+      "lyrics.write"
+    ],
+    "contributions": {},
+    "file": "fanlyrics/fanlyrics.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-gdstudio",
+    "name": "GD音乐台",
+    "version": "1.0.0",
+    "kind": "music",
+    "author": "GD Studio",
+    "description": "基于 GD音乐台 API 的学习用途音源插件，默认使用 netease，搜索列表不预取封面。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics",
+      "cover"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "defaultValue": "320",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "标准音质",
+              "value": "128"
+            },
+            {
+              "label": "较高音质",
+              "value": "192"
+            },
+            {
+              "label": "高音质",
+              "value": "320"
+            },
+            {
+              "label": "无损音质",
+              "value": "740"
+            },
+            {
+              "label": "最高音质",
+              "value": "999"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "gdstudio-music/mono-native-wasm-gdstudio.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-huyao-kuwo",
+    "name": "狐妖酷我",
+    "version": "1.0.2",
+    "kind": "music",
+    "author": "Mono",
+    "description": "通过狐妖 API 搜索和播放酷我音乐。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "key": "apiKey",
+          "label": "接口密钥",
+          "placeholder": "在狐妖控制台的密钥管理中查看",
+          "required": true,
+          "type": "password"
+        },
+        {
+          "defaultValue": "lossless",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "标准 128 kbps",
+              "value": "Standard"
+            },
+            {
+              "label": "高品质 192 kbps",
+              "value": "exhigh"
+            },
+            {
+              "label": "超高品质 320 kbps",
+              "value": "SQ"
+            },
+            {
+              "label": "无损 740 kbps",
+              "value": "lossless"
+            },
+            {
+              "label": "高解析 999 kbps",
+              "value": "hires"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "huyao-kuwo/mono-native-wasm-huyao-kuwo.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mineradio-original-lyrics",
+    "name": "Mineradio 原版歌词",
+    "version": "2.0.0",
+    "kind": "lyrics-renderer",
+    "author": "Mineradio contributors / Mono Player bridge",
+    "description": "Mineradio 2.1.0 原版视觉前端与设置面板，通过轻量桥接接入 Mono 播放状态、封面、歌词和队列。",
+    "capabilities": [
+      "lyrics-renderer"
+    ],
+    "entry": {
+      "renderer": "ui/renderer.mjs"
+    },
+    "permissions": [
+      "player.read",
+      "player.control",
+      "lyrics.read",
+      "artwork.read",
+      "favorites.read",
+      "favorites.write",
+      "lyrics.write",
+      "storage",
+      "audio.read"
+    ],
+    "contributions": {},
+    "file": "mineradio-original-lyrics/mineradio-original-lyrics.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-wasm-miot",
+    "name": "小爱音箱",
+    "version": "1.0.0",
+    "kind": "integration",
+    "author": "Mono / hanxi",
+    "description": "连接小爱音箱，支持扫码登录、音箱分组、语音点歌、定时播放和本地/在线音乐投放。",
+    "capabilities": [
+      "speaker-control"
+    ],
+    "permissions": [
+      "network",
+      "speaker-service",
+      "library.read",
+      "library.write",
+      "playlists.read",
+      "playlists.write",
+      "favorites.read",
+      "favorites.write",
+      "sources.search",
+      "sources.import",
+      "media.read",
+      "artwork.read",
+      "lyrics.read",
+      "history.write"
+    ],
+    "entry": {
+      "service": "dist/service.mjs"
+    },
+    "contributions": {
+      "pages": [
+        {
+          "id": "speaker",
+          "title": "小爱音箱",
+          "entry": "ui/dist/index.html",
+          "presentation": "dialog"
+        }
+      ],
+      "playbackBar": [
+        {
+          "id": "open-speaker",
+          "title": "小爱音箱",
+          "icon": "speaker",
+          "pageId": "speaker"
+        }
+      ]
+    },
+    "file": "miot/mono-wasm-miot.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-netease",
+    "name": "网易云音乐",
+    "version": "1.0.0",
+    "kind": "music",
+    "author": "Mono",
+    "description": "搜索并播放网易云音乐，默认使用超清母带音质。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "defaultValue": "jymaster",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "标准音质",
+              "value": "standard"
+            },
+            {
+              "label": "极高音质",
+              "value": "exhigh"
+            },
+            {
+              "label": "无损音质",
+              "value": "lossless"
+            },
+            {
+              "label": "Hi-Res",
+              "value": "hires"
+            },
+            {
+              "label": "高清环绕声",
+              "value": "jyeffect"
+            },
+            {
+              "label": "沉浸环绕声",
+              "value": "sky"
+            },
+            {
+              "label": "超清母带",
+              "value": "jymaster"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "netease-music/mono-native-wasm-netease.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "playback-card",
+    "name": "Mono 播放卡片",
+    "version": "1.3.0",
+    "kind": "lyrics-renderer",
+    "author": "Mono contributors",
+    "description": "13 种歌词播放卡片：电影、杂志、票根、手账、便签、水墨、古籍、黑胶、CD、拍立得、收据、瑞士排版与极简。支持桌面右下角实时播放。",
+    "capabilities": [
+      "lyrics-renderer"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "key": "cardStyle",
+          "label": "卡片样式",
+          "type": "select",
+          "defaultValue": "minimal",
+          "options": [
+            {
+              "label": "极简",
+              "value": "minimal"
+            },
+            {
+              "label": "电影",
+              "value": "cinematic"
+            },
+            {
+              "label": "杂志",
+              "value": "magazine"
+            },
+            {
+              "label": "票根",
+              "value": "ticket"
+            },
+            {
+              "label": "手账",
+              "value": "journal"
+            },
+            {
+              "label": "便签",
+              "value": "sticky"
+            },
+            {
+              "label": "水墨",
+              "value": "ink"
+            },
+            {
+              "label": "国风",
+              "value": "guofeng"
+            },
+            {
+              "label": "古籍",
+              "value": "ancient"
+            },
+            {
+              "label": "黑胶",
+              "value": "vinyl"
+            },
+            {
+              "label": "CD",
+              "value": "cd"
+            },
+            {
+              "label": "拍立得",
+              "value": "polaroid"
+            },
+            {
+              "label": "收据",
+              "value": "receipt"
+            },
+            {
+              "label": "瑞士排版",
+              "value": "swiss"
+            }
+          ]
+        }
+      ]
+    },
+    "entry": {
+      "renderer": "ui/renderer.mjs"
+    },
+    "permissions": [
+      "player.read",
+      "player.control",
+      "lyrics.read",
+      "artwork.read"
+    ],
+    "contributions": {
+      "pages": [
+        {
+          "id": "card",
+          "title": "Mono 播放卡片",
+          "entry": "ui/index.html"
+        }
+      ]
+    },
+    "file": "playback-card/playback-card.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-shanhaiyun-kw",
+    "name": "山海云酷我",
+    "version": "1.0.3",
+    "kind": "music",
+    "author": "Mono",
+    "description": "接入山海云 APIByte 酷我音乐，支持搜索、播放地址、音质和歌词。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics",
+      "cover"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "key": "apiKey",
+          "label": "API Key",
+          "placeholder": "可选 API Key",
+          "required": false,
+          "type": "password"
+        },
+        {
+          "defaultValue": "p",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "流畅",
+              "value": "s"
+            },
+            {
+              "label": "标准",
+              "value": "h"
+            },
+            {
+              "label": "高品质",
+              "value": "p"
+            },
+            {
+              "label": "无损",
+              "value": "ff"
+            }
+          ],
+          "required": false,
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "shanhaiyun-kw-music/mono-native-wasm-shanhaiyun-kw.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-wasm-stem-separation",
+    "name": "人声 / 伴奏分离",
+    "version": "1.1.0",
+    "kind": "tool",
+    "author": "Mono Player",
+    "description": "使用本地 Demucs 将音乐导出为人声与伴奏 WAV。支持一键准备组件、自动识别已有环境，无需手动配置。",
+    "capabilities": [
+      "stem-separation"
+    ],
+    "permissions": [
+      "service.run",
+      "network",
+      "files.choose",
+      "files.reveal"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "key": "pythonPath",
+          "label": "自定义分离环境（可选）",
+          "placeholder": "自动识别，无需填写；高级用户可指定 Python 路径",
+          "type": "text"
+        },
+        {
+          "defaultValue": "auto",
+          "key": "device",
+          "label": "计算设备",
+          "options": [
+            {
+              "label": "自动选择",
+              "value": "auto"
+            },
+            {
+              "label": "CPU",
+              "value": "cpu"
+            },
+            {
+              "label": "NVIDIA GPU",
+              "value": "cuda"
+            },
+            {
+              "label": "Apple Silicon",
+              "value": "mps"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "service": "dist/service.mjs"
+    },
+    "contributions": {
+      "pages": [
+        {
+          "id": "separation",
+          "title": "人声 / 伴奏分离",
+          "entry": "ui/dist/index.html",
+          "presentation": "page"
+        }
+      ],
+      "sidebar": [
+        {
+          "id": "open-separation",
+          "title": "人声 / 伴奏分离",
+          "icon": "audio-lines",
+          "pageId": "separation"
+        }
+      ]
+    },
+    "file": "stem-separation/mono-wasm-stem-separation.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-wasm-theme-dark",
+    "name": "深色主题",
+    "version": "1.0.0",
+    "kind": "theme",
+    "author": "Mono Player",
+    "description": "克制的深色主题，适合夜间播放和长时间使用。",
+    "capabilities": [
+      "theme"
+    ],
+    "permissions": [],
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "theme-dark/mono-wasm-theme-dark.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-wasm-theme-forest-mint",
+    "name": "森光薄荷",
+    "version": "1.0.0",
+    "kind": "theme",
+    "author": "Mono Player",
+    "description": "以森林照片为背景的清透薄荷主题，适合明亮柔和的播放界面。",
+    "capabilities": [
+      "theme"
+    ],
+    "permissions": [],
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "theme-forest-mint/mono-wasm-theme-forest-mint.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-wasm-theme-gray-white",
+    "name": "灰白主题",
+    "version": "1.0.0",
+    "kind": "theme",
+    "author": "Mono Player",
+    "description": "简洁的浅色灰白主题，适合日常本地音乐管理。",
+    "capabilities": [
+      "theme"
+    ],
+    "permissions": [],
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "theme-gray-white/mono-wasm-theme-gray-white.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-wasm-theme-transparent",
+    "name": "透明主题",
+    "version": "1.0.0",
+    "kind": "theme",
+    "author": "Mono Player",
+    "description": "透明玻璃风格主题，适合桌面歌词和轻量播放器界面。",
+    "capabilities": [
+      "theme"
+    ],
+    "permissions": [],
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "theme-transparent/mono-wasm-theme-transparent.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-xiaogou",
+    "name": "小狗音乐",
+    "version": "1.0.0",
+    "kind": "music",
+    "author": "Mono",
+    "description": "搜索并播放小狗音乐来源，支持歌曲搜索、播放和歌词获取。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "defaultValue": "320k",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "高品音质",
+              "value": "320k"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "xiaogou-music/mono-native-wasm-xiaogou.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-xiaoqiu",
+    "name": "小秋音乐",
+    "version": "1.0.0",
+    "kind": "music",
+    "author": "Mono",
+    "description": "搜索并播放小秋音乐来源，支持在线播放和歌词 metadata。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "defaultValue": "14",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "音乐试听",
+              "value": "0"
+            },
+            {
+              "label": "有损音质",
+              "value": "1"
+            },
+            {
+              "label": "有损音质",
+              "value": "2"
+            },
+            {
+              "label": "有损音质",
+              "value": "3"
+            },
+            {
+              "label": "标准音质",
+              "value": "4"
+            },
+            {
+              "label": "标准音质",
+              "value": "5"
+            },
+            {
+              "label": "标准音质",
+              "value": "6"
+            },
+            {
+              "label": "标准音质",
+              "value": "7"
+            },
+            {
+              "label": "HQ高音质",
+              "value": "8"
+            },
+            {
+              "label": "HQ高音质（音质增强）",
+              "value": "9"
+            },
+            {
+              "label": "SQ无损音质",
+              "value": "10"
+            },
+            {
+              "label": "Hi-Res音质",
+              "value": "11"
+            },
+            {
+              "label": "杜比全景声",
+              "value": "12"
+            },
+            {
+              "label": "臻品全景声",
+              "value": "13"
+            },
+            {
+              "label": "臻品母带2.0",
+              "value": "14"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "xiaoqiu-music/mono-native-wasm-xiaoqiu.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-xiaowo",
+    "name": "小窝音乐",
+    "version": "1.0.0",
+    "kind": "music",
+    "author": "Mono",
+    "description": "搜索并播放小窝音乐来源，支持在线曲目和歌词获取。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "defaultValue": "320k",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "标准音质",
+              "value": "128k"
+            },
+            {
+              "label": "高品音质",
+              "value": "320k"
+            },
+            {
+              "label": "无损音质",
+              "value": "flac"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "xiaowo-music/mono-native-wasm-xiaowo.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-xiaoyun",
+    "name": "小芸音乐",
+    "version": "1.0.0",
+    "kind": "music",
+    "author": "Mono",
+    "description": "搜索并播放小芸音乐来源，支持在线曲库和歌词补全。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "defaultValue": "320k",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "标准音质",
+              "value": "128k"
+            },
+            {
+              "label": "高品音质",
+              "value": "320k"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "xiaoyun-music/mono-native-wasm-xiaoyun.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-yuanli-kw",
+    "name": "元力KW",
+    "version": "1.0.0",
+    "kind": "music",
+    "author": "Mono",
+    "description": "搜索并播放酷我音乐，支持在线歌曲解析和歌词获取。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "defaultValue": "320k",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "标准音质",
+              "value": "128k"
+            },
+            {
+              "label": "高品音质",
+              "value": "320k"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "yuanli-kw-music/mono-native-wasm-yuanli-kw.monoplugin.zip"
+  },
+  {
+    "schemaVersion": 1,
+    "apiVersion": 1,
+    "minHostVersion": "0.1.0",
+    "id": "mono-native-wasm-yuanli-qq",
+    "name": "元力QQ",
+    "version": "1.0.0",
+    "kind": "music",
+    "author": "Mono",
+    "description": "搜索并播放 QQ 音乐，支持多音质和多格式歌词。",
+    "capabilities": [
+      "search",
+      "play",
+      "lyrics"
+    ],
+    "permissions": [
+      "network"
+    ],
+    "configSchema": {
+      "fields": [
+        {
+          "defaultValue": "320k",
+          "key": "defaultQuality",
+          "label": "默认音质",
+          "options": [
+            {
+              "label": "标准音质",
+              "value": "128k"
+            },
+            {
+              "label": "高品音质",
+              "value": "320k"
+            },
+            {
+              "label": "无损音质",
+              "value": "flac"
+            }
+          ],
+          "type": "select"
+        }
+      ]
+    },
+    "entry": {
+      "wasm": "dist/plugin.wasm"
+    },
+    "contributions": {},
+    "file": "yuanli-qq-music/mono-native-wasm-yuanli-qq.monoplugin.zip"
+  }
+]

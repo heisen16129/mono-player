@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-wasm-theme-transparent",
+  "name": "透明主题",
+  "version": "1.0.0",
+  "kind": "theme",
+  "author": "Mono Player",
+  "description": "透明玻璃风格主题，适合桌面歌词和轻量播放器界面。",
+  "capabilities": [
+    "theme"
+  ],
+  "permissions": [],
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

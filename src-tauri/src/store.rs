@@ -139,6 +139,7 @@ pub fn plugin_config_set(app: AppHandle, plugin_id: String, config: Value) -> Ap
             values.insert(key, config);
         }
         write_store(&app, &values)?;
+        let _ = tauri::Emitter::emit(&app,"plugins://config",serde_json::json!({"pluginId":plugin_id.trim()}));
         Ok(crate::plugins::config::effective(&values, plugin_id.trim()))
     })())
 }
@@ -210,6 +211,8 @@ pub(crate) async fn settings_set(app: AppHandle, value: Value) -> ApiResponse<Va
         }
         values.insert(crate::settings::KEY.into(), normalized.clone());
         write_store(&app, &values)?;
+        drop(_guard);
+        crate::plugins::api::lifecycle::sync(&app);
         Ok(normalized)
     }).await.map_err(|e| e.to_string()).and_then(|result| result);
     ApiResponse::from_result(result)

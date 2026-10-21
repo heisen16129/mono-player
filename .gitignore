@@ -55,3 +55,21 @@ src-tauri/target-codex*/
 # Keep plugin wasm release artifacts available for distribution.
 !plugins/*/dist/
 !plugins/*/dist/*.wasm
+
+# Python bytecode caches
+__pycache__/
+*.pyc
+
+# Plugin distribution files; runtime executables remain local build dependencies.
+!plugin/*/dist/
+plugin/*/dist/*
+!plugin/*/dist/*.wasm
+!plugin/*/dist/service.mjs
+!plugin/*/ui/dist/
+!plugin/*/ui/dist/**
+!plugin/dist/
+plugin/dist/*
+!plugin/dist/catalog.json
+!plugin/dist/packages.json
+!packages/plugin-sdk/dist/
+!packages/plugin-sdk/dist/*.mjs

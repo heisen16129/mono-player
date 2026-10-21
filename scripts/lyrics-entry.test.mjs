@@ -6,12 +6,12 @@ import { transform } from 'esbuild';
 
 const source = readFileSync(new URL('../src/composables/useLyricsEntry.ts', import.meta.url), 'utf8');
 const { code } = await transform(source.replace(/^import .*;\r?\n/gm, '').replace('export function', 'function'), { loader: 'ts' });
-const manifest = { id: 'playback-card', enabled: true, kind: 'lyrics-renderer', runtime: 'module', sourceKind: 'local', sourceUrl: 'D:/cards/manifest.json', entry: 'D:/cards/renderer.mjs' };
+const manifest = { id: 'playback-card', enabled: true, kind: 'lyrics-renderer', runtime: 'module', sourceKind: 'local', apiVersion: 1, schemaVersion: 1, packageRoot: 'D:/cards', packageRevision: 'revision', entry: { renderer: 'ui/renderer.mjs' } };
 function setup(id, list = async () => [manifest], open = async () => {}) {
   const calls = [], messages = [];
   const scope = {
-    listInstalledPluginManifests: list,
-    openDesktopPlaybackCard: async (...args) => { calls.push(args); await open(); },
+    listPluginPackages: list,
+    openPluginDesktop: async (...args) => { calls.push(args); await open(); },
     options: {
       renderer: { value: { id } }, config: { value: { cardStyle: 'ancient' } },
       toggleLyricsView: () => calls.push('lyrics-page'), notify: message => messages.push(message),
@@ -26,9 +26,8 @@ test('cover click in card mode opens the desktop card with selected style, never
   const state = setup('playback-card');
   await state.entry.openSelectedLyrics();
   assert.equal(state.calls.length, 1);
-  assert.equal(state.calls[0][0], manifest.entry);
-  assert.equal(state.calls[0][1], manifest.sourceUrl);
-  assert.equal(state.calls[0][2].cardStyle, 'ancient');
+  assert.equal(state.calls[0][0], manifest);
+  assert.equal(state.calls[0][1], '__renderer');
 });
 test('other renderers continue opening the lyrics page', async () => {
   for (const id of ['classic', 'fanlyrics', 'betterlyrics']) {

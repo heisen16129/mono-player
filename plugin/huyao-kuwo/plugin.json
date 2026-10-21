@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-native-wasm-huyao-kuwo",
+  "name": "狐妖酷我",
+  "version": "1.0.2",
+  "kind": "music",
+  "author": "Mono",
+  "description": "通过狐妖 API 搜索和播放酷我音乐。",
+  "capabilities": [
+    "search",
+    "play",
+    "lyrics"
+  ],
+  "permissions": [
+    "network"
+  ],
+  "configSchema": {
+    "fields": [
+      {
+        "key": "apiKey",
+        "label": "接口密钥",
+        "placeholder": "在狐妖控制台的密钥管理中查看",
+        "required": true,
+        "type": "password"
+      },
+      {
+        "defaultValue": "lossless",
+        "key": "defaultQuality",
+        "label": "默认音质",
+        "options": [
+          {
+            "label": "标准 128 kbps",
+            "value": "Standard"
+          },
+          {
+            "label": "高品质 192 kbps",
+            "value": "exhigh"
+          },
+          {
+            "label": "超高品质 320 kbps",
+            "value": "SQ"
+          },
+          {
+            "label": "无损 740 kbps",
+            "value": "lossless"
+          },
+          {
+            "label": "高解析 999 kbps",
+            "value": "hires"
+          }
+        ],
+        "type": "select"
+      }
+    ]
+  },
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

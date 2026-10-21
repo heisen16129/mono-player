@@ -1,0 +1,12 @@
+{
+  "name": "@mono/plugin-sdk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/client.ts",
+    "./connect": "./src/connect.ts",
+    "./renderer": "./src/renderer.ts",
+    "./protocol": "./src/protocol.ts"
+  }
+}

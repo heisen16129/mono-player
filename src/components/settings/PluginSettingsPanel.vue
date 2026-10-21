@@ -48,7 +48,7 @@ async function updatePluginConfig(plugin: PluginManifest, nextConfig: PluginConf
   pluginConfigs.value = { ...pluginConfigs.value, [plugin.id]: nextConfig };
   try {
     if (plugin.kind === 'lyrics-renderer' && await saveLyricsRendererConfig(plugin.id, nextConfig)) return;
-    const saved = await savePluginConfig(plugin.kind === 'lyrics-renderer' ? `lyrics-renderer.${plugin.id}` : plugin.id, nextConfig);
+    const saved = await savePluginConfig(plugin.id, nextConfig);
     if (configRevisions.get(plugin.id) === revision) pluginConfigs.value[plugin.id] = saved;
   } catch (error) {
     if (configRevisions.get(plugin.id) === revision) pluginConfigs.value[plugin.id] = previous;

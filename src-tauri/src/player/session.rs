@@ -101,7 +101,7 @@ fn normalize(mut session: PlaybackSession) -> PlaybackSession {
     }
     if !matches!(
         session.playback_mode.as_str(),
-        "shuffle" | "fixed" | "repeat"
+        "shuffle" | "fixed" | "repeat" | "order" | "once"
     ) {
         session.playback_mode = "repeat".into();
     }

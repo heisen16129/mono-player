@@ -1,0 +1,175 @@
+{
+  "apiVersion": 1,
+  "sourceMigrationComplete": true,
+  "runtimeAcceptance": "see docs/plugin-api-progress.md",
+  "packages": [
+    {
+      "directory": "apple-music-lyrics",
+      "id": "apple-music-lyrics",
+      "file": "apple-music-lyrics/apple-music-lyrics.monoplugin.zip",
+      "revision": "581215a712e7cc4471b87e0f3330c2452661b0f850ce1515be15e10851074b60",
+      "sha256": "074332bf5f50870ce044e7c6ecb5f79b3cc801deb607d93fd3ebae1dfb89a47b"
+    },
+    {
+      "directory": "aq-lyrics",
+      "id": "mono-wasm-aq-lyrics",
+      "file": "aq-lyrics/mono-wasm-aq-lyrics.monoplugin.zip",
+      "revision": "baecdec7a9c0a6fc0583f94c3be176493fd38dfc2b6651803cc0536e8ef23d9e",
+      "sha256": "2cbd4106da22a8620df98c8b1ac09bbf5a82f974f6b2c3210d5ac01ca7c775ba"
+    },
+    {
+      "directory": "ayun-lyrics",
+      "id": "mono-wasm-ayun-lyrics",
+      "file": "ayun-lyrics/mono-wasm-ayun-lyrics.monoplugin.zip",
+      "revision": "28f292f1ff830d1d8230892ee05f9370e57d923942d6133013b13d8c98cb4851",
+      "sha256": "ba9ffde04a2530df55d43e52b7ac6b76f2c93cb27ca715edcc997ac68cc7338d"
+    },
+    {
+      "directory": "betterlyrics",
+      "id": "betterlyrics",
+      "file": "betterlyrics/betterlyrics.monoplugin.zip",
+      "revision": "d642b91f4ef3add26dfb7631351074a1318cc409208cba34c48ffe5031248b8c",
+      "sha256": "3243ef4278f75ca348fc89872063b8def93df00f098bf16612772e5c7b96993a"
+    },
+    {
+      "directory": "desktop-lyrics-example",
+      "id": "desktop-lyrics-example",
+      "file": "desktop-lyrics-example/desktop-lyrics-example.monoplugin.zip",
+      "revision": "9d975a744eff95d7400744cb9b71dd24e926c6b1390b6fe1364c9cf702264fb5",
+      "sha256": "c5d1ac85752419f88b2f0688416a609308609cf7892b1b5a53d8613ab81249e7"
+    },
+    {
+      "directory": "fanlyrics",
+      "id": "fanlyrics",
+      "file": "fanlyrics/fanlyrics.monoplugin.zip",
+      "revision": "95562d3384d40494d5c1f0cd82942d727d2b327da920b7a1aa54bbe258d85e83",
+      "sha256": "c71a663612605f612bf525badf54fb635b3481a7e8740a12797f56bb12144b4b"
+    },
+    {
+      "directory": "gdstudio-music",
+      "id": "mono-native-wasm-gdstudio",
+      "file": "gdstudio-music/mono-native-wasm-gdstudio.monoplugin.zip",
+      "revision": "66a6860ac2b1b8c35b86ff3edafb481556a86556e35a3b898b7a96364813e2fb",
+      "sha256": "1ba5dea58d5b0be27fa9634f189446d6d17c22810501d7a156e1da721b457d30"
+    },
+    {
+      "directory": "huyao-kuwo",
+      "id": "mono-native-wasm-huyao-kuwo",
+      "file": "huyao-kuwo/mono-native-wasm-huyao-kuwo.monoplugin.zip",
+      "revision": "2c1d21464245f3bb1ca67236366cf8180440628b2b8e01cf97268aaeaa52d2b3",
+      "sha256": "b9574c5940ff5a4854af9963c2b7ed6f3af4ef08a000422f1208ae6154a4aa3c"
+    },
+    {
+      "directory": "mineradio-original-lyrics",
+      "id": "mineradio-original-lyrics",
+      "file": "mineradio-original-lyrics/mineradio-original-lyrics.monoplugin.zip",
+      "revision": "d4e11d034bcae832bb2a64c84697f4d0171de082aafe02a292c67cf5b68ad982",
+      "sha256": "e861fe2ed86856b9c6d69a8b2f0ae4b156f2b91a56ef5da4f9aada060ff784cd"
+    },
+    {
+      "directory": "miot",
+      "id": "mono-wasm-miot",
+      "file": "miot/mono-wasm-miot.monoplugin.zip",
+      "revision": "868bdf329b61cc1e3dd0e9dad137d3d2341e9613da9ac64eacb10f04330298d3",
+      "sha256": "7b3979535067ee5e383d84cfe365da802d23be348f6c490d075e8b9216dcd6ec"
+    },
+    {
+      "directory": "netease-music",
+      "id": "mono-native-wasm-netease",
+      "file": "netease-music/mono-native-wasm-netease.monoplugin.zip",
+      "revision": "181b28cc6efbc40bf6f10f9e5134ba20a32681a53f3c44bb122cc9d391fab52a",
+      "sha256": "c5b4796a36226952a9e5781397b59529ff2f2bd2af5f1c7817ed119c576491db"
+    },
+    {
+      "directory": "playback-card",
+      "id": "playback-card",
+      "file": "playback-card/playback-card.monoplugin.zip",
+      "revision": "ce829e18927212d2f6d382d7f3e78aa02542b557b71df2d44529746c3152c4b8",
+      "sha256": "d1c2c0605824e374502b348d49b47ed8a72db699d96aaf68030f14d3576d4740"
+    },
+    {
+      "directory": "shanhaiyun-kw-music",
+      "id": "mono-native-wasm-shanhaiyun-kw",
+      "file": "shanhaiyun-kw-music/mono-native-wasm-shanhaiyun-kw.monoplugin.zip",
+      "revision": "2a2453dede672330a3ca1890b8af345ba4ad2cb3d8cec38c62341741c7e0ad27",
+      "sha256": "07ffb81a93fd2c2acc9cbeb786a738b6df3b8c786f7fcf0535c0b1cb766f8fe2"
+    },
+    {
+      "directory": "stem-separation",
+      "id": "mono-wasm-stem-separation",
+      "file": "stem-separation/mono-wasm-stem-separation.monoplugin.zip",
+      "revision": "2a9894f8be5ac8a6795771a8b063801772892cdd64da41980a15269bb736ffb7",
+      "sha256": "bb8d919b6cf0742558fda55ef0df2554c838b61833715bbe58b8ccc69711c2f0"
+    },
+    {
+      "directory": "theme-dark",
+      "id": "mono-wasm-theme-dark",
+      "file": "theme-dark/mono-wasm-theme-dark.monoplugin.zip",
+      "revision": "6618e241da42e6344d6addc6bd52ff70b34dee6075de953cdb52a7b70d51bd47",
+      "sha256": "040d9678182c52240133dbd9b02f951a1ce14ab17b486dca9a0e3bab5c64de8e"
+    },
+    {
+      "directory": "theme-forest-mint",
+      "id": "mono-wasm-theme-forest-mint",
+      "file": "theme-forest-mint/mono-wasm-theme-forest-mint.monoplugin.zip",
+      "revision": "24d6c7c9d5aaea19e40c878c7466dd93205a3ec8f9aae4e44ea31c4d68a07f37",
+      "sha256": "e2ace6163f53dd1e227632d0a3f657a121b5fd52dfb479223df70f2141e06628"
+    },
+    {
+      "directory": "theme-gray-white",
+      "id": "mono-wasm-theme-gray-white",
+      "file": "theme-gray-white/mono-wasm-theme-gray-white.monoplugin.zip",
+      "revision": "75d0260384a11e16fd127a9df009d2ef5946108d98a0b9f0e5eff763b8c21961",
+      "sha256": "cc974d639ffacce1819fa2078d0d12bbd5ea575873b89b80b5c4dd8c01d3b0e2"
+    },
+    {
+      "directory": "theme-transparent",
+      "id": "mono-wasm-theme-transparent",
+      "file": "theme-transparent/mono-wasm-theme-transparent.monoplugin.zip",
+      "revision": "38156dde5ade19f0dd41d5043683a7562462c767fc63635845ece395b676061e",
+      "sha256": "2cbcae6a7a8db9939840d3d80419e1b3693cb7fab9d540d7b15639400e597367"
+    },
+    {
+      "directory": "xiaogou-music",
+      "id": "mono-native-wasm-xiaogou",
+      "file": "xiaogou-music/mono-native-wasm-xiaogou.monoplugin.zip",
+      "revision": "b9b122a7b8610e9c25134f92455f3f3f4399790316cb75f22c5ada9936b33aa4",
+      "sha256": "117d19175167247ead62c80fdd3e1cbfb6fb4e72090a8ad45974c352a9a0b607"
+    },
+    {
+      "directory": "xiaoqiu-music",
+      "id": "mono-native-wasm-xiaoqiu",
+      "file": "xiaoqiu-music/mono-native-wasm-xiaoqiu.monoplugin.zip",
+      "revision": "54256d803a893b30b1c112f8bb0d41732d35544b4c648aa4252b32dae0a50a2e",
+      "sha256": "322eee66916c7eeabaa11982068dc5e5cdb4651731d119de0ed601bf88e32382"
+    },
+    {
+      "directory": "xiaowo-music",
+      "id": "mono-native-wasm-xiaowo",
+      "file": "xiaowo-music/mono-native-wasm-xiaowo.monoplugin.zip",
+      "revision": "4e7ca4109aa7e6b8e4f1a8f49eaa989aed9e59be9edf9e4ff6b8ba3ede1e6eff",
+      "sha256": "9be2280c62509a94739d74d67cd19797973c8534ef289cabaf52ea885b8015d7"
+    },
+    {
+      "directory": "xiaoyun-music",
+      "id": "mono-native-wasm-xiaoyun",
+      "file": "xiaoyun-music/mono-native-wasm-xiaoyun.monoplugin.zip",
+      "revision": "819e2b39f253f8913937eb08f32a35d5d64f047b0b174dbc8fdd667792dad775",
+      "sha256": "a4035374f4021285a038583e99a2b9c19cf40840f499e5687e2443dba0f90135"
+    },
+    {
+      "directory": "yuanli-kw-music",
+      "id": "mono-native-wasm-yuanli-kw",
+      "file": "yuanli-kw-music/mono-native-wasm-yuanli-kw.monoplugin.zip",
+      "revision": "bc25ced0b10bfce182004b56c18f062bb90fc5b9a25a5c8e81f2a13c9b315a51",
+      "sha256": "439487343afb518566fdd2769ce063ac99c5a7148ebccf3b4684ba5bbcbfe6e2"
+    },
+    {
+      "directory": "yuanli-qq-music",
+      "id": "mono-native-wasm-yuanli-qq",
+      "file": "yuanli-qq-music/mono-native-wasm-yuanli-qq.monoplugin.zip",
+      "revision": "59dd710c3aef9805b9d7a02d86fa0a832ab81217928cc3701d4eba5545b16d94",
+      "sha256": "46063242d3b5dd2a859d57f965152fe596c55af7569fdab0945c28718bc33fce"
+    }
+  ]
+}

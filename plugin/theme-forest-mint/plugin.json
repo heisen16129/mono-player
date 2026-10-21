@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-wasm-theme-forest-mint",
+  "name": "森光薄荷",
+  "version": "1.0.0",
+  "kind": "theme",
+  "author": "Mono Player",
+  "description": "以森林照片为背景的清透薄荷主题，适合明亮柔和的播放界面。",
+  "capabilities": [
+    "theme"
+  ],
+  "permissions": [],
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

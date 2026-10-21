@@ -191,7 +191,7 @@ export interface UserPlaylist {
   createdAt: number;
 }
 
-export type PlaybackMode = 'shuffle' | 'repeat' | 'fixed';
+export type PlaybackMode = 'shuffle' | 'repeat' | 'fixed' | 'order' | 'once';
 
 export interface TrackStatistics {
   count: number;

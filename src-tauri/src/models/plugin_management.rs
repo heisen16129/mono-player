@@ -1,13 +1,10 @@
 use serde::{Deserialize, Serialize};
-use crate::plugins::PluginCatalogItem;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PluginAction {
     pub(crate) action: String,
     pub(crate) id: Option<String>,
-    pub(crate) item: Option<PluginCatalogItem>,
-    pub(crate) file_path: Option<String>,
     pub(crate) enabled: Option<bool>,
     pub(crate) ids: Option<Vec<String>>,
 }

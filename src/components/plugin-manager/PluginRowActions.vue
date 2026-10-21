@@ -3,11 +3,15 @@ import type { PluginCatalogItem, PluginManifest } from '../../types/plugin';
 import type { PluginRow } from './types';
 import PluginRowLinkActionButton from './PluginRowLinkActionButton.vue';
 import PluginRowToggleActionButton from './PluginRowToggleActionButton.vue';
-import { getPluginLaunchers } from '../plugins/pluginLaunchers';
+import { computed } from 'vue';
+import { usePluginNavigation } from '../../composables/usePluginNavigation';
 
-defineProps<{
+const props = defineProps<{
   plugin: PluginRow;
 }>();
+
+const { plugins, openPlugin } = usePluginNavigation();
+const pages = computed(() => plugins.value.find(p => p.id === props.plugin.id)?.contributions.pages ?? []);
 
 const emit = defineEmits<{
   install: [item: PluginCatalogItem];
@@ -20,7 +24,7 @@ const emit = defineEmits<{
 <template>
   <div class="row-actions">
     <template v-if="plugin.installed">
-      <component v-for="launcher in getPluginLaunchers(plugin)" :is="launcher.component" :key="launcher.capability" :plugin-id="plugin.id" :disabled="!plugin.enabled" />
+      <button class="page-action" type="button" v-for="page in pages" :key="page.id" :disabled="!plugin.enabled" @click="openPlugin(plugin.id,page.id)">{{ page.title }}</button>
     </template>
     <PluginRowLinkActionButton v-if="plugin.catalogItem && !plugin.installed" label="安装" variant="install" @click="emit('install', plugin.catalogItem)" />
     <PluginRowLinkActionButton v-if="plugin.catalogItem && plugin.installed && plugin.catalogItem.managementStatus === 'update'" label="更新" variant="update" @click="emit('update', plugin.catalogItem)" />
@@ -32,11 +36,37 @@ const emit = defineEmits<{
 <style scoped>
 .row-actions {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   align-items: center;
   min-width: 0;
-  overflow: hidden;
+  padding: 6px 0;
 }
 
+.row-actions > :deep(button) {
+  flex-shrink: 0;
+}
+
+.page-action {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--smw-text-body);
+  font: inherit;
+  line-height: 24px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.page-action:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.page-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 </style>

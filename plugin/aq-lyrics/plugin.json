@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-wasm-aq-lyrics",
+  "name": "阿Q歌词",
+  "version": "1.0.0",
+  "kind": "lyrics",
+  "author": "Mono",
+  "description": "搜索并返回阿Q歌词 metadata，支持多格式歌词切换。",
+  "capabilities": [
+    "search",
+    "lyrics"
+  ],
+  "permissions": [
+    "network"
+  ],
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

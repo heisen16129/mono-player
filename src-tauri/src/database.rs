@@ -7,6 +7,7 @@ pub(crate) mod library_statistics;
 pub(crate) mod library_search;
 pub(crate) mod search_history;
 pub(crate) mod download_records;
+pub(crate) mod imported_tracks;
 
 use crate::api_response::ApiResponse;
 use crate::models::{artist_names, Track};
@@ -477,6 +478,7 @@ pub(crate) fn init_database(db: &Connection) -> rusqlite::Result<()> {
     search_history::init_table(db)?;
     playback_session::init_table(db)?;
     favorites::init_table(db)?;
+    imported_tracks::init_table(db)?;
     playlists::init_tables(db)?;
     db.execute(
         "UPDATE tracks SET added_at = COALESCE(added_at, updated_at, CURRENT_TIMESTAMP)",

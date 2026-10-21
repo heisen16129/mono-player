@@ -202,6 +202,15 @@ pub(crate) fn edit_tracks(
     Ok(())
 }
 
+pub(crate) fn reorder(db: &Connection, id: &str, tracks: &[Track]) -> Result<(), String> {
+    require_playlist(db,id)?;
+    for (position,track) in tracks.iter().enumerate() {
+        db.execute("UPDATE playlist_tracks SET position=?1 WHERE playlist_id=?2 AND identity_key=?3",
+            params![position as i64,id,identity_key(track)]).map_err(|e|e.to_string())?;
+    }
+    Ok(())
+}
+
 pub(crate) fn delete_for_music_dir(db: &Connection, root: &std::path::Path) -> Result<(), String> {
     let directory = database::normalized_music_dir(root);
     let prefix = format!("{directory}/");

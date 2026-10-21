@@ -1,0 +1,4 @@
+dist/*
+!dist/miot.wasm
+
+!dist/service.mjs

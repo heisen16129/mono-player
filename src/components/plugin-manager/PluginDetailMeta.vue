@@ -9,7 +9,7 @@ defineProps<{
 <template>
   <dl class="plugin-detail-meta">
     <div><dt>版本</dt><dd>v{{ plugin.version }}</dd></div>
-    <div><dt>运行方式</dt><dd>{{ plugin.runtime === 'module' ? '页面模块' : 'WASM' }}</dd></div>
+    <div><dt>运行方式</dt><dd>{{ plugin.runtime === 'module' ? '页面模块' : plugin.runtime === 'node' ? 'Node.js 服务' : 'WASM' }}</dd></div>
     <div v-if="plugin.installedVersion"><dt>已安装</dt><dd>v{{ plugin.installedVersion }}</dd></div>
     <div v-if="plugin.minAppVersion"><dt>最低版本</dt><dd>{{ plugin.minAppVersion }}</dd></div>
     <div><dt>来源</dt><dd>{{ plugin.source }}</dd></div>

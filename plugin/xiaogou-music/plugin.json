@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-native-wasm-xiaogou",
+  "name": "小狗音乐",
+  "version": "1.0.0",
+  "kind": "music",
+  "author": "Mono",
+  "description": "搜索并播放小狗音乐来源，支持歌曲搜索、播放和歌词获取。",
+  "capabilities": [
+    "search",
+    "play",
+    "lyrics"
+  ],
+  "permissions": [
+    "network"
+  ],
+  "configSchema": {
+    "fields": [
+      {
+        "defaultValue": "320k",
+        "key": "defaultQuality",
+        "label": "默认音质",
+        "options": [
+          {
+            "label": "高品音质",
+            "value": "320k"
+          }
+        ],
+        "type": "select"
+      }
+    ]
+  },
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

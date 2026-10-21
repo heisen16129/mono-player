@@ -51,12 +51,9 @@ pub(crate) struct BridgeResponse {
 struct McpPluginManifest {
     id: String,
     name: String,
-    entry: String,
     enabled: bool,
     #[serde(default)]
     capabilities: Vec<String>,
-    #[serde(default)]
-    permissions: Vec<String>,
 }
 
 pub(crate) fn bridge_file_path(app_data_dir: &Path) -> PathBuf {
@@ -174,7 +171,6 @@ fn handle_bridge_request(app: AppHandle, request: BridgeRequest) -> BridgeRespon
     let method = request.method.clone();
     log_bridge_request(&method, &request.params);
     let result = match request.method.as_str() {
-        method if method.starts_with("miot.") => crate::miot::bridge::request(&app, &method[5..], request.params),
         "library.summary" => library_summary(&app),
         "library.listTracks" => list_tracks(&app, request.params),
         "library.getTrack" => get_track(&app, request.params),
@@ -882,9 +878,7 @@ fn read_resource(app: &AppHandle, params: Value) -> Result<Value, String> {
 }
 
 fn read_app_tracks(app: &AppHandle) -> Result<Vec<Track>, String> {
-    let state = app.state::<AppState>();
-    let db = state.db.lock().map_err(|err| err.to_string())?;
-    read_tracks(&db)
+    crate::library_service::read_tracks(app)
 }
 
 fn select_plugins(
@@ -917,13 +911,7 @@ fn select_plugins(
 }
 
 fn read_installed_plugins(app: &AppHandle) -> Result<Vec<McpPluginManifest>, String> {
-    serde_json::from_value(
-        read_store(app)?
-            .get("plugins.installed")
-            .cloned()
-            .unwrap_or_else(|| json!([])),
-    )
-    .map_err(|err| err.to_string())
+    serde_json::from_value(json!(crate::plugins::management::manifests(app)?)).map_err(|err|err.to_string())
 }
 
 fn invoke_plugin(
@@ -931,18 +919,10 @@ fn invoke_plugin(
     plugin: &McpPluginManifest,
     request: Value,
 ) -> Result<Value, String> {
-    let response = app
-        .state::<crate::workers::plugin::PluginWorkerState>()
-        .invoke_plugin(
-            plugin.entry.clone(),
-            request,
-            Some(plugin.id.clone()),
-            Some(plugin.permissions.clone()),
-        )?;
-    if let Some(error) = string_arg(&response, "error") {
-        return Err(error);
-    }
-    Ok(response)
+    let values = crate::store::read_values(app)?;
+    let manifest = values.get("plugins.installed").and_then(Value::as_array)
+        .and_then(|items|items.iter().find(|p|p["id"]==plugin.id)).ok_or("Plugin is unavailable")?;
+    crate::plugins::api::providers::invoke(app,manifest,request).map_err(|e|e.message)
 }
 
 struct OnlineSearchPage {

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "desktop-lyrics-example",
+  "name": "简约桌面歌词示例",
+  "version": "1.0.0",
+  "kind": "desktop-lyrics",
+  "author": "Mono",
+  "description": "可自行修改的桌面歌词插件示例",
+  "capabilities": [
+    "desktop-lyrics"
+  ],
+  "configSchema": {
+    "fields": [
+      {
+        "key": "fontSize",
+        "label": "字号",
+        "type": "range",
+        "min": 16,
+        "max": 36,
+        "step": 1,
+        "defaultValue": 24
+      }
+    ]
+  },
+  "entry": {
+    "renderer": "ui/renderer.mjs"
+  },
+  "permissions": [
+    "player.read",
+    "player.control",
+    "lyrics.read",
+    "artwork.read"
+  ],
+  "contributions": {
+    "pages": [
+      {
+        "id": "lyrics",
+        "title": "简约桌面歌词示例",
+        "entry": "ui/index.html"
+      }
+    ]
+  }
+}

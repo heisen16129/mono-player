@@ -227,6 +227,14 @@ impl AudioWorkerState {
         })
     }
 
+    pub(crate) fn set_muted(&self, muted: bool) -> Result<(), String> {
+        self.expect_ok(WorkerRequest {
+            id: "audio-set-muted".to_string(),
+            method: methods::PLAYER_SET_MUTED.to_string(),
+            payload: json!({ "muted": muted }),
+        })
+    }
+
     pub(crate) fn set_output_device(&self, device_id: Option<String>) -> Result<(), String> {
         self.expect_ok(WorkerRequest {
             id: "audio-set-output-device".to_string(),
@@ -459,6 +467,11 @@ fn handle_request(runtime: &mut AudioWorkerRuntime, request: WorkerRequest) -> W
             runtime.backend.set_volume(payload.volume);
             Ok(())
         }),
+        methods::PLAYER_SET_MUTED => response_from_result(request.id, || {
+            let muted = request.payload["muted"].as_bool().ok_or("Expected muted flag")?;
+            runtime.backend.set_muted(muted);
+            Ok(())
+        }),
         methods::PLAYER_SET_SPEED => response_from_result(request.id, || {
             let payload = serde_json::from_value::<SpeedPayload>(request.payload)
                 .map_err(|err| err.to_string())?;
@@ -553,6 +566,7 @@ struct AudioBackend {
     audio_frame: Arc<Mutex<crate::player::AudioFrameSnapshot>>,
     last_error: Option<String>,
     volume: f32,
+    muted_volume: Option<f32>,
     speed: f32,
 }
 
@@ -574,6 +588,7 @@ impl Default for AudioBackend {
             audio_frame: Arc::new(Mutex::new(crate::player::AudioFrameSnapshot::default())),
             last_error: None,
             volume: 0.72,
+            muted_volume: None,
             speed: 1.0,
         }
     }
@@ -788,9 +803,20 @@ impl AudioBackend {
     }
 
     fn set_volume(&mut self, volume: f32) {
+        self.muted_volume = None;
         self.volume = volume.clamp(0.0, 1.0);
         if let Some(sink) = &self.sink {
             sink.set_volume(self.volume);
+        }
+    }
+
+    fn set_muted(&mut self, muted: bool) {
+        if muted && self.muted_volume.is_none() {
+            let previous = self.volume;
+            self.set_volume(0.0);
+            self.muted_volume = Some(previous);
+        } else if !muted {
+            if let Some(previous) = self.muted_volume.take() { self.set_volume(previous); }
         }
     }
 
@@ -885,6 +911,7 @@ impl AudioBackend {
             is_playing,
             duration: self.current_duration.map(|duration| duration.as_secs_f64()),
             volume: self.volume,
+            is_muted: self.muted_volume.is_some(),
             speed: self.speed,
             spectrum_levels: if is_playing {
                 spectrum_levels_snapshot(&self.spectrum_levels)
@@ -2082,6 +2109,22 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn mute_is_idempotent_and_explicit_volume_change_unmutes() {
+        let mut backend = super::AudioBackend::default();
+        backend.set_volume(0.4);
+        backend.set_muted(true);
+        backend.set_muted(true);
+        assert_eq!(backend.volume, 0.0);
+        assert!(backend.snapshot().is_muted);
+        backend.set_muted(false);
+        assert_eq!(backend.volume, 0.4);
+        backend.set_muted(true);
+        backend.set_volume(0.6);
+        backend.set_muted(false);
+        assert_eq!(backend.volume, 0.6);
+        assert!(!backend.snapshot().is_muted);
+    }
     #[test]
     fn actual_quality_survives_cache_metadata_and_old_cache_is_unknown() {
         let identity: super::OnlineAudioCacheIdentity = serde_json::from_value(serde_json::json!({"providerId":"p","trackId":"t","quality":"lossless"})).unwrap();

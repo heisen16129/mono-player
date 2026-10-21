@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { usePluginLyricsActions } from '../composables/usePluginLyricsActions';
 import { useLyricsActionMenu } from '../composables/useLyricsActionMenu';
 import { useLyricsAssociation } from '../composables/useLyricsAssociation';
 import { useLyricsCover } from '../composables/useLyricsCover';
@@ -142,6 +143,7 @@ const {
   beforeOpen: closeFontMenu,
 });
 const activeTrackRef = computed(() => props.activeTrack);
+usePluginLyricsActions(activeTrackRef, loadedLyricLines, lyricTimeOffset, openLyricSearchDialog);
 const {
   activeArtwork,
   activeLyrics,

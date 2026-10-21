@@ -1,6 +1,5 @@
-pub(crate) mod bridge;
 mod runtime_paths;
-use crate::{api_response::ApiResponse, store, workers::plugin::PluginWorkerState};
+use crate::{api_response::ApiResponse, store};
 use serde_json::{json, Value};
 use std::{
     io::{BufRead, BufReader},
@@ -15,6 +14,8 @@ pub(crate) const ID: &str = "mono-wasm-miot";
 struct Service {
     child: Child,
     url: String,
+    revision: String,
+    _connection: crate::plugins::api::http::ServiceConnection,
 }
 impl Drop for Service {
     fn drop(&mut self) {
@@ -49,13 +50,13 @@ pub(crate) fn installed(app: &AppHandle) -> Result<Value, String> {
     let plugins = store::read_value(app, "plugins.installed")
         .map_err(|e| e.to_string())?
         .unwrap_or(json!([]));
-    plugins
+    let plugin = plugins
         .as_array()
         .and_then(|p| {
             p.iter().find(|p| {
                 p["id"] == ID
                     && p["enabled"] == true
-                    && p["runtime"] == "wasm"
+                    && p["schemaVersion"] == 1 && p["apiVersion"] == 1
                     && p["capabilities"]
                         .as_array()
                         .is_some_and(|c| c.iter().any(|v| v == "speaker-control"))
@@ -65,24 +66,20 @@ pub(crate) fn installed(app: &AppHandle) -> Result<Value, String> {
             })
         })
         .cloned()
-        .ok_or("请先安装并启用小爱音箱插件".into())
-}
-fn bundle_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    if cfg!(debug_assertions) {
-        return Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../plugins/miot/dist"));
-    }
-    Ok(app
-        .path()
-        .resource_dir()
-        .map_err(|e| e.to_string())?
-        .join("miot"))
+        .ok_or_else(|| "请先安装并启用 v1 小爱音箱插件".to_string())?;
+    let principal = crate::plugins::api::authorization::Principal { plugin_id: ID.into(),
+        package_revision: plugin["packageRevision"].as_str().unwrap_or_default().into(), surface:"service".into() };
+    let grants = store::read_value(app, "plugins.api.grants").map_err(|e| e.to_string())?;
+    crate::plugins::api::authorization::authorize(&principal, Some(&plugin), grants.as_ref().and_then(|v| v.get(ID)), Some("speaker-service"))
+        .map_err(|error| error.message)?;
+    Ok(plugin)
 }
 fn start(app: &AppHandle) -> Result<String, String> {
     let plugin = installed(app)?;
     let state = app.state::<MiotState>();
     let mut slot = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(service) = slot.as_mut() {
-        if service
+        if plugin["packageRevision"] == service.revision && service
             .child
             .try_wait()
             .map_err(|e| e.to_string())?
@@ -92,20 +89,22 @@ fn start(app: &AppHandle) -> Result<String, String> {
         }
         slot.take();
     }
-    let response = app.state::<PluginWorkerState>().invoke_plugin(
-        plugin["entry"].as_str().ok_or("插件入口缺失")?.into(),
-        json!({"action":"speaker_service"}),
-        Some(ID.into()),
-        Some(vec![]),
-    )?;
-    if response["code"] != 1 || response["data"]["engine"] != "mono-miot" {
-        return Err("不支持的音箱服务方案".into());
-    }
-    let bundle = bundle_dir(app)?;
-    if !bundle.join("service.mjs").is_file() || !bundle.join("web/index.html").is_file() {
-        return Err("音箱组件尚未构建，请先运行 npm run miot:build".into());
+    let package_root = PathBuf::from(plugin["packageRoot"].as_str().ok_or("插件安装目录缺失")?);
+    let entry = |key: &str| -> Result<PathBuf, String> {
+        let relative = plugin["entry"][key].as_str().filter(|path| crate::plugins::api::manifest::valid_path(path)).ok_or("插件入口无效")?;
+        Ok(package_root.join(relative))
+    };
+    let service_entry = entry("service")?;
+    let bundle = if cfg!(debug_assertions) { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../plugin/miot/dist") }
+        else { app.path().resource_dir().map_err(|e|e.to_string())?.join("miot") };
+    if !service_entry.is_file() || !package_root.join("ui/dist/index.html").is_file() {
+        return Err("音箱插件包缺少服务或页面入口".into());
     }
     let data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let revision = plugin["packageRevision"].as_str().ok_or("插件修订缺失")?.to_string();
+    let connection = crate::plugins::api::http::start(app.clone(), crate::plugins::api::authorization::Principal {
+        plugin_id: ID.into(), package_revision: revision.clone(), surface:"service".into(),
+    }, data.join("plugin-sessions"))?;
     let node = bundle.join(if cfg!(windows) { "node.exe" } else { "node" });
     let mut command = Command::new(if node.is_file() {
         node
@@ -113,10 +112,10 @@ fn start(app: &AppHandle) -> Result<String, String> {
         PathBuf::from("node")
     });
     command
-        .arg(bundle.join("service.mjs"))
-        .arg(crate::mcp_bridge::bridge_file_path(&data))
+        .arg(service_entry)
+        .arg(&connection.file)
         .arg(data.join("miot"))
-        .arg(bundle.join("web"))
+        .arg(package_root.join("ui/dist"))
         .arg(runtime_paths::ffmpeg(&bundle))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -152,17 +151,17 @@ fn start(app: &AppHandle) -> Result<String, String> {
     *slot = Some(Service {
         child,
         url: url.clone(),
+        revision,
+        _connection: connection,
     });
     Ok(url)
 }
-#[tauri::command]
-pub(crate) async fn miot_open(app: AppHandle) -> ApiResponse<String> {
-    ApiResponse::from_result(
-        tauri::async_runtime::spawn_blocking(move || start(&app))
-            .await
-            .map_err(|e| e.to_string())
-            .and_then(|r| r),
-    )
+
+pub(crate) fn connection(app: &AppHandle) -> Result<Value, String> {
+    let mut url = tauri::Url::parse(&start(app)?).map_err(|e| e.to_string())?;
+    let token = url.fragment().ok_or("音箱服务凭据缺失")?.to_string();
+    url.set_fragment(None);
+    Ok(json!({"url":url.as_str(),"token":token}))
 }
 #[tauri::command]
 pub(crate) async fn miot_sync(app: AppHandle) -> ApiResponse<()> {

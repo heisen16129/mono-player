@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-native-wasm-gdstudio",
+  "name": "GD音乐台",
+  "version": "1.0.0",
+  "kind": "music",
+  "author": "GD Studio",
+  "description": "基于 GD音乐台 API 的学习用途音源插件，默认使用 netease，搜索列表不预取封面。",
+  "capabilities": [
+    "search",
+    "play",
+    "lyrics",
+    "cover"
+  ],
+  "permissions": [
+    "network"
+  ],
+  "configSchema": {
+    "fields": [
+      {
+        "defaultValue": "320",
+        "key": "defaultQuality",
+        "label": "默认音质",
+        "options": [
+          {
+            "label": "标准音质",
+            "value": "128"
+          },
+          {
+            "label": "较高音质",
+            "value": "192"
+          },
+          {
+            "label": "高音质",
+            "value": "320"
+          },
+          {
+            "label": "无损音质",
+            "value": "740"
+          },
+          {
+            "label": "最高音质",
+            "value": "999"
+          }
+        ],
+        "type": "select"
+      }
+    ]
+  },
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

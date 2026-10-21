@@ -41,7 +41,9 @@ export function usePluginMarketLabels({ appLocale, installingPluginIds }: UsePlu
       'cache-read': '读取缓存',
       'cache-write': '写入缓存',
       'download-write': '写入下载目录',
-      'audio-process': '处理所选本地音频并导出',
+      'service.run': '运行本地后台（可执行程序及访问文件）',
+      'files.choose': '选择本地文件或文件夹',
+      'files.reveal': '打开插件数据和输出位置',
       'speaker-service': '运行音箱服务并向音箱提供音乐',
     };
     return labels[permission] ?? permission;

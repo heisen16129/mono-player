@@ -1,0 +1,42 @@
+# Mono 小爱音箱插件
+
+基于 https://github.com/songloft-org/songloft-plugin-miot 移植，参考提交 `5daa04d5bf99eac146fc889009f9d3e069d6677e`。原项目说明及声明保存在 UPSTREAM.md。
+
+支持账号登录、设备管理、播放队列、歌单和收藏、音量与进度、分组控制、语音点歌、在线音源、定时任务、睡眠定时、续播记忆和工具箱。分组采用批量下发指令，不保证多设备采样级同步。
+
+## 使用
+
+1. 使用包含本次宿主修改的 Mono；旧版不能仅通过导入 WASM 获得此功能。
+2. 在插件中心导入 `mono-wasm-miot.monoplugin.zip` 并启用，通过播放栏音箱图标打开页面。
+3. 在音箱设置中扫码登录绑定设备的小米账号，刷新并选择设备。
+4. 电脑和音箱使用同一局域网，服务器地址填写电脑可访问的局域网地址。默认媒体端口 17843，Windows 防火墙需要允许局域网访问。
+5. 选择 Mono 歌单播放。在线点歌需要启用具有搜索和播放能力的音源插件。
+
+按小米返回的硬件型号自动选择播放指令。尚未在用户的小爱音箱 Pro 和第二台音箱上完成实机测试。
+
+关闭面板后服务继续运行；退出 Mono 或停用插件停止服务。登录凭据与设置保存在 Mono 应用数据目录的 `miot/settings.json`，请勿分享该文件。
+
+## 开发
+
+在项目根目录运行 `npm run miot:build` 构建，`npm run miot:test` 验证。首次构建需要网络、Node.js 20+、Rust 和 wasm32-unknown-unknown 目标，依赖会自动安装。开发播放转码需要 FFmpeg。
+
+Windows 打包已接入 `npm run miot:bundle`，复制本机 Node.js 和 FFmpeg 到安装资源，最终用户无需单独安装 Node.js。生成的运行时、网页和测试包不提交到仓库。
+
+`wasm/` 提供 Mono 插件元信息及受限服务方案；`mono/` 提供宿主适配与媒体服务；`src/` 和 `frontend/` 保留上游业务模块；宿主实现位于 `src-tauri/src/miot/`。
+
+管理服务仅监听本机；局域网端口仅提供带独立凭据的媒体访问。曲库、收藏和歌单由 Mono 提供，移除歌曲保留源文件。
+
+自动测试覆盖模拟登录、机型分支、分组失败隔离、定时任务、语音指令、歌曲编号、收藏、HTTP Range、接口权限、持久化和退出；不代替真实账号和设备验证。
+
+原作者署名及声明保留，本次未对外发布。再分发时还需遵守所选 Node.js、FFmpeg 及依赖许可。
+
+## 后端运行方式
+
+小爱使用 Vue 页面和 Node.js 后台服务，不包含 WASM 后端。plugin.json 的 entry.service 指向 dist/service.mjs，宿主校验插件授权后直接启动并管理服务。源码位于 backend/src/ 和 backend/mono/，页面源码位于 ui/frontend/。插件 ID 暂保留 mono-wasm-miot，以继续使用原有配置和存储；ID 不代表运行环境。
+
+2026-10-22 已更新本插件安装包：移除 WASM 薄层，页面声明为 dialog。其他插件安装包不随本次更新重建。
+
+## 目录用途
+
+backend/ 放后端源码，ui/frontend/ 放 Vue 源码，ui/dist/ 放当前页面构建结果。根目录 dist/ 放 service.mjs 和运行依赖；测试构建结果写入仓库 target/miot-tests/，不混入运行产物。node_modules/ 是本地开发依赖，不进入安装包。build.mjs、bundle.mjs、test.mjs 分别用于构建、准备运行依赖和测试；package.json、锁文件和 TypeScript/Vite 配置是开发配置，不是后台进程。
+

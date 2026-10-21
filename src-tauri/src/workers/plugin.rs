@@ -91,23 +91,6 @@ impl PluginWorkerState {
         })
     }
 
-    pub(crate) fn refresh_plugin_wasm_cache(&self, entry: String) -> Result<(), String> {
-        if !entry.starts_with("http://") && !entry.starts_with("https://") {
-            return Ok(());
-        }
-
-        log_plugin_args(
-            "PluginWorkerState::refresh_plugin_wasm_cache",
-            json!({ "entry": entry }),
-        );
-        let _: Vec<u8> = self.deserialize_response(WorkerRequest {
-            id: "plugin-refresh-wasm-cache".to_string(),
-            method: methods::PLUGIN_READ_WASM_BYTES.to_string(),
-            payload: json!({ "entry": entry, "refreshCache": true }),
-        })?;
-        Ok(())
-    }
-
     pub(crate) fn invoke_plugin(
         &self,
         entry: String,
@@ -509,9 +492,12 @@ fn invoke_plugin_backend(payload: InvokePayload, cache_dir: &Path) -> Result<Val
 
     let wasm_bytes =
         crate::plugins::read_plugin_wasm_bytes_backend(payload.entry, Some(cache_dir), false)?;
-    let engine = Engine::default();
+    let mut config = wasmtime::Config::new();
+    config.consume_fuel(true);
+    let engine = Engine::new(&config).map_err(|e|e.to_string())?;
     let module = Module::from_binary(&engine, &wasm_bytes).map_err(|err| err.to_string())?;
     let mut store = Store::new(&engine, ());
+    store.set_fuel(500_000_000).map_err(|e|e.to_string())?;
     let instance = Instance::new(&mut store, &module, &[]).map_err(|err| err.to_string())?;
     let runtime = WasmPluginRuntime::new(&mut store, instance)?;
     let mut current_request = payload.request;
@@ -896,6 +882,25 @@ mod tests {
 
     fn test_cache_dir() -> PathBuf {
         std::env::temp_dir().join("mono-player-plugin-worker-tests")
+    }
+
+    #[test]
+    #[ignore = "requires all migrated WASM artifacts"]
+    fn all_migrated_wasm_metadata_matches_canonical_manifests() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin");
+        let mut count = 0;
+        for directory in std::fs::read_dir(&root).unwrap().flatten().filter(|e|e.path().join("plugin.json").is_file()) {
+            let manifest: Value = serde_json::from_slice(&std::fs::read(directory.path().join("plugin.json")).unwrap()).unwrap();
+            let Some(entry) = manifest["entry"]["wasm"].as_str() else { continue; };
+            let response = invoke_plugin_backend(InvokePayload {
+                entry:directory.path().join(entry).to_string_lossy().into_owned(),
+                request:json!({"action":"metadata"}), plugin_id:Some(manifest["id"].as_str().unwrap().into()), permissions:Some(vec![]),
+            },&test_cache_dir()).unwrap();
+            assert_eq!(response["code"],1,"{}",manifest["id"]);
+            assert_eq!(response["data"],manifest,"{}",manifest["id"]);
+            count += 1;
+        }
+        assert_eq!(count,17);
     }
 
     #[test]

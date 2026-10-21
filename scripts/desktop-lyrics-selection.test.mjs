@@ -7,7 +7,7 @@ const source = readFileSync(new URL('../src/services/desktopLyricsOptions.ts', i
 const { code } = await transform(source.replace(/^import .*;\r?\n/gm, '').replaceAll('export ', ''), { loader:'ts' });
 for (const [current, selected, expected] of [
   ['desktop-lyrics', 'card:ancient', 'card'],
-  ['desktop-playback-card', 'floating', 'floating'],
+  ['plugin-desktop-playback-card', 'floating', 'floating'],
   [null, 'card:sticky', null],
 ]) {
   test(`select ${selected} while ${current || 'closed'}`, async () => {
@@ -18,7 +18,8 @@ for (const [current, selected, expected] of [
       saveDesktopCardStyle:async style=>styles.push(style),
       savePluginConfig:async (id, config)=>saved.push({id, config}),
       openDesktopLyricsWindow:async()=>opened.push('floating'),
-      openDesktopPlaybackCard:async()=>opened.push('card'),
+      listPluginPackages:async()=>[{id:'playback-card',enabled:true,entry:{renderer:'ui/renderer.mjs'}}],
+      openPluginDesktop:async()=>opened.push('card'),
     });
     vm.runInContext(code, context);
     await vm.runInContext(`selectDesktopLyricsStyle('${selected}')`, context);
@@ -37,11 +38,12 @@ for (const rendererId of ['playback-card', 'floating', undefined]) {
       WebviewWindow:{getByLabel:async()=>null},
       getPluginConfig:async id=>{assert.equal(id,'desktop-lyrics.host');return {rendererId};},
       openDesktopLyricsWindow:async()=>opened.push('floating'),
-      openDesktopPlaybackCard:async entry=>opened.push(entry),
+      listPluginPackages:async()=>[{id:'playback-card',enabled:true,entry:{renderer:'ui/renderer.mjs'}}],
+      openPluginDesktop:async plugin=>opened.push(plugin.id),
     });
     vm.runInContext(code, context);
     await vm.runInContext('openSelectedDesktopLyrics()', context);
-    assert.deepEqual(opened, [rendererId === 'playback-card' ? 'builtin:playback-card' : 'floating']);
+    assert.deepEqual(opened, [rendererId === 'playback-card' ? 'playback-card' : 'floating']);
   });
 }
 

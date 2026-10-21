@@ -57,7 +57,7 @@ pub(crate) struct QueueSnapshot {
     sources: Vec<String>,
     current_source: Option<String>,
     current_index: Option<usize>,
-    playback_mode: String,
+    pub(crate) playback_mode: String,
 }
 
 impl Default for PlayerBackend {
@@ -155,7 +155,7 @@ pub(super) fn set_playback_mode_backend(backend: &mut PlayerBackend, playback_mo
 
 fn normalize_playback_mode(playback_mode: String) -> String {
     match playback_mode.as_str() {
-        "shuffle" | "fixed" => playback_mode,
+        "shuffle" | "fixed" | "order" | "once" => playback_mode,
         _ => "repeat".to_string(),
     }
 }
@@ -278,6 +278,10 @@ pub(super) fn queue_playback_options(backend: &PlayerBackend) -> (String, bool, 
 }
 
 pub(super) fn refresh_queue_index(backend: &mut PlayerBackend) {
+    if let Some(index) = backend.queue_index {
+        let current=backend.current_source.as_deref().and_then(|source|queue_source_key_for_source(&backend.queue_tracks,source));
+        if current.as_ref().is_some_and(|key|backend.queue_sources.get(index)==Some(key)) { return; }
+    }
     backend.queue_index = backend
         .current_source
         .as_ref()
@@ -376,7 +380,7 @@ pub(super) fn queue_track_plugin_source_key(track: &QueueTrack) -> Option<String
     }
 }
 
-fn build_play_order_sources(
+pub(super) fn build_play_order_sources(
     tracks: &[QueueTrack],
     active_source: Option<&str>,
     playback_mode: &str,
@@ -529,7 +533,7 @@ pub(super) fn current_plugin_queue_source_for_backend(
         .map(|source| (source, Some(queue_index)))
 }
 
-fn queue_source_exists_for_backend(backend: &PlayerBackend, source: &str) -> bool {
+pub(super) fn queue_source_exists_for_backend(backend: &PlayerBackend, source: &str) -> bool {
     if is_plugin_queue_source(source) && queue_track_for_source(backend, source).is_some() {
         return true;
     }
@@ -586,6 +590,8 @@ fn calculate_next_queue_index(backend: &PlayerBackend) -> Option<usize> {
     let current_index = current_queue_index(backend).unwrap_or(0);
     match backend.playback_mode.as_str() {
         "fixed" => Some(current_index),
+        "once" => None,
+        "order" => ((current_index+1)..backend.queue_sources.len()).find(|i|queue_source_exists_for_backend(backend,&backend.queue_sources[*i])),
         _ => next_valid_queue_index(backend, current_index),
     }
 }
@@ -602,6 +608,8 @@ fn calculate_previous_queue_index(backend: &PlayerBackend) -> Option<usize> {
     let current_index = current_queue_index(backend).unwrap_or(0);
     match backend.playback_mode.as_str() {
         "fixed" => Some(current_index),
+        "once" => None,
+        "order" => (0..current_index).rev().find(|i|queue_source_exists_for_backend(backend,&backend.queue_sources[*i])),
         _ => previous_valid_queue_index(backend, current_index),
     }
 }
@@ -672,6 +680,26 @@ fn random_usize(max: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn public_order_and_once_modes_do_not_wrap_at_boundaries() {
+        let first = temp_audio_file();
+        let second = temp_audio_file();
+        let mut backend = PlayerBackend {queue_sources:vec![first.clone(),second.clone()],queue_index:Some(1),playback_mode:"order".into(),..PlayerBackend::default()};
+        assert_eq!(calculate_next_queue_index(&backend),None);
+        assert_eq!(calculate_previous_queue_index(&backend),Some(0));
+        backend.queue_index=Some(0);
+        assert_eq!(calculate_previous_queue_index(&backend),None);
+        assert_eq!(calculate_next_queue_index(&backend),Some(1));
+        backend.playback_mode="once".into();
+        assert_eq!(calculate_next_queue_index(&backend),None);
+        assert_eq!(calculate_previous_queue_index(&backend),None);
+        backend.playback_mode="repeat".into();
+        assert_eq!(calculate_previous_queue_index(&backend),Some(1));
+        backend.playback_mode="fixed".into();
+        assert_eq!(calculate_next_queue_index(&backend),Some(0));
+        let _=remove_file(first); let _=remove_file(second);
+    }
+
     #[test]
     fn queue_deduplicates_local_paths_but_preserves_url_case() {
         let track = |id, path: &str| serde_json::from_value::<super::QueueTrack>(serde_json::json!({"id":id,"path":path,"title":"Song"})).unwrap();

@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run miot:bundle && npm run build",
+    "beforeBuildCommand": "npm run miot:bundle && npm run plugins:v1:build && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -51,10 +51,33 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../plugins/miot/dist/service.mjs": "miot/service.mjs",
-      "../plugins/miot/dist/web/": "miot/web/",
-      "../plugins/miot/dist/node.exe": "miot/node.exe",
-      "../plugins/miot/dist/ffmpeg.exe": "miot/ffmpeg.exe"
+      "../plugin/dist/": "plugin-packages/",
+      "../plugin/miot/dist/node.exe": "miot/node.exe",
+      "../plugin/miot/dist/ffmpeg.exe": "miot/ffmpeg.exe",
+      "../plugin/apple-music-lyrics/apple-music-lyrics.monoplugin.zip": "plugin-packages/apple-music-lyrics/apple-music-lyrics.monoplugin.zip",
+      "../plugin/aq-lyrics/mono-wasm-aq-lyrics.monoplugin.zip": "plugin-packages/aq-lyrics/mono-wasm-aq-lyrics.monoplugin.zip",
+      "../plugin/ayun-lyrics/mono-wasm-ayun-lyrics.monoplugin.zip": "plugin-packages/ayun-lyrics/mono-wasm-ayun-lyrics.monoplugin.zip",
+      "../plugin/betterlyrics/betterlyrics.monoplugin.zip": "plugin-packages/betterlyrics/betterlyrics.monoplugin.zip",
+      "../plugin/desktop-lyrics-example/desktop-lyrics-example.monoplugin.zip": "plugin-packages/desktop-lyrics-example/desktop-lyrics-example.monoplugin.zip",
+      "../plugin/fanlyrics/fanlyrics.monoplugin.zip": "plugin-packages/fanlyrics/fanlyrics.monoplugin.zip",
+      "../plugin/gdstudio-music/mono-native-wasm-gdstudio.monoplugin.zip": "plugin-packages/gdstudio-music/mono-native-wasm-gdstudio.monoplugin.zip",
+      "../plugin/huyao-kuwo/mono-native-wasm-huyao-kuwo.monoplugin.zip": "plugin-packages/huyao-kuwo/mono-native-wasm-huyao-kuwo.monoplugin.zip",
+      "../plugin/mineradio-original-lyrics/mineradio-original-lyrics.monoplugin.zip": "plugin-packages/mineradio-original-lyrics/mineradio-original-lyrics.monoplugin.zip",
+      "../plugin/miot/mono-wasm-miot.monoplugin.zip": "plugin-packages/miot/mono-wasm-miot.monoplugin.zip",
+      "../plugin/netease-music/mono-native-wasm-netease.monoplugin.zip": "plugin-packages/netease-music/mono-native-wasm-netease.monoplugin.zip",
+      "../plugin/playback-card/playback-card.monoplugin.zip": "plugin-packages/playback-card/playback-card.monoplugin.zip",
+      "../plugin/shanhaiyun-kw-music/mono-native-wasm-shanhaiyun-kw.monoplugin.zip": "plugin-packages/shanhaiyun-kw-music/mono-native-wasm-shanhaiyun-kw.monoplugin.zip",
+      "../plugin/stem-separation/mono-wasm-stem-separation.monoplugin.zip": "plugin-packages/stem-separation/mono-wasm-stem-separation.monoplugin.zip",
+      "../plugin/theme-dark/mono-wasm-theme-dark.monoplugin.zip": "plugin-packages/theme-dark/mono-wasm-theme-dark.monoplugin.zip",
+      "../plugin/theme-forest-mint/mono-wasm-theme-forest-mint.monoplugin.zip": "plugin-packages/theme-forest-mint/mono-wasm-theme-forest-mint.monoplugin.zip",
+      "../plugin/theme-gray-white/mono-wasm-theme-gray-white.monoplugin.zip": "plugin-packages/theme-gray-white/mono-wasm-theme-gray-white.monoplugin.zip",
+      "../plugin/theme-transparent/mono-wasm-theme-transparent.monoplugin.zip": "plugin-packages/theme-transparent/mono-wasm-theme-transparent.monoplugin.zip",
+      "../plugin/xiaogou-music/mono-native-wasm-xiaogou.monoplugin.zip": "plugin-packages/xiaogou-music/mono-native-wasm-xiaogou.monoplugin.zip",
+      "../plugin/xiaoqiu-music/mono-native-wasm-xiaoqiu.monoplugin.zip": "plugin-packages/xiaoqiu-music/mono-native-wasm-xiaoqiu.monoplugin.zip",
+      "../plugin/xiaowo-music/mono-native-wasm-xiaowo.monoplugin.zip": "plugin-packages/xiaowo-music/mono-native-wasm-xiaowo.monoplugin.zip",
+      "../plugin/xiaoyun-music/mono-native-wasm-xiaoyun.monoplugin.zip": "plugin-packages/xiaoyun-music/mono-native-wasm-xiaoyun.monoplugin.zip",
+      "../plugin/yuanli-kw-music/mono-native-wasm-yuanli-kw.monoplugin.zip": "plugin-packages/yuanli-kw-music/mono-native-wasm-yuanli-kw.monoplugin.zip",
+      "../plugin/yuanli-qq-music/mono-native-wasm-yuanli-qq.monoplugin.zip": "plugin-packages/yuanli-qq-music/mono-native-wasm-yuanli-qq.monoplugin.zip"
     }
   }
 }

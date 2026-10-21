@@ -20,6 +20,8 @@ export function createPlayerPlaybackStateActions({
 
   const playbackModeLabel = computed(() => {
     if (playbackMode.value === 'shuffle') return resolveLocale(settings.value.locale) === 'en-US' ? 'Shuffle' : '随机播放';
+    if (playbackMode.value === 'order') return resolveLocale(settings.value.locale) === 'en-US' ? 'In order' : '顺序播放';
+    if (playbackMode.value === 'once') return resolveLocale(settings.value.locale) === 'en-US' ? 'Play once' : '播放一次';
     if (playbackMode.value === 'repeat') return resolveLocale(settings.value.locale) === 'en-US' ? 'Repeat' : '循环播放';
     return resolveLocale(settings.value.locale) === 'en-US' ? 'Single track' : '固定播放';
   });

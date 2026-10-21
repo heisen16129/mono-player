@@ -94,7 +94,7 @@ export function usePluginInstallActions({
   }
 
   async function batchUninstallSelected() {
-    await runBatch(selectedPlugins.value.map(p => ({ action: 'uninstall', id: p.id })));
+    await runBatch(selectedPlugins.value.filter(p => p.installed).map(p => ({ action: 'uninstall', id: p.id })));
   }
 
   async function batchDisableSelected() {
@@ -105,7 +105,7 @@ export function usePluginInstallActions({
     const selected = await open({
       multiple: false,
       filters: [
-        { name: '插件文件', extensions: ['wasm', 'json'] },
+        { name: 'Mono 插件包', extensions: ['zip'] },
       ],
     });
 

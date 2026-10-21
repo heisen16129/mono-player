@@ -212,7 +212,7 @@ iframe 加载后先收到 `{ type: 'init', protocolVersion: 2 }`，模块挂载�
 
 - [x] 扩展渲染上下文，向插件提供标题、艺术家、专辑和时长。
 - [x] 新增 `plugins/apple-music-lyrics` 独立插件包，不编译进内置渲染器。
-- [x] 提供可从插件中心安装的 `manifest.json` 和 sandbox `renderer.mjs`。
+- [x] 提供根目录 `plugin.json`、sandbox `ui/renderer.mjs` 和可从插件中心导入的 `.monoplugin.zip`。
 - [x] 实现左侧封面/曲目信息和右侧歌词列布局。
 - [x] 实现当前歌词聚焦、前后歌词渐隐、滚动居中和点击跳转。
 - [x] 保留拖动浏览、歌词同步和空/加载状态。

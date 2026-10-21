@@ -1,5 +1,6 @@
 pub(crate) mod library_directories;
 pub(crate) mod plugin_management;
+pub(crate) mod plugin_api;
 pub(crate) mod custom_theme;
 pub(crate) mod download_record;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

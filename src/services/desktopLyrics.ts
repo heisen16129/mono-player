@@ -1,4 +1,3 @@
-import { broadcastDesktopCardState } from './desktopPlaybackCard';
 import { emit } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { Track } from '../types/music';
@@ -98,16 +97,14 @@ export async function openDesktopLyricsWindow() {
 
 export async function toggleDesktopLyricsWindow() {
   if (!isTauriRuntime()) return null;
-  const { closeDesktopLyrics, openSelectedDesktopLyrics } = await import('./desktopLyricsOptions');
-  const existing = await WebviewWindow.getByLabel(DESKTOP_LYRICS_LABEL)
-    ?? await WebviewWindow.getByLabel('desktop-playback-card');
-  if (existing) { await closeDesktopLyrics(); return null; }
+  const { closeDesktopLyrics, openSelectedDesktopLyrics, isDesktopLyricsVisible } = await import('./desktopLyricsOptions');
+  if (await isDesktopLyricsVisible()) { await closeDesktopLyrics(); return null; }
   await openSelectedDesktopLyrics();
   return null;
 }
 export async function broadcastDesktopLyricsState(state: DesktopLyricsState) {
   if (!isTauriRuntime()) return;
-  await broadcastDesktopCardState(state);
+  await emit('plugins://presentation', state);
   if (!desktopLyricsWindow) return;
 
   await emit(DESKTOP_LYRICS_UPDATE_EVENT, state);

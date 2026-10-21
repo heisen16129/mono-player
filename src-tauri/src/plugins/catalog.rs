@@ -22,10 +22,15 @@ fn ensure_source_cache(values: &mut Map<String, Value>) {
     }
 }
 
+fn v1_item(item: &Value) -> bool {
+    item["entry"].as_str().is_some_and(|entry| entry.split('?').next().unwrap_or_default().ends_with(".monoplugin.zip"))
+}
+
 fn snapshot(values: &Map<String, Value>) -> Value {
     let sources = values.get(SOURCES).and_then(Value::as_object);
     let mut merged = std::collections::BTreeMap::new();
     let mut official = sources.and_then(|s| s.get(OFFICIAL)).cloned().unwrap_or(json!([]));
+    if let Some(items) = official.as_array_mut() { items.retain(v1_item); }
     let mut lists = vec![official.clone()];
     for sub in subscriptions(values) {
         if let Some(items) = sources.and_then(|s| s.get(sub["id"].as_str().unwrap_or_default())) { lists.push(items.clone()); }
@@ -34,7 +39,7 @@ fn snapshot(values: &Map<String, Value>) -> Value {
     if sources.is_none() { lists.push(values.get("plugins.catalog.cache").cloned().unwrap_or(json!([]))); }
     if let Some(legacy) = sources.and_then(|s| s.get("legacy")) { lists.insert(0, legacy.clone()); }
     for list in lists {
-        for item in list.as_array().into_iter().flatten() {
+        for item in list.as_array().into_iter().flatten().filter(|item| v1_item(item)) {
             if let Some(id) = item["id"].as_str() { merged.insert(id.to_owned(), item.clone()); }
         }
     }
@@ -44,7 +49,7 @@ fn snapshot(values: &Map<String, Value>) -> Value {
     let installed = values.get("plugins.installed").and_then(Value::as_array);
     let status = |item: &Value| {
         let current = installed.and_then(|items| items.iter().find(|p| p["id"] == item["id"]));
-        match current { None => "available", Some(p) if p["version"] != item["version"] => "update", _ => "installed" }
+        match current { None => "available", Some(p) if p["version"] != item["version"] || api::registry::record(p).is_err() => "update", _ => "installed" }
     };
     for item in &mut catalog { item["managementStatus"] = json!(status(item)); }
     for item in official.as_array_mut().into_iter().flatten() { item["managementStatus"] = json!(status(item)); }
@@ -52,7 +57,43 @@ fn snapshot(values: &Map<String, Value>) -> Value {
 }
 
 fn read_snapshot(app: &AppHandle) -> Result<Value, String> {
-    Ok(snapshot(&crate::store::read_values(app)?))
+    let values = crate::store::read_values(app)?;
+    let mut result = snapshot(&values);
+    let bundled = bundled(app);
+    for key in ["official", "catalog"] {
+        let items = result[key].as_array_mut().unwrap();
+        for item in &bundled {
+            if !items.iter().any(|p| p["id"] == item["id"]) {
+                let mut item=item.clone();
+                let current=values.get("plugins.installed").and_then(Value::as_array).and_then(|items|items.iter().find(|p|p["id"]==item["id"]));
+                item["managementStatus"]=json!(match current {None=>"available",Some(p) if p["version"]!=item["version"] || api::registry::record(p).is_err()=>"update",_=>"installed"});
+                items.push(item);
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn bundled(app: &AppHandle) -> Vec<Value> {
+    let root = if cfg!(debug_assertions) { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../plugin/dist") }
+        else { match app.path().resource_dir() { Ok(root) => root.join("plugin-packages"), Err(_) => return vec![] } };
+    let index: Value = match fs::read(root.join("catalog.json")).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()) {
+        Some(value) => value, None => return vec![],
+    };
+    index.as_array().into_iter().flatten().filter_map(|value| {
+        let file = value["file"].as_str()?;
+        if !api::manifest::valid_path(file) { return None; }
+        let package_root = if cfg!(debug_assertions) { root.parent()? } else { root.as_path() };
+        let path = package_root.join(file);
+        if !path.is_file() { return None; }
+        let mut manifest = value.clone();
+        manifest.as_object_mut()?.remove("file");
+        manifest["packageUrl"] = json!(format!("https://bundled.invalid/{file}"));
+        let item = normalize_catalog_item_value(manifest)?;
+        let mut item = serde_json::to_value(item).ok()?;
+        item["entry"] = json!(path); item["sourceKind"] = json!("official");
+        Some(item)
+    }).collect()
 }
 
 #[tauri::command]
@@ -129,31 +170,25 @@ pub(crate) async fn plugin_catalog(app: AppHandle, action: String, id: Option<St
 mod tests {
     use super::*;
     #[test]
-    fn merge_is_stable_and_status_uses_installed_version() {
-        let values = json!({"plugins.subscriptions":[{"id":"s"}],"plugins.catalog.sources":{"official-plugin-store":[{"id":"p","name":"P","version":"1"}],"s":[{"id":"p","name":"P","version":"2"},{"id":"hidden","name":"H"}]},"plugins.deleted":["hidden"],"plugins.installed":[{"id":"p","version":"1"}]}).as_object().unwrap().clone();
+    fn v1_catalog_merges_sources_and_rejects_old_executable_entries() {
+        let values = json!({"plugins.subscriptions":[{"id":"s"}],"plugins.catalog.sources":{
+            "official-plugin-store":[{"id":"p","name":"P","version":"1","entry":"https://a/p.monoplugin.zip"},
+              {"id":"legacy","entry":"https://a/old.wasm"}],
+            "s":[{"id":"p","name":"P","version":"2","entry":"https://b/p.monoplugin.zip"}]},
+            "plugins.installed":[{"id":"p","version":"1"}]}).as_object().unwrap().clone();
         let result = snapshot(&values);
         assert_eq!(result["catalog"].as_array().unwrap().len(),1);
         assert_eq!(result["catalog"][0]["version"],"2");
-        assert_eq!(result["official"][0]["version"],"1");
+        assert_eq!(result["catalog"][0]["managementStatus"],"update");
+        assert_eq!(result["official"].as_array().unwrap().len(),1);
     }
     #[test]
-    fn legacy_cache_keeps_other_sources_when_one_refreshes() {
-        let mut values = json!({"plugins.subscriptions":[{"id":"a","url":"https://a.test"},{"id":"b","url":"https://b.test"}],"plugins.catalog.cache":[{"id":"a-song","name":"A","sourceUrl":"https://a.test"},{"id":"b-song","name":"B","sourceUrl":"https://b.test"}]}).as_object().unwrap().clone();
-        ensure_source_cache(&mut values);
-        values.get_mut(SOURCES).unwrap()["a"] = json!([]);
-        let result = snapshot(&values);
-        assert_eq!(result["catalog"].as_array().unwrap().len(), 1);
-        assert_eq!(result["catalog"][0]["id"], "b-song");
-        // A failed refresh does not write to the cache, so B's last success remains.
-        assert_eq!(snapshot(&values)["catalog"], result["catalog"]);
+    fn catalog_requires_canonical_manifest_and_package_url() {
+        let mut value: Value = serde_json::from_str(include_str!("../../../plugin/apple-music-lyrics/plugin.json")).unwrap();
+        assert!(normalize_catalog_item_value(value.clone()).is_none());
+        value["packageUrl"] = json!("https://example.com/apple.monoplugin.zip");
+        assert!(normalize_catalog_item_value(value.clone()).is_some());
+        value["entry"] = json!("https://example.com/renderer.mjs");
+        assert!(normalize_catalog_item_value(value).is_none());
     }
-
-    #[test]
-    fn market_statuses_cover_install_update_and_available() {
-        let values = json!({"plugins.catalog.sources":{"official-plugin-store":[{"id":"new","version":"1"},{"id":"old","version":"2"},{"id":"same","version":"1"}]},"plugins.installed":[{"id":"old","version":"1"},{"id":"same","version":"1"}]}).as_object().unwrap().clone();
-        let result = snapshot(&values);
-        let statuses: Map<String, Value> = result["official"].as_array().unwrap().iter().map(|item| (item["id"].as_str().unwrap().into(), item["managementStatus"].clone())).collect();
-        assert_eq!(Value::Object(statuses), json!({"new":"available","old":"update","same":"installed"}));
-    }
-
 }

@@ -1,0 +1,254 @@
+import {
+  UPSTREAM_BODY_HTML,
+  UPSTREAM_CSS,
+  UPSTREAM_INLINE_HANDLER_NAMES,
+  UPSTREAM_MODULE_COUNT,
+  UPSTREAM_RUNTIME,
+  UPSTREAM_WORKSHOP_SRCDOC,
+} from './generated/upstream.mjs';
+import upstreamAdapterSource from './upstream-adapter.js.part';
+import pluginOverrides from './plugin-overrides.css';
+import skullAssetUrl from '../upstream/public/assets/skull-decimation-points.bin';
+import { applyMessage, createContext, toRuntimeContext } from './bridge/context-adapter.mjs';
+import { createWallpaperSampler } from './bridge/wallpaper-sampler.mjs';
+
+let target = null;
+let rendererApi = null;
+let context = createContext();
+let runtimeApi = null;
+let styleElement = null;
+let cleanupActions = null;
+let previousFetch = null;
+let previousInlineHandlers = null;
+let previousWorkshopSrcdoc = null;
+let storagePersistTimer = 0;
+let wallpaperSampler = null;
+
+const PRIVATE_STORAGE_KEY = 'mineradioOriginalStorage';
+let privateStorage = ''; 
+const excludedStorageKey = (key) => /(login|cookie|last-playback|listen-stats|local-beat|library|cache)/i.test(key);
+
+function jsonResponse(value, status = 200) {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+  });
+}
+
+function installStorageFallback() {
+  try {
+    localStorage.setItem('mineradio-startup-fast-skip-v1', '1');
+    localStorage.setItem('mineradio-visual-guide-seen-v2', '1');
+    localStorage.removeItem('mineradio-last-playback-v1');
+    return;
+  } catch (error) {
+    let restored = {};
+    try { restored = JSON.parse(String(privateStorage || '{}')) || {}; } catch (parseError) {}
+    const memory = new Map(Object.entries(restored).map(([key, value]) => [String(key), String(value)]));
+    memory.set('mineradio-startup-fast-skip-v1', '1');
+    memory.set('mineradio-visual-guide-seen-v2', '1');
+    memory.delete('mineradio-last-playback-v1');
+    const schedulePersist = () => {
+      clearTimeout(storagePersistTimer);
+      storagePersistTimer = setTimeout(() => {
+        const entries = {};
+        for (const [key, value] of memory) {
+          if (key.startsWith('mineradio-') && !excludedStorageKey(key)) entries[key] = value;
+        }
+        const serialized = JSON.stringify(entries);
+        if (serialized === privateStorage) return;
+        rendererApi.storage.set(PRIVATE_STORAGE_KEY, serialized).then(() => { privateStorage = serialized; });
+      }, 240);
+    };
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        get length() { return memory.size; },
+        clear() { memory.clear(); },
+        getItem(key) { return memory.has(String(key)) ? memory.get(String(key)) : null; },
+        key(index) { return [...memory.keys()][index] ?? null; },
+        removeItem(key) { memory.delete(String(key)); schedulePersist(); },
+        setItem(key, value) { memory.set(String(key), String(value)); schedulePersist(); },
+      },
+    });
+  }
+}
+
+function installEnvironment() {
+  installStorageFallback();
+  previousWorkshopSrcdoc = window.__monoMineradioWorkshopSrcdoc;
+  window.__monoMineradioWorkshopSrcdoc = UPSTREAM_WORKSHOP_SRCDOC;
+  previousFetch = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = String(typeof input === 'string' ? input : input?.url || '');
+    if (/assets\/skull-decimation-points\.bin(?:\?|$)/i.test(url)) return previousFetch(skullAssetUrl, init);
+    if (/^(?:https?:\/\/[^/]+)?\/api\//i.test(url)) return jsonResponse({});
+    return previousFetch(input, init);
+  };
+  if (!window.electronAPI) {
+    window.electronAPI = new Proxy({}, {
+      get(_target, property) {
+        if (String(property).startsWith('on')) return () => () => {};
+        return async () => null;
+      },
+    });
+  }
+  window.open = () => null;
+}
+
+
+function bindHostActions() {
+  const abort = new AbortController();
+  const options = { capture: true, signal: abort.signal };
+  const clickActions = new Map([
+    ['play-btn', () => context.playback.isPlaying ? rendererApi.player.pause() : rendererApi.player.play()],
+    ['prev-btn', () => rendererApi.player.previous()],
+    ['next-btn', () => rendererApi.player.next()],
+    ['heart-btn', () => rendererApi.favorites.set(context.activeTrack.id, !context.playback.isFavorite)],
+    ['play-mode-btn', () => rendererApi.player.setMode(['loop','shuffle','single'][(['repeat','shuffle','fixed'].indexOf(context.playback.playbackMode) + 1) % 3])],
+  ]);
+  document.addEventListener('click', (event) => {
+    const button = event.target?.closest?.('button');
+    const action = button ? clickActions.get(button.id) : null;
+    if (action) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      action();
+      return;
+    }
+    const queueItem = event.target?.closest?.('[data-queue-index]');
+    if (queueItem && queueItem.closest('#queue-list, #mini-queue-list')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      rendererApi.queue.play(context.queueTracks[Number(queueItem.dataset.queueIndex)].entryId);
+      return;
+    }
+    const settingsTab = event.target?.closest?.('#fx-panel-tabs [data-fx-tab]');
+    if (settingsTab) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      runtimeApi?.selectSettingsTab(settingsTab.dataset.fxTab);
+      return;
+    }
+    const inlineTarget = event.target?.closest?.('[onclick]');
+    if (inlineTarget && typeof inlineTarget.onclick !== 'function') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      runtimeApi?.invokeInlineHandler(inlineTarget.getAttribute('onclick'), event, inlineTarget);
+    }
+  }, options);
+  for (const eventType of ['error', 'input', 'keydown', 'mouseleave', 'mousemove']) {
+    document.addEventListener(eventType, (event) => {
+      const attribute = `on${eventType}`;
+      const inlineTarget = event.target?.closest?.(`[${attribute}]`);
+      if (!inlineTarget || typeof inlineTarget[attribute] === 'function') return;
+      runtimeApi?.invokeInlineHandler(inlineTarget.getAttribute(attribute), event, inlineTarget);
+    }, options);
+  }
+  document.getElementById('progress-bar')?.addEventListener('pointerup', (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(1, rect.width)));
+    rendererApi.player.seek(ratio * (Number(context.activeTrack?.duration) || 0));
+  }, { signal: abort.signal });
+  document.getElementById('volume-slider')?.addEventListener('input', (event) => {
+    const originalVolume = Math.min(1, Math.max(0, Number(event.currentTarget.value) || 0));
+    rendererApi.player.setVolume(originalVolume);
+  }, { signal: abort.signal });
+  return () => abort.abort();
+}
+
+function runOriginalRuntime() {
+  previousInlineHandlers = new Map(UPSTREAM_INLINE_HANDLER_NAMES.map((name) => [
+    name,
+    Object.prototype.hasOwnProperty.call(window, name) ? window[name] : undefined,
+  ]));
+  const exportInlineHandlers = UPSTREAM_INLINE_HANDLER_NAMES.map((name) => (
+    `if(typeof ${name}==='function')window[${JSON.stringify(name)}]=${name};`
+  )).join('');
+  const runtimeFactory = new Function(
+    `${UPSTREAM_RUNTIME}\n${exportInlineHandlers}\n${upstreamAdapterSource}\n//# sourceURL=mineradio-2.1.0-original-runtime.js`,
+  );
+  runtimeFactory.call(window);
+  runtimeApi = window.__monoMineradioOriginal;
+  if (!runtimeApi) throw new Error('Mineradio original adapter did not initialize.');
+}
+
+function renderContext() {
+  const runtimeContext = toRuntimeContext(context);
+  const isNativeScene = runtimeContext.background?.source === 'wallpaper'
+    && runtimeContext.background?.wallpaperProjectType === 'scene';
+  const windowOpacity = Math.min(1, Math.max(0, Number(runtimeContext.background?.windowOpacity ?? 1)));
+  document.documentElement.style.setProperty('--mono-window-opacity', String(windowOpacity));
+  document.body.style.setProperty('--mono-window-opacity', String(windowOpacity));
+  target?.style.setProperty('--mono-window-opacity', String(windowOpacity));
+  target?.classList.toggle('native-wallpaper-scene', isNativeScene);
+  document.body.classList.toggle('native-wallpaper-scene', isNativeScene);
+  runtimeApi?.setContext(runtimeContext);
+  wallpaperSampler?.update(context.background);
+  if (target && runtimeApi?.debug) {
+    target.dataset.mineradioOriginalDebug = JSON.stringify(runtimeApi.debug());
+  }
+}
+
+function update(message) {
+  if (!applyMessage(context, message)) return;
+  renderContext();
+}
+
+async function mount(nextTarget, api) {
+  target = nextTarget;
+  rendererApi = api;
+  context = createContext();
+  privateStorage = await api.storage.get(PRIVATE_STORAGE_KEY) || '';
+  target.dataset.mineradioOriginalRoot = 'true';
+  target.innerHTML = UPSTREAM_BODY_HTML;
+  styleElement = document.createElement('style');
+  styleElement.dataset.mineradioOriginalStyles = 'true';
+  styleElement.textContent = `${UPSTREAM_CSS}\n${pluginOverrides}`;
+  document.head.append(styleElement);
+  installEnvironment();
+  cleanupActions = bindHostActions();
+  runOriginalRuntime();
+  wallpaperSampler = createWallpaperSampler(target);
+  renderContext();
+  target.dataset.mineradioOriginalModules = String(UPSTREAM_MODULE_COUNT);
+}
+
+function destroy() {
+  wallpaperSampler?.destroy();
+  wallpaperSampler = null;
+  clearTimeout(storagePersistTimer);
+  cleanupActions?.();
+  if (previousFetch) window.fetch = previousFetch;
+  if (previousWorkshopSrcdoc === undefined) delete window.__monoMineradioWorkshopSrcdoc;
+  else window.__monoMineradioWorkshopSrcdoc = previousWorkshopSrcdoc;
+  for (const [name, previous] of previousInlineHandlers || []) {
+    if (previous === undefined) delete window[name];
+    else window[name] = previous;
+  }
+  delete window.__monoMineradioOriginal;
+  document.body.classList.remove('native-wallpaper-scene');
+  styleElement?.remove();
+  if (target) {
+    target.innerHTML = '';
+    delete target.dataset.mineradioOriginalRoot;
+    delete target.dataset.mineradioOriginalDebug;
+  }
+  target = null;
+  rendererApi = null;
+  context = createContext();
+  runtimeApi = null;
+  styleElement = null;
+  cleanupActions = null;
+  previousFetch = null;
+  previousInlineHandlers = null;
+  previousWorkshopSrcdoc = null;
+  storagePersistTimer = 0;
+}
+
+export default {
+  mount,
+  update,
+  updateAudioFrame(frame) { runtimeApi?.setAudioFrame(frame || null); },
+  destroy,
+};

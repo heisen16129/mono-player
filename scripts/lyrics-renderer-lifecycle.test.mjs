@@ -9,13 +9,13 @@ test('renderer discovery synchronizes enable, update, disable and removal', asyn
     stdin: { contents: `export * from './src/lyrics-renderers/registry'; export * from './src/lyrics-renderers/external';`, resolveDir: root },
     bundle: true, platform: 'node', format: 'esm', write: false,
     plugins: [{ name: 'mock-host', setup(builder) {
-      builder.onLoad({ filter: /services[\\/]plugins\.ts$/ }, () => ({ contents: 'export async function listInstalledPluginManifests() { return globalThis.__rendererManifests; }', loader: 'js' }));
+      builder.onLoad({ filter: /services[\\/]pluginPackages\.ts$/ }, () => ({ contents: 'export async function listPluginPackages() { return globalThis.__rendererManifests; }', loader: 'js' }));
       builder.onLoad({ filter: /\.vue$/ }, () => ({ contents: 'export default {}', loader: 'js' }));
     } }],
   });
   const registry = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
   registry.registerLyricsRenderer({ id: 'classic', name: 'Classic', component: {} });
-  const plugin = { id: 'test.page', name: 'Test page', version: '1', entry: 'page.mjs', enabled: true, runtime: 'module', kind: 'lyrics-renderer', capabilities: ['lyrics-renderer'] };
+  const plugin = { id: 'test.page', name: 'Test page', version: '1', apiVersion:1, schemaVersion:1, packageRevision:'a'.repeat(64), entry: {renderer:'ui/renderer.mjs'}, enabled: true, runtime: 'module', kind: 'lyrics-renderer', capabilities: ['lyrics-renderer'] };
   try {
     globalThis.__rendererManifests = [plugin, { ...plugin, id: 'music', runtime: 'wasm', kind: 'music' }];
     await registry.loadExternalLyricsRenderers();

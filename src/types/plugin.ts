@@ -1,4 +1,4 @@
-export type PluginRuntime = 'wasm' | 'module';
+export type PluginRuntime = 'wasm' | 'module' | 'node';
 
 export type PluginPlaybackQuality = string;
 
@@ -43,7 +43,9 @@ export type PluginPermission =
   | 'cache-read'
   | 'cache-write'
   | 'download-write'
-  | 'audio-process'
+  | 'service.run'
+  | 'files.choose'
+  | 'files.reveal'
   | 'speaker-service';
 
 export interface PluginSidebarEntry {

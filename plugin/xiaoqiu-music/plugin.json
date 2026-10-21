@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-native-wasm-xiaoqiu",
+  "name": "小秋音乐",
+  "version": "1.0.0",
+  "kind": "music",
+  "author": "Mono",
+  "description": "搜索并播放小秋音乐来源，支持在线播放和歌词 metadata。",
+  "capabilities": [
+    "search",
+    "play",
+    "lyrics"
+  ],
+  "permissions": [
+    "network"
+  ],
+  "configSchema": {
+    "fields": [
+      {
+        "defaultValue": "14",
+        "key": "defaultQuality",
+        "label": "默认音质",
+        "options": [
+          {
+            "label": "音乐试听",
+            "value": "0"
+          },
+          {
+            "label": "有损音质",
+            "value": "1"
+          },
+          {
+            "label": "有损音质",
+            "value": "2"
+          },
+          {
+            "label": "有损音质",
+            "value": "3"
+          },
+          {
+            "label": "标准音质",
+            "value": "4"
+          },
+          {
+            "label": "标准音质",
+            "value": "5"
+          },
+          {
+            "label": "标准音质",
+            "value": "6"
+          },
+          {
+            "label": "标准音质",
+            "value": "7"
+          },
+          {
+            "label": "HQ高音质",
+            "value": "8"
+          },
+          {
+            "label": "HQ高音质（音质增强）",
+            "value": "9"
+          },
+          {
+            "label": "SQ无损音质",
+            "value": "10"
+          },
+          {
+            "label": "Hi-Res音质",
+            "value": "11"
+          },
+          {
+            "label": "杜比全景声",
+            "value": "12"
+          },
+          {
+            "label": "臻品全景声",
+            "value": "13"
+          },
+          {
+            "label": "臻品母带2.0",
+            "value": "14"
+          }
+        ],
+        "type": "select"
+      }
+    ]
+  },
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

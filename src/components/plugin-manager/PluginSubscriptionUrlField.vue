@@ -17,7 +17,7 @@ const emit = defineEmits<{
       :value="modelValue"
       type="url"
       :disabled="disabled"
-      placeholder="https://example.com/plugins.json 或 plugin.wasm"
+      placeholder="https://example.com/plugins.json"
       @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       @keydown.enter="emit('add')"
     />

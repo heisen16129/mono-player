@@ -20,12 +20,11 @@ fn asset(value: Option<&str>, entry: &str) -> Option<String> {
 }
 
 pub(super) fn read_theme(app: &AppHandle, plugin: &Value) -> Result<CustomTheme, String> {
-    let id = plugin["id"].as_str().ok_or("插件 ID 无效")?;
-    let entry = plugin["entry"].as_str().ok_or("插件入口无效")?;
-    let permissions = serde_json::from_value(plugin["permissions"].clone()).ok();
-    let raw = app.state::<crate::workers::plugin::PluginWorkerState>()
-        .invoke_plugin(entry.into(), json!({"action":"theme"}), Some(id.into()), permissions)
-        .and_then(super::unwrap_plugin_response_envelope)?;
+    let root = plugin["packageRoot"].as_str().ok_or("Plugin package is unavailable")?;
+    let relative = plugin["entry"]["wasm"].as_str().ok_or("API v1 WASM entry is required")?;
+    let entry_path = Path::new(root).join(relative);
+    let entry = entry_path.to_str().ok_or("Invalid plugin path")?;
+    let raw = super::api::providers::invoke(app, plugin, json!({"action":"theme"})).map_err(|e| e.message)?;
     let text = |key: &str| raw[key].as_str().map(str::trim).filter(|s| !s.is_empty()).or_else(|| plugin[key].as_str()).unwrap_or_default().to_owned();
     let id = text("id");
     let mut theme: CustomTheme = serde_json::from_value(json!({
@@ -58,7 +57,7 @@ pub(super) fn bind(values: &mut Map<String, Value>, plugin_id: &str, theme: Cust
 pub(crate) fn ensure_links(app: &AppHandle) -> Result<(), String> {
     let installed = store::read_value(app, INSTALLED).map_err(|e| e.to_string())?.unwrap_or(json!([]));
     let links = store::read_value(app, LINKS).map_err(|e| e.to_string())?.unwrap_or(json!({}));
-    for plugin in installed.as_array().into_iter().flatten().filter(|p| is_theme(p)) {
+    for plugin in installed.as_array().into_iter().flatten().filter(|p| is_theme(p) && p["enabled"] == true) {
         let Some(id) = plugin["id"].as_str() else { continue; };
         if links.as_object().is_some_and(|m| m.values().any(|v| v.as_str() == Some(id))) { continue; }
         let theme = match read_theme(app, plugin) {
@@ -75,11 +74,21 @@ pub(crate) fn ensure_links(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn unbind(values: &mut Map<String, Value>, plugin_id: &str) -> Result<(), String> {
+    let mut links = values.get(LINKS).and_then(Value::as_object).cloned().unwrap_or_default();
+    let ids: Vec<_> = links.iter().filter(|(_, v)| v.as_str() == Some(plugin_id)).map(|(id, _)| id.clone()).collect();
+    for id in ids { custom_themes::remove(values, &id)?; links.remove(&id); }
+    values.insert(LINKS.into(), Value::Object(links));
+    Ok(())
+}
+
 fn remove_records(values: &mut Map<String, Value>, plugin_id: &str) -> Result<(), String> {
     let mut links = values.get(LINKS).and_then(Value::as_object).cloned().unwrap_or_default();
     let ids: Vec<_> = links.iter().filter(|(_, v)| v.as_str() == Some(plugin_id)).map(|(id, _)| id.clone()).collect();
     for id in ids { custom_themes::remove(values, &id)?; links.remove(&id); }
     values.insert(LINKS.into(), Value::Object(links));
+    if let Some(grants) = values.get_mut("plugins.api.grants").and_then(Value::as_object_mut) { grants.remove(plugin_id); }
+    values.remove(&format!("plugins.api.storage.{plugin_id}"));
     for key in [INSTALLED, "plugins.catalog.cache"] {
         if let Some(items) = values.get_mut(key).and_then(Value::as_array_mut) { items.retain(|p| p["id"] != plugin_id); }
     }
@@ -92,8 +101,7 @@ fn remove_records(values: &mut Map<String, Value>, plugin_id: &str) -> Result<()
 }
 
 pub(super) fn remove_package(app: &AppHandle, values: &mut Map<String, Value>, plugin_id: &str) -> Result<(), String> {
-    let path = super::plugin_package_dir(app, plugin_id)?;
-    if path.is_dir() { fs::remove_dir_all(path).map_err(|e| e.to_string())?; }
+    let _ = app;
     remove_records(values, plugin_id)
 }
 

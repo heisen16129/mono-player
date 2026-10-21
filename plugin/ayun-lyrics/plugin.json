@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-wasm-ayun-lyrics",
+  "name": "阿云歌词",
+  "version": "1.0.0",
+  "kind": "lyrics",
+  "author": "Mono",
+  "description": "搜索并返回阿云歌词 metadata，用于播放时补全歌词。",
+  "capabilities": [
+    "search",
+    "lyrics"
+  ],
+  "permissions": [
+    "network"
+  ],
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

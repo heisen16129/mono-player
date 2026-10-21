@@ -3,7 +3,7 @@ import { transform } from 'esbuild';
 import vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-const source = readFileSync('plugins/miot/frontend/src/store.ts','utf8');
+const source = readFileSync('plugin/miot/ui/frontend/src/store.ts','utf8');
 const body = source.slice(source.indexOf('export async function playAllSpeakers'), source.indexOf('export async function playerCommand'));
 const {code} = await transform(body.replace('export ',''),{loader:'ts'});
 for (const fail of [false,true]) test(`all speakers deduplicates groups, skips offline; failure=${fail}`,async()=>{

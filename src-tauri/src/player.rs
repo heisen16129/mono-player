@@ -16,6 +16,7 @@ mod cache;
 pub(crate) mod cache_settings;
 pub(crate) mod karaoke_source;
 mod queue;
+pub(crate) mod plugin_queue;
 mod recent_playback;
 mod resume;
 pub(crate) mod session;
@@ -128,6 +129,8 @@ pub(crate) struct PlayerSnapshot {
     pub(crate) is_playing: bool,
     pub(crate) duration: Option<f64>,
     pub(crate) volume: f32,
+    #[serde(default)]
+    pub(crate) is_muted: bool,
     pub(crate) speed: f32,
     pub(crate) spectrum_levels: Vec<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -709,6 +712,7 @@ pub(crate) fn player_queue_insert_next(
         backend.queued_next_source = Some(source_key);
         refresh_queue_index(&mut backend);
         let snapshot = queue_snapshot_from_backend(&mut backend);
+        drop(backend);
         emit_queue_snapshot(&app, "insert_next", &snapshot);
         Ok(snapshot)
     })())
@@ -733,6 +737,7 @@ pub(crate) fn player_queue_append(
         backend.queue_sources.push(source_key);
         refresh_queue_index(&mut backend);
         let snapshot = queue_snapshot_from_backend(&mut backend);
+        drop(backend);
         emit_queue_snapshot(&app, "append", &snapshot);
         Ok(snapshot)
     })())
@@ -759,6 +764,7 @@ pub(crate) fn player_queue_remove(
         }
         refresh_queue_index(&mut backend);
         let snapshot = queue_snapshot_from_backend(&mut backend);
+        drop(backend);
         emit_queue_snapshot(&app, "remove", &snapshot);
         Ok(snapshot)
     })())
@@ -1513,6 +1519,7 @@ fn resolve_queue_source_for_playback(
         });
     }
     let plugins = crate::plugins::read_playback_plugin(app, &provider_id)?;
+    let authorized_plugin = plugins.first().cloned().ok_or_else(|| "Playback provider is unavailable.".to_string())?;
     let quality_fallback = read_quality_fallback(app);
     let track_value = queue_track_plugin_value(&track);
     ensure_current_playback_generation(state, generation)?;
@@ -1525,7 +1532,10 @@ fn resolve_queue_source_for_playback(
         quality_fallback,
         false,
         plugins,
-        || ensure_current_playback_generation(state, generation),
+        || {
+            ensure_current_playback_generation(state, generation)?;
+            crate::plugins::verify_playback_plugin(app, &authorized_plugin)
+        },
     )?;
     if let Some(artwork) = source_result.artwork.as_deref() {
         if let Some(track_id) = track
@@ -1548,6 +1558,7 @@ fn resolve_queue_source_for_playback(
         }
     }
     let resolved_source = source_result.url.clone();
+    crate::plugins::verify_playback_plugin(app, &authorized_plugin)?;
     let mut cache_track_id = source_result.source_id.trim().to_string();
     if cache_track_id.is_empty() {
         cache_track_id = track.source_id.clone().unwrap_or_default();

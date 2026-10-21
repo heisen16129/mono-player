@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-wasm-miot",
+  "name": "小爱音箱",
+  "version": "1.0.0",
+  "kind": "integration",
+  "author": "Mono / hanxi",
+  "description": "连接小爱音箱，支持扫码登录、音箱分组、语音点歌、定时播放和本地/在线音乐投放。",
+  "capabilities": [
+    "speaker-control"
+  ],
+  "permissions": [
+    "network",
+    "speaker-service",
+    "library.read",
+    "library.write",
+    "playlists.read",
+    "playlists.write",
+    "favorites.read",
+    "favorites.write",
+    "sources.search",
+    "sources.import",
+    "media.read",
+    "artwork.read",
+    "lyrics.read",
+    "history.write"
+  ],
+  "entry": {
+    "service": "dist/service.mjs"
+  },
+  "contributions": {
+    "pages": [
+      {
+        "id": "speaker",
+        "title": "小爱音箱",
+        "entry": "ui/dist/index.html",
+        "presentation": "dialog"
+      }
+    ],
+    "playbackBar": [
+      {
+        "id": "open-speaker",
+        "title": "小爱音箱",
+        "icon": "speaker",
+        "pageId": "speaker"
+      }
+    ]
+  }
+}

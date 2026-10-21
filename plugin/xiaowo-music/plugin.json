@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-native-wasm-xiaowo",
+  "name": "小窝音乐",
+  "version": "1.0.0",
+  "kind": "music",
+  "author": "Mono",
+  "description": "搜索并播放小窝音乐来源，支持在线曲目和歌词获取。",
+  "capabilities": [
+    "search",
+    "play",
+    "lyrics"
+  ],
+  "permissions": [
+    "network"
+  ],
+  "configSchema": {
+    "fields": [
+      {
+        "defaultValue": "320k",
+        "key": "defaultQuality",
+        "label": "默认音质",
+        "options": [
+          {
+            "label": "标准音质",
+            "value": "128k"
+          },
+          {
+            "label": "高品音质",
+            "value": "320k"
+          },
+          {
+            "label": "无损音质",
+            "value": "flac"
+          }
+        ],
+        "type": "select"
+      }
+    ]
+  },
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

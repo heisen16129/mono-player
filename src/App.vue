@@ -17,7 +17,7 @@ import { useActivePlaybackSeekActions } from './composables/useActivePlaybackSee
 import { useActiveTrackState } from './composables/useActiveTrackState';
 import { useActiveTrackUiState } from './composables/useActiveTrackUiState';
 import { useAppBootstrap } from './composables/useAppBootstrap';
-import { useMiotLibrarySync } from './composables/useMiotLibrarySync';
+import { usePluginHostSync } from './composables/usePluginHostSync';
 import { useAppContextMenuBindings } from './composables/useAppContextMenuBindings';
 import { useAppDialogsBindings } from './composables/useAppDialogsBindings';
 import { useAppMainContentSurfaceBindings } from './composables/useAppMainContentSurfaceBindings';
@@ -31,6 +31,7 @@ import { useExternalPlaybackEventBridge } from './composables/useExternalPlaybac
 import { useFavoriteTrackActions } from './composables/useFavoriteTrackActions';
 import { useLibraryCatalog } from './composables/useLibraryCatalog';
 import { providePluginNavigation } from './composables/usePluginNavigation';
+import PluginPageDialog from './components/plugins/PluginPageDialog.vue';
 import { useLibraryNavigation } from './composables/useLibraryNavigation';
 import { useLibraryPanelResize } from './composables/useLibraryPanelResize';
 import { useLocalPlaybackActions } from './composables/useLocalPlaybackActions';
@@ -71,10 +72,11 @@ import {
 } from './utils/playback';
 
 const player = usePlayerStore();
-useMiotLibrarySync();
+usePluginHostSync();
 const isAppReady = ref(false);
 const appPlayerSurfaceRef = ref<{ getController: () => PlayerDockController | null } | null>(null);
 const {
+  selectLyricsRenderer,
   activeRenderer: activeLyricsRenderer,
   activeRendererConfig: activeLyricsRendererConfig,
   hydrateLyricsRendererSettings,
@@ -189,7 +191,9 @@ const {
   selectArtist,
   isSettingsOpen,
 } = useLibraryNavigation(() => getDefaultArtistName());
-providePluginNavigation(activeView, () => player.settings.enablePlugins);
+providePluginNavigation(activeView, () => player.settings.enablePlugins, showOnlineToast, id => {
+  if (selectLyricsRenderer(id) && !isLyricsOpen.value) toggleLyricsView();
+}, () => { if (!isLyricsOpen.value) toggleLyricsView(); });
 
 const {
   hasThemeBackground,
@@ -940,6 +944,8 @@ const {
       <AppStartupLoading v-if="!isAppReady" />
 
       <template v-else>
+        <PluginPageDialog />
+
         <SettingsDrawer :open="isSettingsOpen" @close="isSettingsOpen = false" />
 
         <PlaylistContextMenu

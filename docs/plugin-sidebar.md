@@ -1,42 +1,18 @@
-# 插件侧栏菜单申请
+# 侧栏插件菜单插槽
 
-插件在 metadata 中主动声明 `sidebar`，安装并启用后，主侧栏会生成菜单。没有声明的插件不会自动获得菜单。该声明与 `playbackBar` 相互独立。
-
-## 插件自己的网页
+插件通过 `plugin.json` 的 contributions.pages 注册包内页面，再通过 contributions.sidebar 申请菜单。
 
 ```json
 {
-  "sidebar": {
-    "title": "我的插件",
-    "icon": "plug",
-    "page": { "url": "https://example.com/plugin/index.html" }
-  }
+  "pages": [{"id":"separate","title":"人声／伴奏分离","entry":"ui/index.html"}],
+  "sidebar": [{"id":"open-separate","title":"人声／伴奏分离","icon":"audio-lines","pageId":"separate"}]
 }
 ```
 
-- `title` 可省略，默认使用插件名称。
-- `icon` 支持 `plug`、`speaker`、`audio-lines`。
-- `page.url` 使用 HTTPS 地址，页面必须允许 iframe 嵌入。此版本不提供本地 HTML 包安装。
-- 页面在右侧内容区的隔离 iframe 中展示，允许脚本、表单、弹出窗口，不授予宿主 Tauri API 或同源权限。需要账号或跨域 API 的页面应自行适配该隔离环境。
-- 页面不替换宿主侧栏或播放栏。点击其他主菜单即可离开；再次进入会重新加载页面。
+上面是 contributions 对象。菜单与播放栏独立，均不根据 capability 自动生成。人声分离只申请此菜单，小爱音箱不申请侧栏。
 
-## 已接入宿主的服务页面
+页面使用包内静态资源、公共 SDK 和宿主的隔离容器。不能填写远程 page.url 或旧 action。安装时验证引用；关闭页面清理会话/订阅；停用或卸载后页面关闭且旧请求被拒绝。拖动调用 mono.window.startDragging，按钮区域不触发拖动。
 
-人声／伴奏分离申请原生功能页面：
+完整字段和权限见 [公共规范](plugin-api-v1.md)，最小页面见 [SDK](../packages/plugin-sdk/README.md)。
 
-```json
-{
-  "sidebar": {
-    "title": "人声／伴奏分离",
-    "icon": "audio-lines",
-    "page": { "action": "stem-separation" }
-  }
-}
-```
-
-`stem-separation` 需要插件同时声明该 capability；宿主在内容区呈现分离页面，与原弹窗复用任务和环境管理组件。
-小爱音箱不再申请侧栏菜单，仅保留播放栏入口。Host 仍支持 `speaker-control` 页面适配器，但不会自动生成菜单。
-其他服务 action 需要在 `src/services/pluginPages.ts` 接入，不执行插件声明的任意宿主命令。
-
-菜单声明通过 metadata → catalog → 安装清单 → 持久化完整保留。旧插件包需要更新或重新安装才能读取新声明。
-安装、更新、启停、卸载触发 `mono:plugins-changed` 后刷新菜单；当前页面所属插件停用或卸载时退出到插件管理，关闭全局插件开关时回到音乐池。
+页面声明可以设置 presentation: "dialog"，在主窗口上覆盖弹窗打开；presentation: "page" 则在主内容区打开。未填写时，侧栏入口默认主内容页，播放栏入口默认弹窗；管理页直接打开时按该页面申请的入口判断，均未申请则使用主内容页。页面显式声明优先于入口默认值，与是否有 Node/WASM 后端无关。弹窗使用相同的隔离页面和公共 API，关闭弹窗不停止后台服务。小爱页面声明为 dialog，播放栏与管理页入口都打开同一个弹窗。

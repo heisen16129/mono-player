@@ -11,6 +11,7 @@ mod playlists;
 mod recent_played;
 mod library_statistics;
 mod library_search;
+mod library_service;
 mod search_history;
 mod lyrics;
 mod mcp;
@@ -68,6 +69,9 @@ pub fn run() {
     let startup_started = std::time::Instant::now();
     tauri::Builder::default()
         .manage(startup::StartupClock(startup_started))
+        .register_uri_scheme_protocol("plugin-page", |context, request| {
+            plugins::api::pages::response(context.app_handle(), request)
+        })
         .register_uri_scheme_protocol("wallpaper-frame", |context, request| {
             wallpaper_engine::frame_response(context.app_handle(), request)
         })
@@ -144,11 +148,13 @@ pub fn run() {
             app.manage(scanner::batch::ScanBatchState::default());
             app.manage(plugins::online_search::OnlineSearchState::default());
             app.manage(plugins::online_search::LyricsSearchState::default());
+            app.manage(plugins::api::sessions::Sessions::default());
+            app.manage(plugins::api::subscriptions::State::default());
+            app.manage(plugins::api::search::State::default());
+            app.manage(plugins::api::media::State::default());
             app.manage(sleep_timer::SleepTimerState::default());
             app.manage(miot::MiotState::default());
-            app.manage(stem_separation::EnvironmentState::default());
-            app.manage(stem_separation::SeparationState::default());
-            app.manage(stem_separation::BatchState::default());
+            app.manage(plugins::services::State::default());
             app.manage(wallpaper_engine::WallpaperEngineState::default());
             let miot_app = app.handle().clone();
             tauri::async_runtime::spawn(async move { let _ = miot::miot_sync(miot_app).await; });
@@ -188,6 +194,18 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             startup::startup_trace,
+            plugins::api::sessions::plugin_api_open,
+            plugins::api::sessions::plugin_api_request,
+            plugins::api::sessions::plugin_api_close,
+            plugins::api::sessions::plugin_api_presentation,
+            plugins::api::installer::plugin_package_inspect,
+            plugins::api::commands::plugin_command_run,
+            plugins::api::installer::plugin_package_install,
+            plugins::api::sessions::plugin_lyrics_offset,
+            plugins::api::installer::plugin_package_download,
+            plugins::api::registry::plugin_package_list,
+            plugins::api::registry::plugin_package_incompatible,
+            plugins::api::registry::plugin_package_change,
             library_statistics::read_library_statistics,
             library_search::search_library,
             search_history::update_search_history,
@@ -231,20 +249,12 @@ pub fn run() {
             plugins::catalog::plugin_catalog,
             plugins::management::plugin_action,
             plugins::management::plugin_batch,
-            plugins::read_local_renderer_module,
-            plugins::read_remote_renderer_module,
             plugins::search_plugin,
             plugins::online_search::search_online_music,
             plugins::online_search::search_online_lyrics,
             plugins::resolve_plugin_playback_qualities,
             plugins::resolve_plugin_lyrics_metadata,
-            miot::miot_open,
             miot::miot_sync,
-            stem_separation::stem_separation_start,
-            stem_separation::batch::stem_batch_start,
-            stem_separation::batch::stem_batch_status,
-            stem_separation::batch::stem_batch_cancel,
-            stem_separation::batch::stem_output_directory,
             stem_separation::karaoke::karaoke_prepare,
             stem_separation::karaoke::karaoke_has_accompaniment,
             player::karaoke_source::karaoke_playback_source,
@@ -309,9 +319,8 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::Exit) {
                 player::session::save_logged(app);
                 app.state::<miot::MiotState>().shutdown();
-                app.state::<stem_separation::EnvironmentState>().shutdown();
-                let _ = app.state::<stem_separation::BatchState>().cancel(&app.state::<stem_separation::SeparationState>());
-                app.state::<stem_separation::SeparationState>().shutdown();
+                app.state::<plugins::services::State>().shutdown();
+                app.state::<plugins::api::media::State>().shutdown();
                 wallpaper_engine::shutdown(app);
             }
         });

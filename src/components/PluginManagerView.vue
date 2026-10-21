@@ -1,10 +1,10 @@
 ﻿<script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { usePluginNavigation } from '../composables/usePluginNavigation';
 import { usePluginCatalogState } from '../composables/usePluginCatalogState';
 import { usePluginCenterTabs } from '../composables/usePluginCenterTabs';
 import { usePluginDragSort } from '../composables/usePluginDragSort';
 import { usePluginInstallActions } from '../composables/usePluginInstallActions';
-import { usePluginInstalledPanelBindings } from '../composables/usePluginInstalledPanelBindings';
 import { usePluginMarket } from '../composables/usePluginMarket';
 import { usePluginMarketPanelBindings } from '../composables/usePluginMarketPanelBindings';
 import { usePluginManagerLifecycle } from '../composables/usePluginManagerLifecycle';
@@ -15,6 +15,7 @@ import { usePluginSubscriptions } from '../composables/usePluginSubscriptions';
 import { usePluginSubscriptionsPanelBindings } from '../composables/usePluginSubscriptionsPanelBindings';
 import { resolveLocale } from '../i18n';
 import { usePlayerStore } from '../stores/player';
+import PluginPackagePanel from './plugin-manager/PluginPackagePanel.vue';
 import PluginInstalledPanel from './plugin-manager/PluginInstalledPanel.vue';
 import PluginCenterTabs from './plugin-manager/PluginCenterTabs.vue';
 import PluginLoadingOverlay from './plugin-manager/PluginLoadingOverlay.vue';
@@ -22,7 +23,22 @@ import PluginManagerHeader from './plugin-manager/PluginManagerHeader.vue';
 import PluginMarketPanel from './plugin-manager/PluginMarketPanel.vue';
 import PluginSubscriptionsPanel from './plugin-manager/PluginSubscriptionsPanel.vue';
 
+import { PACKAGE_INSTALL_EVENT, type PackageInstallRequest } from '../services/pluginPackages';
+async function reviewRequestedPackage(event: Event) {
+  const request = (event as CustomEvent<PackageInstallRequest>).detail;
+  await nextTick();
+  if (!packagePanel.value) { request.reject(new Error('插件管理不可用')); return; }
+  try { await packagePanel.value.reviewPackage(request.path, request); }
+  catch (error) { emit('notify', String(error), 'error'); }
+}
+onMounted(() => window.addEventListener(PACKAGE_INSTALL_EVENT, reviewRequestedPackage));
+onBeforeUnmount(() => window.removeEventListener(PACKAGE_INSTALL_EVENT, reviewRequestedPackage));
+
 const player = usePlayerStore();
+const packagePanel = ref<InstanceType<typeof PluginPackagePanel> | null>(null);
+async function importFromLocalFile() {
+  await packagePanel.value?.importPackage();
+}
 const appLocale = computed(() => resolveLocale(player.settings.locale));
 
 const emit = defineEmits<{
@@ -30,8 +46,8 @@ const emit = defineEmits<{
 }>();
 
 const {
-  createFormatCapabilities,
   notifyPlugin,
+  createFormatCapabilities,
 } = usePluginManagerPresentation({
   notify: (message, variant) => emit('notify', message, variant),
 });
@@ -41,12 +57,19 @@ const {
   pluginCenterTabs,
   selectPluginCenterTab,
 } = usePluginCenterTabs();
+const { settingsPluginId } = usePluginNavigation();
+watch(settingsPluginId, async id => {
+  if (!id) return;
+  selectPluginCenterTab('installed');
+  await nextTick();
+  await packagePanel.value?.openSettings(id);
+  settingsPluginId.value = null;
+}, { immediate:true });
 
 const {
   catalogPlugins,
   deletedPluginIds,
   installedPlugins,
-  isLoading,
   isLoadingOfficialCatalog,
   officialCatalogPlugins,
   loadCachedCatalogPlugins,
@@ -68,26 +91,25 @@ const {
 
 const {
   allVisibleSelected,
+  selectedPluginIds,
+  setPluginSelected,
+  toggleAllVisiblePlugins,
   pruneSelection,
   selectedEnabledPlugins,
   selectedInstallablePlugins,
-  selectedPluginIds,
   selectedPlugins,
-  setPluginSelected,
-  toggleAllVisiblePlugins,
 } = usePluginSelection(visiblePlugins);
 registerPluginCatalogSelectionPruner(pruneSelection);
 
 const {
-  batchDisableSelected,
-  batchInstallSelected,
-  batchUninstallSelected,
-  importFromLocalFile,
   installPlugin,
-  isBatchBusy,
+  updatePlugin,
   removePlugin,
   togglePlugin,
-  updatePlugin,
+  isBatchBusy,
+  batchInstallSelected,
+  batchUninstallSelected,
+  batchDisableSelected,
 } = usePluginInstallActions({
   catalogPlugins,
   installedPlugins,
@@ -130,6 +152,7 @@ const {
   onInstallPlugin: installPlugin,
   onUpdatePlugin: updatePlugin,
 });
+
 const formatCapabilities = createFormatCapabilities(localizedCapability);
 
 const { pluginMarketPanelListeners, pluginMarketPanelProps } = usePluginMarketPanelBindings({
@@ -159,9 +182,9 @@ const { pluginMarketPanelListeners, pluginMarketPanelProps } = usePluginMarketPa
 });
 
 const {
-  dragOverPluginId,
-  draggingPluginId,
   resetPluginPointerDragState,
+  draggingPluginId,
+  dragOverPluginId,
   startPluginPointerDrag,
   startPluginRowPointerDrag,
 } = usePluginDragSort({
@@ -170,30 +193,6 @@ const {
   visiblePlugins,
 });
 
-const { pluginInstalledPanelListeners, pluginInstalledPanelProps } = usePluginInstalledPanelBindings({
-  allVisibleSelected,
-  busy: isBatchBusy,
-  dragOverPluginId,
-  draggingPluginId,
-  enabledCount: computed(() => selectedEnabledPlugins.value.length),
-  formatCapabilities,
-  installableCount: computed(() => selectedInstallablePlugins.value.length),
-  loading: isLoading,
-  plugins: visiblePlugins,
-  selectedCount: computed(() => selectedPlugins.value.length),
-  selectedPluginIds,
-  batchDisable: batchDisableSelected,
-  batchInstall: batchInstallSelected,
-  batchUninstall: batchUninstallSelected,
-  install: installPlugin,
-  remove: removePlugin,
-  select: setPluginSelected,
-  startDrag: startPluginPointerDrag,
-  startRowDrag: startPluginRowPointerDrag,
-  toggle: togglePlugin,
-  toggleAll: toggleAllVisiblePlugins,
-  update: updatePlugin,
-});
 
 const {
   addSubscription,
@@ -249,12 +248,39 @@ usePluginManagerLifecycle({
 
     <PluginInstalledPanel
       v-else-if="activePluginCenterTab === 'installed'"
-      v-bind="{ ...pluginInstalledPanelProps, ...pluginInstalledPanelListeners }"
+      :all-visible-selected="allVisibleSelected"
+      :busy="isBatchBusy"
+      :drag-over-plugin-id="dragOverPluginId"
+      :dragging-plugin-id="draggingPluginId"
+      :enabled-count="selectedEnabledPlugins.length"
+      :format-capabilities="formatCapabilities"
+      :installable-count="selectedInstallablePlugins.length"
+      :loading="false"
+      :plugins="visiblePlugins"
+      :selected-count="selectedPlugins.length"
+      :selected-plugin-ids="selectedPluginIds"
+      @batch-disable="batchDisableSelected"
+      @batch-install="batchInstallSelected"
+      @batch-uninstall="batchUninstallSelected"
+      @install="installPlugin"
+      @remove="removePlugin"
+      @select="setPluginSelected"
+      @start-drag="startPluginPointerDrag"
+      @start-row-drag="startPluginRowPointerDrag"
+      @toggle="togglePlugin"
+      @toggle-all="toggleAllVisiblePlugins"
+      @update="updatePlugin"
     />
 
     <PluginSubscriptionsPanel
       v-else
       v-bind="{ ...pluginSubscriptionsPanelProps, ...pluginSubscriptionsPanelListeners }"
+    />
+
+    <PluginPackagePanel
+      ref="packagePanel"
+      @installed="loadInstalledPlugins(); loadDeletedPluginIds()"
+      @notify="(message, variant) => emit('notify', message, variant)"
     />
 
     <PluginLoadingOverlay v-if="isAddingSubscription" />

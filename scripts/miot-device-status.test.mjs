@@ -6,7 +6,7 @@ import { transform } from 'esbuild';
 
 async function harness() {
   const context = vm.createContext({ songloft: { log: { warn() {} } } });
-  for (const path of ['plugins/miot/src/player/device_display.ts', 'plugins/miot/src/handlers/playlist.ts']) {
+  for (const path of ['plugin/miot/backend/src/player/device_display.ts', 'plugin/miot/backend/src/handlers/playlist.ts']) {
     const source = readFileSync(path, 'utf8').replace(/^import .*;\r?\n/gm, '').replaceAll('export ', '');
     const { code } = await transform(source, { loader: 'ts' });
     vm.runInContext(code, context);

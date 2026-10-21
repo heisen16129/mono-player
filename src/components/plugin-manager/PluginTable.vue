@@ -57,7 +57,7 @@ const { isScrolling, showScrolling } = useScrollingState();
       </tbody>
     </table>
 
-    <PluginTableEmptyState v-if="!loading && plugins.length === 0" message="暂无插件，添加订阅或从本地文件安装。" />
+    <PluginTableEmptyState v-if="!loading && plugins.length === 0" message="暂无已安装插件，可前往商城安装或在订阅源中导入安装包。" />
   </div>
 </template>
 

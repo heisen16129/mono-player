@@ -35,23 +35,7 @@ export function usePluginRows({
         manifest: plugin,
       };
     });
-    const installedIds = new Set(installedRows.map((item) => item.id));
-    const catalogRows = catalogPlugins.value
-      .filter((item) => !installedIds.has(item.id))
-      .map((item) => ({
-        id: item.id,
-        name: item.name,
-        version: item.version,
-        author: item.author ?? '',
-        runtime: item.runtime,
-        capabilities: [],
-        installed: false,
-        enabled: false,
-        catalogItem: item,
-        manifest: null,
-      }));
-
-    return [...installedRows, ...catalogRows].filter((plugin) => !deletedPluginIds.value.has(plugin.id));
+    return installedRows.filter((plugin) => !deletedPluginIds.value.has(plugin.id));
   });
 
   return {

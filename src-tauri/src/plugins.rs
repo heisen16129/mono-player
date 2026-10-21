@@ -1,4 +1,6 @@
+pub(crate) mod services;
 pub(crate) mod online_search;
+pub(crate) mod api;
 pub(crate) mod theme_links;
 pub(crate) mod management;
 pub(crate) mod config;
@@ -48,52 +50,26 @@ pub struct PluginPlaybackPlanPlugin {
     config: Option<Value>,
     #[serde(default)]
     config_schema: Option<Value>,
-}
-
-pub(crate) fn playback_plugins_from_values(
-    plugins: Value,
-    configs: Option<Value>,
-) -> Result<Vec<PluginPlaybackPlanPlugin>, String> {
-    let mut plugins = serde_json::from_value::<Vec<PluginPlaybackPlanPlugin>>(plugins)
-        .map_err(|err| err.to_string())?;
-    attach_plugin_configs(&mut plugins, configs.as_ref().unwrap_or(&Value::Null));
-    Ok(plugins)
+    #[serde(default)]
+    package_revision: Option<String>,
 }
 
 pub(crate) fn read_playback_plugin(
     app: &AppHandle,
     provider_id: &str,
 ) -> Result<Vec<PluginPlaybackPlanPlugin>, String> {
-    let plugins = crate::store::read_value(app, "plugins.installed")
-        .map_err(|err| err.to_string())?
-        .unwrap_or_else(|| Value::Array(Vec::new()));
-    let config =
-        crate::store::read_plugin_config_value(app, provider_id).map_err(|err| err.to_string())?;
-    let configs = config.map(|config| {
-        let mut configs = serde_json::Map::new();
-        configs.insert(provider_id.to_string(), config);
-        Value::Object(configs)
-    });
-    let mut plugins = playback_plugins_from_values(plugins, configs)?;
-    plugins.retain(|plugin| plugin.id == provider_id);
-    Ok(plugins)
+    let values = crate::store::read_values(app)?;
+    api::providers::playback_plan(&values, provider_id).map(|plugin| vec![plugin]).map_err(|error| error.message)
 }
 
-fn attach_plugin_configs(plugins: &mut [PluginPlaybackPlanPlugin], configs: &Value) {
-    for plugin in plugins {
-        let mut config = default_config_from_schema(plugin.config_schema.as_ref());
-        merge_config_value(&mut config, plugin.config.as_ref());
-        merge_config_value(&mut config, configs.get(&plugin.id));
-        plugin.config = if config
-            .as_object()
-            .map(|object| object.is_empty())
-            .unwrap_or(true)
-        {
-            None
-        } else {
-            Some(config)
-        };
+pub(crate) fn verify_playback_plugin(app: &AppHandle, expected: &PluginPlaybackPlanPlugin) -> Result<(), String> {
+    let values = crate::store::read_values(app)?;
+    let current = api::providers::playback_plan(&values, &expected.id).map_err(|error| error.message)?;
+    if expected.package_revision.is_none() || current.package_revision != expected.package_revision
+        || current.permissions != expected.permissions {
+        return Err("Playback provider changed; retry with the current package.".into());
     }
+    Ok(())
 }
 
 fn default_config_from_schema(schema: Option<&Value>) -> Value {
@@ -327,260 +303,35 @@ pub async fn plugin_invoke(
     permissions: Option<Vec<String>>,
 ) -> ApiResponse<serde_json::Value> {
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
-        worker
-            .invoke_plugin(entry, request, plugin_id, permissions)
-            .and_then(unwrap_plugin_response_envelope)
+        let _ = (entry, permissions);
+        let id = plugin_id.ok_or("An installed v1 plugin ID is required")?;
+        let plan = read_playback_plugin(&app,&id)?.into_iter().next().ok_or("Plugin unavailable")?;
+        let action = request["action"].as_str().ok_or("Missing provider action")?;
+        if !plan.capabilities.iter().any(|c|c == action) && action != "qualities" { return Err("Undeclared provider action".into()); }
+        let values = crate::store::read_values(&app)?;
+        let manifest = values.get("plugins.installed").and_then(Value::as_array).and_then(|items|items.iter().find(|p|p["id"] == id)).ok_or("Plugin unavailable")?;
+        api::providers::invoke(&app,manifest,request).map_err(|e|e.message)
     }).await.map_err(|err| err.to_string()).and_then(|result| result);
     ApiResponse::from_result(result)
 }
 
 fn fetch_plugin_catalog_items_inner(
-    worker: &crate::workers::plugin::PluginWorkerState,
+    _worker: &crate::workers::plugin::PluginWorkerState,
     url: String,
 ) -> Result<Vec<PluginCatalogItem>, String> {
-    if is_direct_plugin_url(&url) {
-        return build_plugin_catalog_item_from_entry(worker, url.clone(), url)
-            .map(|item| vec![item]);
-    }
-
     let catalog_text = fetch_plugin_catalog_backend(url)?;
     let catalog = serde_json::from_str::<Value>(&catalog_text).map_err(|err| err.to_string())?;
     Ok(normalize_catalog_values(catalog_values(catalog)))
 }
 
-fn build_plugin_manifest_from_catalog_inner(
-    app: &AppHandle,
-    worker: &crate::workers::plugin::PluginWorkerState,
-    item: PluginCatalogItem,
-    installed_at: String,
-    enabled: bool,
-) -> Result<PluginManifest, String> {
-    if item.runtime == "module" {
-        let mut manifest = build_module_manifest_from_catalog(item, installed_at, enabled)?;
-        let source = fetch_plugin_catalog_backend(manifest.entry.clone())?;
-        install_renderer_package(&plugin_package_dir(app, &manifest.id)?, &mut manifest, &source)?;
-        return Ok(manifest);
-    }
-    if item.runtime != "wasm" {
-        return Err("不支持的插件运行类型".to_string());
-    }
-    worker.refresh_plugin_wasm_cache(item.entry.clone())?;
 
-    let metadata =
-        read_plugin_metadata_backend(&worker, item.entry.clone(), Some(item.permissions.clone()))?;
 
-    let capabilities = required_metadata_list(metadata.capabilities, "capabilities")?;
-    let id = required_metadata_field(metadata.id, "id")?;
-    let entry = install_plugin_wasm_package(app, &id, &item.entry)?;
-    Ok(PluginManifest {
-        id,
-        name: required_metadata_field(metadata.name, "name")?,
-        version: required_metadata_field(metadata.version, "version")?,
-        kind: required_metadata_field(metadata.kind, "kind")?,
-        runtime: "wasm".to_string(),
-        entry,
-        author: required_metadata_field(metadata.author, "author")?,
-        description: required_metadata_field(metadata.description, "description")?,
-        icon: metadata.icon,
-        updated_at: required_metadata_field(metadata.updated_at, "updatedAt")?,
-        tags: plugin_capability_tags(&capabilities),
-        highlights: metadata.highlights.unwrap_or_default(),
-        screenshots: metadata.screenshots.unwrap_or_default(),
-        capabilities,
-        permissions: metadata.permissions.unwrap_or_default(),
-        playback_bar: metadata.playback_bar,
-        sidebar: metadata.sidebar,
-        config_schema: metadata.config_schema,
-        source_url: Some(item.source_url),
-        source_kind: item.source_kind,
-        installed_at,
-        enabled,
-    })
-}
 
-fn build_module_manifest_from_catalog(
-    item: PluginCatalogItem,
-    installed_at: String,
-    enabled: bool,
-) -> Result<PluginManifest, String> {
-    if item.runtime != "module"
-        || !matches!(item.kind.as_str(), "lyrics-renderer" | "desktop-lyrics")
-        || !item.capabilities.iter().any(|capability| capability == &item.kind)
-        || !is_module_plugin_url(&item.entry)
-        || !(item.entry.starts_with("https://") || item.entry.starts_with("http://"))
-    {
-        return Err("歌词页面插件需要有效的模块地址和 lyrics-renderer 能力".to_string());
-    }
-    Ok(PluginManifest {
-        id: item.id,
-        name: item.name,
-        version: item.version,
-        kind: item.kind,
-        runtime: item.runtime,
-        entry: item.entry,
-        author: item.author,
-        description: item.description,
-        icon: item.icon,
-        updated_at: item.updated_at,
-        tags: plugin_capability_tags(&item.capabilities),
-        capabilities: item.capabilities,
-        highlights: item.highlights,
-        screenshots: item.screenshots,
-        permissions: item.permissions,
-        playback_bar: item.playback_bar,
-        sidebar: item.sidebar,
-        config_schema: item.config_schema,
-        source_url: Some(item.source_url),
-        source_kind: item.source_kind,
-        installed_at,
-        enabled,
-    })
-}
 
-fn build_local_plugin_manifest_inner(
-    app: &AppHandle,
-    worker: &crate::workers::plugin::PluginWorkerState,
-    file_path: String,
-    installed_at: String,
-    enabled: bool,
-) -> Result<PluginManifest, String> {
-    if !is_direct_plugin_url(&file_path) {
-        return Err("local plugin entry must be a .wasm file".to_string());
-    }
 
-    let metadata = read_plugin_metadata_backend(&worker, file_path.clone(), None)?;
 
-    let capabilities = required_metadata_list(metadata.capabilities, "capabilities")?;
-    let id = required_metadata_field(metadata.id, "id")?;
-    let entry = install_plugin_wasm_package(app, &id, &file_path)?;
-    Ok(PluginManifest {
-        id,
-        name: required_metadata_field(metadata.name, "name")?,
-        version: required_metadata_field(metadata.version, "version")?,
-        kind: required_metadata_field(metadata.kind, "kind")?,
-        runtime: "wasm".to_string(),
-        entry,
-        author: required_metadata_field(metadata.author, "author")?,
-        description: required_metadata_field(metadata.description, "description")?,
-        icon: metadata.icon,
-        updated_at: required_metadata_field(metadata.updated_at, "updatedAt")?,
-        tags: plugin_capability_tags(&capabilities),
-        highlights: metadata.highlights.unwrap_or_default(),
-        screenshots: metadata.screenshots.unwrap_or_default(),
-        capabilities,
-        permissions: metadata.permissions.unwrap_or_default(),
-        playback_bar: metadata.playback_bar,
-        sidebar: metadata.sidebar,
-        config_schema: metadata.config_schema,
-        source_url: Some(file_path),
-        source_kind: "local".to_string(),
-        installed_at,
-        enabled,
-    })
-}
 
-#[tauri::command]
-pub async fn read_remote_renderer_module(url: String) -> ApiResponse<String> {
-    if !is_module_plugin_url(&url) {
-        return ApiResponse::from_result(Err("歌词模块地址必须是 .js 或 .mjs".to_string()));
-    }
-    let result = tauri::async_runtime::spawn_blocking(move || fetch_plugin_catalog_backend(url))
-        .await
-        .map_err(|err| err.to_string())
-        .and_then(|result| result);
-    ApiResponse::from_result(result)
-}
 
-#[tauri::command]
-pub fn read_local_renderer_module(
-    manifest_path: String,
-    module_path: String,
-) -> ApiResponse<String> {
-    const MAX_LYRICS_RENDERER_MODULE_BYTES: u64 = 8 * 1024 * 1024;
-    ApiResponse::from_result((|| {
-        if !manifest_path.to_ascii_lowercase().ends_with(".json")
-            || !is_module_plugin_url(&module_path)
-        {
-            return Err("歌词渲染插件路径无效".to_string());
-        }
-        let manifest = Path::new(&manifest_path)
-            .canonicalize()
-            .map_err(|err| err.to_string())?;
-        let package_dir = manifest
-            .parent()
-            .ok_or_else(|| "插件目录无效".to_string())?;
-        let module = Path::new(&module_path)
-            .canonicalize()
-            .map_err(|err| err.to_string())?;
-        if !module.starts_with(package_dir) {
-            return Err("歌词渲染模块必须位于 manifest 所在插件目录内".to_string());
-        }
-        let metadata = fs::metadata(&module).map_err(|err| err.to_string())?;
-        if metadata.len() > MAX_LYRICS_RENDERER_MODULE_BYTES {
-            return Err("歌词渲染模块不能超过 8 MB".to_string());
-        }
-        fs::read_to_string(module).map_err(|err| err.to_string())
-    })())
-}
-
-fn install_renderer_package(
-    package_dir: &Path,
-    manifest: &mut PluginManifest,
-    source: &str,
-) -> Result<(), String> {
-    if source.is_empty() || source.len() > 8 * 1024 * 1024 {
-        return Err("歌词渲染模块不能为空或超过 8 MB".to_string());
-    }
-    fs::create_dir_all(package_dir).map_err(|err| err.to_string())?;
-    let module_path = package_dir.join("renderer.mjs");
-    fs::write(&module_path, source).map_err(|err| err.to_string())?;
-    manifest.entry = module_path.to_string_lossy().to_string();
-    fs::write(
-        package_dir.join("manifest.json"),
-        serde_json::to_vec_pretty(manifest).map_err(|err| err.to_string())?,
-    ).map_err(|err| err.to_string())?;
-    Ok(())
-}
-
-fn install_plugin_wasm_package(
-    app: &AppHandle,
-    plugin_id: &str,
-    source_entry: &str,
-) -> Result<String, String> {
-    let package_dir = plugin_package_dir(app, plugin_id)?;
-    fs::create_dir_all(&package_dir).map_err(|err| err.to_string())?;
-    let wasm_path = package_dir.join("plugin.wasm");
-    let bytes = read_plugin_wasm_bytes_backend(source_entry.to_string(), None, true)?;
-    fs::write(&wasm_path, bytes).map_err(|err| err.to_string())?;
-    Ok(wasm_path.to_string_lossy().to_string())
-}
-
-fn plugin_package_dir(app: &AppHandle, plugin_id: &str) -> Result<PathBuf, String> {
-    Ok(app
-        .path()
-        .app_data_dir()
-        .map_err(|err| err.to_string())?
-        .join("plugins")
-        .join(sanitize_plugin_package_id(plugin_id)))
-}
-
-fn sanitize_plugin_package_id(plugin_id: &str) -> String {
-    let id = plugin_id
-        .chars()
-        .map(|character| match character {
-            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => character,
-            _ => '_',
-        })
-        .collect::<String>()
-        .trim_matches('.')
-        .to_string();
-    if id.is_empty() {
-        "unknown-plugin".to_string()
-    } else {
-        id
-    }
-}
 
 #[tauri::command]
 pub async fn search_plugin(
@@ -592,6 +343,8 @@ pub async fn search_plugin(
     plugins: Vec<PluginPlaybackPlanPlugin>,
 ) -> Result<ApiResponse<PluginSearchPage>, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let _ = plugins;
+        let plugins = read_playback_plugin(&app,&provider_id)?;
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
         search_plugin_backend(&worker, provider_id, keyword, page, page_size, plugins)
     })
@@ -648,6 +401,8 @@ pub async fn resolve_plugin_playback_qualities(
 ) -> Result<ApiResponse<PluginPlaybackQualities>, String> {
     let generation = PLAYBACK_QUALITIES_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let _ = plugins;
+        let plugins = read_playback_plugin(&app,&provider_id)?;
         let worker = app.state::<crate::workers::plugin::PluginWorkerState>();
         resolve_plugin_playback_qualities_backend_when_ready(
             &worker,
@@ -959,6 +714,8 @@ pub async fn resolve_plugin_lyrics_metadata(
     playback_guard: Option<PluginLyricsPlaybackGuard>,
 ) -> Result<ApiResponse<PluginLyricsMetadata>, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let _ = plugins;
+        let plugins = read_playback_plugin(&app,&provider_id)?;
         let track_id = json_string_field(&track, &["sourceId", "id"])
             .unwrap_or("")
             .trim()
@@ -1277,7 +1034,7 @@ fn normalize_plugin_search_page(
         .unwrap_or_default();
     let tracks = raw_tracks
         .into_iter()
-        .map(|track| normalize_plugin_search_track(track, plugin))
+        .map(|track| normalize_plugin_search_track(track, &plugin.id, &plugin.name))
         .collect::<Vec<_>>();
     let is_end = response
         .get("isEnd")
@@ -1289,7 +1046,8 @@ fn normalize_plugin_search_page(
 
 fn normalize_plugin_search_track(
     track: serde_json::Value,
-    plugin: &PluginPlaybackPlanPlugin,
+    provider_id: &str,
+    provider_name: &str,
 ) -> PluginSearchTrack {
     let source_raw = track
         .get("sourceRaw")
@@ -1298,12 +1056,12 @@ fn normalize_plugin_search_track(
     let title = json_string_field(&track, &["title", "name"])
         .unwrap_or("Unknown Track")
         .to_string();
-    let id = json_search_id(&track).unwrap_or_else(|| format!("{}:{}", plugin.id, title));
+    let id = json_search_id(&track).unwrap_or_else(|| format!("{}:{}", provider_id, title));
 
     PluginSearchTrack {
         id,
-        provider_id: plugin.id.clone(),
-        provider_name: plugin.name.clone(),
+        provider_id: provider_id.to_string(),
+        provider_name: provider_name.to_string(),
         title,
         artist: json_search_artist_names(&track)
             .filter(|artists| !artists.is_empty())
@@ -1509,19 +1267,6 @@ fn catalog_values(catalog: Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-fn catalog_item_source_url(value: &Value) -> Result<String, String> {
-    let source_url = string_field(value, &["url", "entry"])
-        .ok_or_else(|| "plugin catalog item missing url".to_string())?;
-    let is_module = string_field(value, &["runtime"]).as_deref() == Some("module");
-    if if is_module {
-        !is_module_plugin_url(&source_url)
-    } else {
-        !is_direct_plugin_url(&source_url)
-    } {
-        return Err("plugin catalog item url does not match its runtime".to_string());
-    }
-    Ok(source_url)
-}
 
 fn is_official_plugin_source(source: &str) -> bool {
     source == OFFICIAL_PLUGIN_CATALOG_URL || source.starts_with(OFFICIAL_PLUGIN_ENTRY_PREFIX)
@@ -1544,178 +1289,32 @@ fn infer_plugin_source_kind(entry: &str, source_url: Option<&str>) -> String {
     "local".to_string()
 }
 
-fn normalized_source_kind(value: Option<String>, entry: &str, source_url: Option<&str>) -> String {
-    match value.as_deref() {
-        Some("official") => "official".to_string(),
-        Some("subscription") => "subscription".to_string(),
-        Some("local") => "local".to_string(),
-        _ => infer_plugin_source_kind(entry, source_url),
-    }
-}
 
 fn normalize_catalog_item_value(value: Value) -> Option<PluginCatalogItem> {
-    let source_url = catalog_item_source_url(&value).ok()?;
-    let name = string_field(&value, &["name"])?;
-    let capabilities = normalize_capabilities(array_string_field(&value, "capabilities")?)?;
-    let entry = string_field(&value, &["entry"]).unwrap_or_else(|| source_url.clone());
-    let source_kind = normalized_source_kind(
-        string_field(&value, &["sourceKind", "source_kind"]),
-        &entry,
-        Some(&source_url),
-    );
-
+    let mut manifest_value = value.clone();
+    let object = manifest_value.as_object_mut()?;
+    for key in ["packageUrl", "updatedAt", "icon", "screenshots", "highlights"] { object.remove(key); }
+    let manifest: api::manifest::Manifest = serde_json::from_value(manifest_value).ok()?;
+    api::manifest::validate(&manifest, env!("CARGO_PKG_VERSION")).ok()?;
+    let entry = value["packageUrl"].as_str()?.to_string();
+    let url = tauri::Url::parse(&entry).ok()?;
+    if !matches!(url.scheme(), "http" | "https") || !url.path().ends_with(".monoplugin.zip") { return None; }
+    let capabilities = manifest.capabilities;
     Some(PluginCatalogItem {
-        id: string_field(&value, &["id"])?,
-        name,
-        version: string_field(&value, &["version"])?,
-        kind: normalize_kind(string_field(&value, &["kind"])?)?,
-        runtime: normalize_runtime(string_field(&value, &["runtime"]))
-            .unwrap_or_else(|| "wasm".to_string()),
-        entry,
-        author: string_field(&value, &["author"])?,
-        description: string_field(&value, &["description"])?,
-        icon: string_field(&value, &["icon"]),
-        updated_at: string_field(&value, &["updatedAt", "updated_at"])?,
-        tags: plugin_capability_tags(&capabilities),
-        highlights: normalize_text_list(
-            array_string_field(&value, "highlights").unwrap_or_default(),
-        ),
-        screenshots: normalize_screenshot_list(
-            array_string_field(&value, "screenshots").unwrap_or_default(),
-        ),
-        capabilities,
-        permissions: normalize_permissions(
-            array_string_field(&value, "permissions").unwrap_or_default(),
-        )
-        .ok()?,
-        source_url,
-        source_kind,
-        playback_bar: value.get("playbackBar").filter(|v| v.is_object()).cloned(),
-        sidebar: value.get("sidebar").filter(|v| v.is_object()).cloned(),
-        config_schema: normalize_config_schema(
-            value
-                .get("configSchema")
-                .or_else(|| value.get("config_schema"))
-                .cloned(),
-        ),
+        id:manifest.id, name:manifest.name, version:manifest.version, kind:manifest.kind,
+        runtime:if manifest.entry.renderer.is_some() { "module" } else if manifest.entry.service.is_some() { "node" } else { "wasm" }.into(),
+        source_kind:infer_plugin_source_kind(&entry,Some(&entry)), source_url:entry.clone(), entry,
+        author:manifest.author, description:manifest.description,
+        icon:string_field(&value,&["icon"]), updated_at:string_field(&value,&["updatedAt"]).unwrap_or_default(),
+        tags:plugin_capability_tags(&capabilities), capabilities, permissions:manifest.permissions,
+        highlights:array_string_field(&value,"highlights").unwrap_or_default(),
+        screenshots:array_string_field(&value,"screenshots").unwrap_or_default(),
+        playback_bar:None, sidebar:None, config_schema:manifest.config_schema,
     })
 }
 
-fn normalize_plugin_manifest_value(value: Value) -> Option<PluginManifest> {
-    let entry = string_field(&value, &["entry"])?;
-    let runtime =
-        normalize_runtime(string_field(&value, &["runtime"])).unwrap_or_else(|| "wasm".to_string());
-    if (runtime == "wasm" && !is_direct_plugin_url(&entry))
-        || (runtime == "module" && !is_module_plugin_url(&entry))
-    {
-        return None;
-    }
-    if !entry.starts_with("http://")
-        && !entry.starts_with("https://")
-        && !Path::new(&entry).is_file()
-    {
-        return None;
-    }
-    let name = string_field(&value, &["name"])?;
-    let source_url = string_field(&value, &["sourceUrl", "source_url"]);
-    let capabilities = normalize_capabilities(array_string_field(&value, "capabilities")?)?;
-    let source_kind = normalized_source_kind(
-        string_field(&value, &["sourceKind", "source_kind"]),
-        &entry,
-        source_url.as_deref(),
-    );
 
-    Some(PluginManifest {
-        id: string_field(&value, &["id"])?,
-        name,
-        version: string_field(&value, &["version"])?,
-        kind: normalize_kind(string_field(&value, &["kind"])?)?,
-        runtime,
-        entry,
-        author: string_field(&value, &["author"])?,
-        description: string_field(&value, &["description"])?,
-        icon: string_field(&value, &["icon"]),
-        updated_at: string_field(&value, &["updatedAt", "updated_at"])?,
-        tags: plugin_capability_tags(&capabilities),
-        highlights: normalize_text_list(
-            array_string_field(&value, "highlights").unwrap_or_default(),
-        ),
-        screenshots: normalize_screenshot_list(
-            array_string_field(&value, "screenshots").unwrap_or_default(),
-        ),
-        capabilities,
-        permissions: normalize_permissions(
-            array_string_field(&value, "permissions").unwrap_or_default(),
-        )
-        .ok()?,
-        source_url,
-        source_kind,
-        installed_at: string_field(&value, &["installedAt", "installed_at"]).unwrap_or_default(),
-        enabled: value
-            .get("enabled")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
-        playback_bar: value.get("playbackBar").filter(|v| v.is_object()).cloned(),
-        sidebar: value.get("sidebar").filter(|v| v.is_object()).cloned(),
-        config_schema: normalize_config_schema(
-            value
-                .get("configSchema")
-                .or_else(|| value.get("config_schema"))
-                .cloned(),
-        ),
-    })
-}
 
-fn build_plugin_catalog_item_from_entry(
-    worker: &crate::workers::plugin::PluginWorkerState,
-    entry: String,
-    source_url: String,
-) -> Result<PluginCatalogItem, String> {
-    let metadata = read_plugin_metadata_backend(worker, entry.clone(), None)?;
-    let capabilities = required_metadata_list(metadata.capabilities, "capabilities")?;
-    let source_kind = infer_plugin_source_kind(&entry, Some(&source_url));
-    Ok(PluginCatalogItem {
-        id: required_metadata_field(metadata.id, "id")?,
-        name: required_metadata_field(metadata.name, "name")?,
-        version: required_metadata_field(metadata.version, "version")?,
-        kind: required_metadata_field(metadata.kind, "kind")?,
-        runtime: "wasm".to_string(),
-        entry,
-        author: required_metadata_field(metadata.author, "author")?,
-        description: required_metadata_field(metadata.description, "description")?,
-        icon: metadata.icon,
-        updated_at: required_metadata_field(metadata.updated_at, "updatedAt")?,
-        tags: plugin_capability_tags(&capabilities),
-        highlights: metadata.highlights.unwrap_or_default(),
-        screenshots: metadata.screenshots.unwrap_or_default(),
-        capabilities,
-        permissions: metadata.permissions.unwrap_or_default(),
-        source_kind,
-        source_url,
-        playback_bar: metadata.playback_bar,
-        sidebar: metadata.sidebar,
-        config_schema: metadata.config_schema,
-    })
-}
-
-fn read_plugin_metadata_backend(
-    worker: &crate::workers::plugin::PluginWorkerState,
-    entry: String,
-    permissions: Option<Vec<String>>,
-) -> Result<PluginMetadata, String> {
-    worker
-        .invoke_plugin(
-            entry,
-            json!({ "action": "metadata" }),
-            None,
-            permissions.map(normalize_permissions).transpose()?,
-        )
-        .and_then(unwrap_plugin_response_envelope)
-        .and_then(|value| {
-            serde_json::from_value::<PluginMetadata>(value).map_err(|err| err.to_string())
-        })
-        .and_then(normalize_plugin_metadata)
-}
 
 fn unwrap_plugin_response_envelope(response: Value) -> Result<Value, String> {
     let code = response
@@ -1744,160 +1343,14 @@ fn unwrap_plugin_response_envelope(response: Value) -> Result<Value, String> {
         .ok_or_else(|| "plugin ApiResponse success missing data".to_string())
 }
 
-fn normalize_plugin_metadata(metadata: PluginMetadata) -> Result<PluginMetadata, String> {
-    Ok(PluginMetadata {
-        id: Some(required_metadata_field(metadata.id, "id")?),
-        name: Some(required_metadata_field(metadata.name, "name")?),
-        version: Some(required_metadata_field(metadata.version, "version")?),
-        kind: Some(
-            normalize_kind(required_metadata_field(metadata.kind, "kind")?)
-                .ok_or_else(|| "plugin metadata kind is not supported".to_string())?,
-        ),
-        author: Some(required_metadata_field(metadata.author, "author")?),
-        description: Some(required_metadata_field(
-            metadata.description,
-            "description",
-        )?),
-        icon: metadata.icon.and_then(non_empty_string),
-        updated_at: Some(required_metadata_field(metadata.updated_at, "updatedAt")?),
-        highlights: Some(normalize_text_list(metadata.highlights.unwrap_or_default())),
-        screenshots: Some(normalize_screenshot_list(
-            metadata.screenshots.unwrap_or_default(),
-        )),
-        capabilities: Some(
-            normalize_capabilities(required_metadata_list(
-                metadata.capabilities,
-                "capabilities",
-            )?)
-            .ok_or_else(|| "plugin metadata capabilities cannot be empty".to_string())?,
-        ),
-        permissions: Some(normalize_permissions(
-            metadata.permissions.unwrap_or_default(),
-        )?),
-        playback_bar: metadata.playback_bar.filter(|v| v.is_object()),
-        sidebar: metadata.sidebar.filter(|v| v.is_object()),
-        config_schema: normalize_config_schema(metadata.config_schema),
-    })
-}
 
-fn required_metadata_field(value: Option<String>, field: &str) -> Result<String, String> {
-    value
-        .and_then(non_empty_string)
-        .ok_or_else(|| format!("plugin metadata missing {field}"))
-}
 
-fn required_metadata_list(value: Option<Vec<String>>, field: &str) -> Result<Vec<String>, String> {
-    let items = value.unwrap_or_default();
-    if items.is_empty() {
-        Err(format!("plugin metadata missing {field}"))
-    } else {
-        Ok(items)
-    }
-}
 
-fn normalize_text_list(values: Vec<String>) -> Vec<String> {
-    values.into_iter().filter_map(non_empty_string).fold(
-        Vec::<String>::new(),
-        |mut items, value| {
-            if !items.contains(&value) {
-                items.push(value);
-            }
-            items
-        },
-    )
-}
 
-fn normalize_screenshot_list(values: Vec<String>) -> Vec<String> {
-    normalize_text_list(values).into_iter().take(5).collect()
-}
 
-fn normalize_config_schema(value: Option<Value>) -> Option<Value> {
-    let value = value?;
-    let fields = value
-        .get("fields")
-        .and_then(Value::as_array)?
-        .iter()
-        .filter_map(normalize_config_field)
-        .collect::<Vec<_>>();
-    if fields.is_empty() {
-        None
-    } else {
-        Some(json!({ "fields": fields }))
-    }
-}
 
-fn normalize_config_field(value: &Value) -> Option<Value> {
-    let key = string_field(value, &["key"])?;
-    let label = string_field(value, &["label"])?;
-    let field_type = normalize_config_field_type(string_field(value, &["type"])?)?;
-    let options = normalize_config_options(value.get("options"));
-    if matches!(field_type.as_str(), "select" | "radio" | "checkbox") && options.is_empty() {
-        return None;
-    }
 
-    let mut field = serde_json::Map::new();
-    field.insert("key".to_string(), Value::String(key));
-    field.insert("label".to_string(), Value::String(label));
-    field.insert("type".to_string(), Value::String(field_type));
-    if let Some(placeholder) = string_field(value, &["placeholder"]) {
-        field.insert("placeholder".to_string(), Value::String(placeholder));
-    }
-    if let Some(required) = value.get("required").and_then(Value::as_bool) {
-        field.insert("required".to_string(), Value::Bool(required));
-    }
-    if let Some(default_value) = value
-        .get("defaultValue")
-        .or_else(|| value.get("default_value"))
-        .and_then(normalize_config_default_value)
-    {
-        field.insert("defaultValue".to_string(), default_value);
-    }
-    if let Some(label_en) = string_field(value, &["labelEn", "label_en"]) {
-        field.insert("labelEn".to_string(), Value::String(label_en));
-    }
-    for key in ["min", "max", "step"] {
-        if let Some(number) = value.get(key).and_then(Value::as_f64) {
-            if let Some(number) = serde_json::Number::from_f64(number) {
-                field.insert(key.to_string(), Value::Number(number));
-            }
-        }
-    }
-    if !options.is_empty() {
-        field.insert("options".to_string(), Value::Array(options));
-    }
-    Some(Value::Object(field))
-}
 
-fn normalize_config_field_type(field_type: String) -> Option<String> {
-    match field_type.trim() {
-        "text" | "password" | "number" | "range" | "select" | "radio" | "checkbox" | "switch" => {
-            Some(field_type.trim().to_string())
-        }
-        _ => None,
-    }
-}
-
-fn normalize_config_options(value: Option<&Value>) -> Vec<Value> {
-    value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|option| {
-            let label = string_field(option, &["label"])?;
-            let value = option.get("value").and_then(json_value_to_string)?;
-            Some(json!({ "label": label, "value": value }))
-        })
-        .fold(Vec::<Value>::new(), |mut items, option| {
-            let value = option.get("value").and_then(Value::as_str).unwrap_or("");
-            if !items
-                .iter()
-                .any(|item| item.get("value").and_then(Value::as_str) == Some(value))
-            {
-                items.push(option);
-            }
-            items
-        })
-}
 
 fn normalize_config_default_value(value: &Value) -> Option<Value> {
     match value {
@@ -1918,48 +1371,9 @@ fn normalize_config_default_value(value: &Value) -> Option<Value> {
     }
 }
 
-fn normalize_runtime(runtime: Option<String>) -> Option<String> {
-    match runtime.as_deref().map(str::trim) {
-        Some("wasm") | Some("module") => Some(runtime.unwrap().trim().to_string()),
-        _ => None,
-    }
-}
 
-fn normalize_kind(kind: String) -> Option<String> {
-    match kind.trim() {
-        "music" | "lyrics" | "lyrics-renderer" | "desktop-lyrics" | "metadata" | "playlist" | "theme"
-        | "integration" | "tool" => Some(kind.trim().to_string()),
-        _ => None,
-    }
-}
 
-fn normalize_capabilities(capabilities: Vec<String>) -> Option<Vec<String>> {
-    let normalized = capabilities
-        .into_iter()
-        .filter_map(|capability| normalize_capability(&capability))
-        .fold(Vec::<String>::new(), |mut items, capability| {
-            if !items.contains(&capability) {
-                items.push(capability);
-            }
-            items
-        });
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
-    }
-}
 
-fn normalize_capability(capability: &str) -> Option<String> {
-    match capability.trim() {
-        "search" | "play" | "lyrics" | "metadata" | "cover" | "album" | "playlist-import"
-        | "playlist-export" | "theme" | "scrobble" | "history-sync" | "batch-rename"
-        | "lyric-convert" | "lyric-translate" | "lyrics-renderer" | "desktop-lyrics" | "stem-separation" | "speaker-control" => {
-            Some(capability.trim().to_string())
-        }
-        _ => None,
-    }
-}
 
 fn plugin_capability_tags(capabilities: &[String]) -> Vec<String> {
     capabilities
@@ -1981,49 +1395,9 @@ fn plugin_capability_tags(capabilities: &[String]) -> Vec<String> {
         })
 }
 
-fn normalize_permissions(permissions: Vec<String>) -> Result<Vec<String>, String> {
-    Ok(permissions
-        .into_iter()
-        .map(|permission| {
-            normalize_permission(&permission)
-                .ok_or_else(|| format!("unsupported plugin permission: {permission}"))
-        })
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .fold(Vec::<String>::new(), |mut items, permission| {
-            if !items.contains(&permission) {
-                items.push(permission);
-            }
-            items
-        }))
-}
 
-fn normalize_permission(permission: &str) -> Option<String> {
-    match permission.trim() {
-        "network" | "credential-read" | "cache-read" | "cache-write" | "download-write" | "audio-process" | "speaker-service" => {
-            Some(permission.trim().to_string())
-        }
-        _ => None,
-    }
-}
 
-fn is_direct_plugin_url(value: &str) -> bool {
-    value
-        .split('?')
-        .next()
-        .unwrap_or(value)
-        .to_ascii_lowercase()
-        .ends_with(".wasm")
-}
 
-fn is_module_plugin_url(value: &str) -> bool {
-    let entry = value
-        .split('?')
-        .next()
-        .unwrap_or(value)
-        .to_ascii_lowercase();
-    entry.ends_with(".js") || entry.ends_with(".mjs")
-}
 
 fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
     keys.iter()
@@ -2045,14 +1419,6 @@ fn array_string_field(value: &Value, key: &str) -> Option<Vec<String>> {
     )
 }
 
-fn non_empty_string(value: String) -> Option<String> {
-    let value = value.trim().to_string();
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
-    }
-}
 
 fn find_search_plugin(
     provider_id: String,
@@ -2687,55 +2053,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn catalog_lyrics_module_preserves_entry_and_metadata() {
-        let mut value: Value = serde_json::from_str(include_str!(
-            "../../plugins/apple-music-lyrics/manifest.json"
-        )).unwrap();
-        value["entry"] = json!("https://example.com/renderer.mjs");
-        value["sourceUrl"] = json!("https://example.com/catalog.json");
-        value["sourceKind"] = json!("subscription");
-        value["configSchema"] = json!({"fields": []});
-        let item = normalize_catalog_item_value(value).unwrap();
-        let manifest = build_module_manifest_from_catalog(item.clone(), "now".into(), true).unwrap();
-        assert_eq!(manifest.runtime, "module");
-        assert_eq!(manifest.entry, item.entry);
-        assert_eq!(manifest.id, item.id);
-        assert_eq!(manifest.version, item.version);
-        assert_eq!(manifest.source_url.as_deref(), Some(item.source_url.as_str()));
-        assert_eq!(manifest.config_schema, item.config_schema);
-        assert!(manifest.enabled);
-
-        let package_dir = std::env::temp_dir().join(format!(
-            "mono-renderer-test-{}-{}", std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
-        ));
-        let mut local = manifest;
-        install_renderer_package(&package_dir, &mut local, "export default {mount(){},update(){}};").unwrap();
-        assert!(Path::new(&local.entry).is_file());
-        assert_eq!(local.source_url.as_deref(), Some(item.source_url.as_str()));
-        assert!(normalize_plugin_manifest_value(serde_json::to_value(&local).unwrap()).is_some());
-        let saved: PluginManifest = serde_json::from_slice(&fs::read(package_dir.join("manifest.json")).unwrap()).unwrap();
-        assert_eq!(saved.entry, local.entry);
-        install_renderer_package(&package_dir, &mut local, "export default {version:2};").unwrap();
-        assert_eq!(fs::read_to_string(&local.entry).unwrap(), "export default {version:2};");
-        assert!(install_renderer_package(&package_dir, &mut local, "").is_err());
-        assert_eq!(fs::read_to_string(&local.entry).unwrap(), "export default {version:2};");
-        fs::remove_dir_all(package_dir).unwrap();
-
-        for (field, invalid) in [
-            ("runtime", json!("wasm")),
-            ("kind", json!("music")),
-            ("capabilities", json!(["lyrics"])),
-            ("entry", json!("https://example.com/plugin.wasm")),
-            ("entry", json!("./renderer.mjs")),
-        ] {
-            let mut invalid_item = serde_json::to_value(&item).unwrap();
-            invalid_item[field] = invalid;
-            let invalid_item = serde_json::from_value(invalid_item).unwrap();
-            assert!(build_module_manifest_from_catalog(invalid_item, "now".into(), true).is_err());
-        }
-    }
 
     #[test]
     fn json_year_value_ignores_non_ascii_text_without_panicking() {

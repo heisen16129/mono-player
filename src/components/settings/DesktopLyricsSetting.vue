@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import DesktopStylePreview from './DesktopStylePreview.vue';
-import * as cardManifest from '../../../plugins/playback-card/manifest.json';
+import * as cardManifest from '../../../plugin/playback-card/plugin.json';
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 import { usePlayerStore } from '../../stores/player';
 import { desktopLyricsPlugins, openDesktopLyricsStyle, closeDesktopLyrics, selectDesktopLyricsStyle, isDesktopLyricsVisible } from '../../services/desktopLyricsOptions';
@@ -75,7 +75,7 @@ onMounted(async () => {
     const saved = await getPluginConfig('desktop-lyrics.host');
     appearance.value = await loadDesktopAppearance();
     if (saved.rendererId === 'playback-card') {
-      const config = await getPluginConfig('lyrics-renderer.playback-card');
+      const config = await getPluginConfig('playback-card');
       const id = 'card:' + (config.cardStyle || 'minimal');
       selected.value = options.value.some(o => o.id === id) ? id : 'card:minimal';
     } else if (options.value.some(o => o.id === saved.rendererId)) selected.value = String(saved.rendererId);

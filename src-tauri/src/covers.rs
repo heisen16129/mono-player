@@ -39,6 +39,7 @@ pub(crate) struct CropCoverImageResult {
 }
 
 pub(crate) struct CachedCoverFiles {
+    pub(crate) original_path: PathBuf,
     pub(crate) original_url: String,
     pub(crate) thumbnail_url: String,
 }
@@ -298,6 +299,7 @@ fn cached_cover_files(
     let original_url = cover_asset_url(original_path);
     let thumbnail_url = cover_asset_url(thumbnail_path);
     Ok(Some(CachedCoverFiles {
+        original_path: original_path.to_path_buf(),
         original_url,
         thumbnail_url,
     }))

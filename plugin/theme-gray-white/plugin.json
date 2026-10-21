@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-wasm-theme-gray-white",
+  "name": "灰白主题",
+  "version": "1.0.0",
+  "kind": "theme",
+  "author": "Mono Player",
+  "description": "简洁的浅色灰白主题，适合日常本地音乐管理。",
+  "capabilities": [
+    "theme"
+  ],
+  "permissions": [],
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

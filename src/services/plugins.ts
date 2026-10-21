@@ -4,7 +4,7 @@ import type {
   PluginManifest,
   PluginSubscription,
 } from '../types/plugin';
-import { listen } from '@tauri-apps/api/event';
+import { requestPackageInstall } from './pluginPackages';
 import { invokeApi } from './api';
 import { isTauriRuntime } from './music';
 export interface PluginCatalogSnapshot {
@@ -61,20 +61,27 @@ export interface PluginAction {
 export interface PluginBatchResult { index: number; id: string; success: boolean; error: string | null }
 
 export async function batchPluginActions(requests: PluginAction[], onProgress?: (completed: number, total: number) => void): Promise<PluginBatchResult[]> {
-  const requestId = crypto.randomUUID();
-  const unlisten = await listen<{ requestId: string; completed: number; total: number }>('plugins://batch', event => {
-    if (event.payload.requestId === requestId) onProgress?.(event.payload.completed, event.payload.total);
-  });
-  try { return await invokeApi('plugin_batch', { requestId, requests }); }
-  finally { unlisten(); }
+  const results: PluginBatchResult[] = [];
+  for (const [index, request] of requests.entries()) {
+    try {
+      if (request.action === 'install' || request.action === 'update') {
+        await requestPackageInstall(request.filePath || request.item?.entry || '');
+      } else await invokeApi('plugin_action', { request });
+      results.push({ index, id: request.id || request.item?.id || '', success: true, error: null });
+    } catch (error) { results.push({ index, id: request.id || request.item?.id || '', success: false, error: String(error) }); }
+    onProgress?.(index + 1, requests.length);
+  }
+  return results;
 }
 
-export function installCatalogPlugin(item: PluginCatalogItem, update = false): Promise<PluginManifest[]> {
-  return invokeApi('plugin_action', { request: { action: update ? 'update' : 'install', item } });
+export async function installCatalogPlugin(item: PluginCatalogItem, _update = false): Promise<PluginManifest[]> {
+  await requestPackageInstall(item.entry);
+  return listInstalledPlugins();
 }
 
-export function installLocalPlugin(filePath: string): Promise<PluginManifest[]> {
-  return invokeApi('plugin_action', { request: { action: 'install', filePath } });
+export async function installLocalPlugin(filePath: string): Promise<PluginManifest[]> {
+  await requestPackageInstall(filePath);
+  return listInstalledPlugins();
 }
 
 export function uninstallPlugin(id: string): Promise<PluginManifest[]> {

@@ -20,7 +20,7 @@ pub(crate) fn normalize(value: &Value) -> Value {
 }
 
 pub(crate) fn effective(values: &Map<String, Value>, id: &str) -> Value {
-    let manifest_id = id.strip_prefix("lyrics-renderer.").unwrap_or(id);
+    let manifest_id = id;
     let manifest = values.get("plugins.installed").and_then(Value::as_array).and_then(|items| items.iter().find(|p| p["id"] == manifest_id));
     let mut config = super::default_config_from_schema(manifest.and_then(|p| p.get("configSchema")));
     super::merge_config_value(&mut config, values.get(&format!("plugins.config.{id}")));
@@ -31,8 +31,13 @@ pub(crate) fn validate(values: &Map<String, Value>, id: &str, config: &Value) ->
     let mut next = values.clone();
     next.insert(format!("plugins.config.{id}"), config.clone());
     let result = effective(&next, id);
-    let manifest_id = id.strip_prefix("lyrics-renderer.").unwrap_or(id);
-    let fields = values.get("plugins.installed").and_then(Value::as_array).and_then(|items| items.iter().find(|p| p["id"] == manifest_id)).and_then(|p| p["configSchema"]["fields"].as_array());
+    let manifest_id = id;
+    let schema = values.get("plugins.installed").and_then(Value::as_array).and_then(|items| items.iter().find(|p| p["id"] == manifest_id)).and_then(|p| p.get("configSchema"));
+    validate_schema(schema, &result)
+}
+
+pub(crate) fn validate_schema(schema: Option<&Value>, result: &Value) -> Result<(), String> {
+    let fields = schema.and_then(|schema| schema["fields"].as_array());
     for field in fields.into_iter().flatten() {
         let key = field["key"].as_str().unwrap_or_default();
         let value = &result[key];

@@ -18,6 +18,7 @@ pub(crate) mod methods {
     pub(crate) const PLAYER_STOP: &str = "player.stop";
     pub(crate) const PLAYER_SEEK: &str = "player.seek";
     pub(crate) const PLAYER_SET_VOLUME: &str = "player.setVolume";
+    pub(crate) const PLAYER_SET_MUTED: &str = "player.setMuted";
     pub(crate) const PLAYER_SET_SPEED: &str = "player.setSpeed";
     pub(crate) const PLAYER_SET_OUTPUT_DEVICE: &str = "player.setOutputDevice";
     pub(crate) const PLAYER_STATE: &str = "player.state";

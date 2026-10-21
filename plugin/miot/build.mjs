@@ -1,0 +1,11 @@
+import { build } from 'esbuild';
+import { mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+const root = fileURLToPath(new URL('.', import.meta.url));
+process.chdir(root);
+mkdirSync('dist', { recursive: true });
+await import('../../packages/plugin-sdk/build.mjs');
+mkdirSync('backend', { recursive: true });
+await build({ absWorkingDir: root, entryPoints: ['./backend/mono/server.mjs'], outfile: 'dist/service.mjs', bundle: true, platform: 'node', target: 'node20', format: 'esm', banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" } });
+execFileSync(process.execPath, ['ui/frontend/node_modules/vite/bin/vite.js', 'build'], { cwd: root, stdio: 'inherit' });

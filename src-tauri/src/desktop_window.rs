@@ -3,7 +3,7 @@ use crate::api_response::ApiResponse;
 #[tauri::command]
 pub(crate) fn resize_desktop_lyrics(window: tauri::WebviewWindow, width: f64, height: f64, preserve_center: bool) -> ApiResponse<()> {
     ApiResponse::from_empty_result((|| {
-        if !matches!(window.label(), "desktop-lyrics" | "desktop-playback-card") {
+        if !matches!(window.label(), "desktop-lyrics" | "desktop-playback-card") && !window.label().starts_with("plugin-desktop-") {
             return Err("Not a desktop lyrics window".into());
         }
         if !width.is_finite() || !height.is_finite() || width < 100.0 || height < 50.0 || width > 2000.0 || height > 1200.0 {

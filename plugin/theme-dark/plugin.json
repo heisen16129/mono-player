@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "mono-wasm-theme-dark",
+  "name": "深色主题",
+  "version": "1.0.0",
+  "kind": "theme",
+  "author": "Mono Player",
+  "description": "克制的深色主题，适合夜间播放和长时间使用。",
+  "capabilities": [
+    "theme"
+  ],
+  "permissions": [],
+  "entry": {
+    "wasm": "dist/plugin.wasm"
+  },
+  "contributions": {}
+}

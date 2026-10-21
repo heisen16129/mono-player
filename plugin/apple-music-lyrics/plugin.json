@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "minHostVersion": "0.1.0",
+  "id": "apple-music-lyrics",
+  "name": "Apple Music 歌词",
+  "version": "2.0.0",
+  "kind": "lyrics-renderer",
+  "author": "Mono Player",
+  "description": "Apple Music 风格的动态舞台、逐词歌词、播放队列与可持久化显示设置。",
+  "capabilities": [
+    "lyrics-renderer"
+  ],
+  "entry": {
+    "renderer": "ui/renderer.mjs"
+  },
+  "permissions": [
+    "player.read",
+    "player.control",
+    "lyrics.read",
+    "artwork.read",
+    "favorites.read",
+    "favorites.write",
+    "lyrics.write"
+  ],
+  "contributions": {}
+}
